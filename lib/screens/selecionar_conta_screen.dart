@@ -12,27 +12,18 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
   int? _contaSelecionada;
 
   final List<Map<String, String>> _contas = [
-    {'banco': '077 BANCO INTER', 'agencia': '0001', 'conta': '7210063-0', 'cpf': '405.707.968-81'},
+    {'banco': '077 BACO INTER', 'agencia': '0001', 'conta': '7210063-0', 'cpf': '405.707.968-81'},
   ];
 
-  void _confirmarSaque() { Navigator.push(context, MaterialPageRoute(builder: (_) => ConfirmarSaqueScreen(valor: widget.valor, conta: _contas[_contaSelecionada!]))); } void _old() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF161820),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Saque solicitado!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text('${widget.valor} sera transferido para a conta selecionada em ate 1 dia util.',
-            style: const TextStyle(color: Color(0xFF6B7280))),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.popUntil(context, (r) => r.isFirst);
-            },
-            child: const Text('OK', style: TextStyle(color: Color(0xFF1A56DB), fontWeight: FontWeight.bold)),
-          ),
-        ],
+  void _confirmarSaque() {
+    if (_contaSelecionada == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ConfirmarSaqueScreen(
+          valor: widget.valor,
+          conta: _contas[_contaSelecionada!],
+        ),
       ),
     );
   }
@@ -40,11 +31,14 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: const Color(0xFF1A1A2E),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0F14),
+        backgroundColor: const Color(0xFF1A1A2E),
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text('Carteira', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [IconButton(icon: const Icon(Icons.notifications_outlined, color: Colors.white), onPressed: () {})],
       ),
@@ -53,13 +47,9 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text('Para qual conta voce deseja transferir?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('Para qual conta voce
-deseja transferir?',
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1.3)),
-            const SizedBox(height: 12),
-            const Text('Selecione ou exclua uma conta, ou adicione uma nova conta:',
-                style: TextStyle(color: Color(0xFF6B7280), fontSize: 14)),
+            const Text('Selecione ou exclua uma conta, ou adicione uma nova conta:', style: TextStyle(color: Color.fromARGB(255, 155, 163, 175), fontSize: 14)),
             const SizedBox(height: 24),
             Expanded(
               child: ListView.builder(
@@ -73,33 +63,26 @@ deseja transferir?',
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF161820),
+                        color: const Color(0xFF2A2A3E),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: selecionada ? const Color(0xFF1A56DB) : const Color(0xFF2A2D35), width: selecionada ? 2 : 1),
+                        border: selecionada ? Border.all(color: const Color(0xFFFF9500), width: 2) : null,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(conta['banco']!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 12),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.more_vert, color: Color(0xFF6B7280), size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Agencia: ${conta['agencia']}', style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-                                    Text('Conta: ${conta['conta']}', style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-                                    Text('CPF: ${conta['cpf']}', style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.chevron_right, color: Color(0xFF6B7280)),
-                            ],
+                          Icon(Icons.more_vert, color: Color.fromARGB(255, 155, 163, 175), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(conta['banco'] ?? '', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
+                                Text('Agencia: ${conta['agencia']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
+                                Text('Conta: ${conta['conta']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
+                                Text('CPF: ${conta['cpf']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
+                              ],
+                            ),
                           ),
+                          Icon(Icons.chevron_right, color: Color.fromARGB(255, 107, 159, 228)),
                         ],
                       ),
                     ),
@@ -113,7 +96,7 @@ deseja transferir?',
               child: ElevatedButton(
                 onPressed: _contaSelecionada == null ? null : _confirmarSaque,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A56DB),
+                  backgroundColor: const Color(0xFFFF9500),
                   disabledBackgroundColor: const Color(0xFF2A2D35),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
@@ -124,7 +107,6 @@ deseja transferir?',
                 ),
               ),
             ),
-            const SizedBox(height: 16),
           ],
         ),
       ),

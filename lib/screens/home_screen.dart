@@ -1,3 +1,5 @@
+import 'carteira_screen.dart';
+import 'carteira_screen.dart';
 import 'package:flutter/material.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
@@ -231,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => CarteiraScreen())); },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A56DB),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
