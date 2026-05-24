@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,7 +25,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _carregando = true);
     try {
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -140,26 +144,29 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildCampoSenha() {
-    return TextFormField(
-      controller: _senhaController, obscureText: !_senhaVisivel,
-      style: const TextStyle(color: Colors.white),
-      validator: (v) {
-        if (v == null || v.isEmpty) return 'Informe a senha';
-        if (v.length < 6) return 'Senha muito curta';
-        return null;
-      },
-      decoration: InputDecoration(
-        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4B5563), size: 20),
-        suffixIcon: IconButton(
-          icon: Icon(_senhaVisivel ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF4B5563), size: 20),
-          onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 0),
+      child: TextFormField(
+        controller: _senhaController, obscureText: !_senhaVisivel,
+        style: const TextStyle(color: Colors.white),
+        validator: (v) {
+          if (v == null || v.isEmpty) return 'Informe a senha';
+          if (v.length < 6) return 'Senha muito curta';
+          return null;
+        },
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4B5563), size: 20),
+          suffixIcon: IconButton(
+            icon: Icon(_senhaVisivel ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF4B5563), size: 20),
+            onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
+          ),
+          hintText: 'Senha cadastrada', hintStyle: const TextStyle(color: Color(0xFF4B5563)),
+          filled: true, fillColor: const Color(0xFF161820),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
-        hintText: 'Senha cadastrada', hintStyle: const TextStyle(color: Color(0xFF4B5563)),
-        filled: true, fillColor: const Color(0xFF161820),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }
