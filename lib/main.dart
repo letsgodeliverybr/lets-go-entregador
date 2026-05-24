@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://swblxsmijkojdbburtxv.supabase.co',
+    anonKey: 'sb_publishable_nQ2bYVXYMmmdQBVQa9UCAQ_UsoacaZA',
+  );
   runApp(const App());
 }
 
@@ -32,6 +38,33 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _senhaVisivel = false;
+  bool _carregando = false;
+
+  Future<void> _login() async {
+    setState(() => _carregando = true);
+    try {
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _senhaController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email ou senha incorretos!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    setState(() => _carregando = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,16 +77,11 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.delivery_dining,
-                    size: 80, color: Colors.white),
+                const Icon(Icons.delivery_dining, size: 80, color: Colors.white),
                 const SizedBox(height: 16),
                 const Text(
                   "Let's Go Delivery",
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const Text(
                   "Área do Entregador",
@@ -82,11 +110,8 @@ class _LoginPageState extends State<LoginPage> {
                     hintText: 'Senha',
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
-                      icon: Icon(_senhaVisivel
-                          ? Icons.visibility_off
-                          : Icons.visibility),
-                      onPressed: () =>
-                          setState(() => _senhaVisivel = !_senhaVisivel),
+                      icon: Icon(_senhaVisivel ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
                     ),
                     filled: true,
                     fillColor: Colors.white,
@@ -101,26 +126,61 @@ class _LoginPageState extends State<LoginPage> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: _carregando ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFFFF6B00),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text(
-                      'ENTRAR',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _carregando
+                        ? const CircularProgressIndicator(color: Color(0xFFFF6B00))
+                        : const Text('ENTRAR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Let's Go Delivery"),
+        backgroundColor: const Color(0xFFFF6B00),
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.delivery_dining, size: 80, color: Color(0xFFFF6B00)),
+            SizedBox(height: 16),
+            Text('Bem-vindo, Entregador!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            SizedBox(height: 8),
+            Text('Em breve: mapa e entregas', style: TextStyle(fontSize: 16, color: Colors.grey)),
+          ],
         ),
       ),
     );
