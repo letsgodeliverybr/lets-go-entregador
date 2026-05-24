@@ -1,3 +1,4 @@
+import 'confirmar_saque_screen.dart';
 import 'package:flutter/material.dart';
 
 class SelecionarContaScreen extends StatefulWidget {
@@ -14,7 +15,7 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
     {'banco': '077 BANCO INTER', 'agencia': '0001', 'conta': '7210063-0', 'cpf': '405.707.968-81'},
   ];
 
-  void _confirmarSaque() {
+  void _confirmarSaque() { Navigator.push(context, MaterialPageRoute(builder: (_) => ConfirmarSaqueScreen(valor: widget.valor, conta: _contas[_contaSelecionada!]))); } void _old() {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
