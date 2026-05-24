@@ -1,68 +1,45 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/location_service.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
-
   @override
   State<EntregadorHomeScreen> createState() => _EntregadorHomeScreenState();
 }
 
 class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
-  StreamSubscription<Position>? _locationSubscription;
-  bool _rastreandoAtivo = false;
-  String _status = 'Parado';
-  double? _lat;
-  double? _lng;
-
   final _supabase = Supabase.instance.client;
-
-  void _iniciarRastreamento() {
-    setState(() {
-      _rastreandoAtivo = true;
-      _status = 'Rastreando...';
-    });
-
-    _locationSubscription = LocationService.getPositionStream().listen((position) async {
-      setState(() {
-        _lat = position.latitude;
-        _lng = position.longitude;
-      });
-
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId != null) {
-        await _supabase.from('entregadores').upsert({
-          'id': userId,
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'atualizado_em': DateTime.now().toIso8601String(),
-        });
-      }
-    });
-  }
-
-  void _pararRastreamento() {
-    _locationSubscription?.cancel();
-    setState(() {
-      _rastreandoAtivo = false;
-      _status = 'Parado';
-    });
-  }
-
-  @override
-  void dispose() {
-    _locationSubscription?.cancel();
-    super.dispose();
-  }
+  bool _rastreandoAtivo = false;
+  Position? _posicao;
+  MapController _mapController = MapController();
+  static const _centroRibeirao = LatLng(-21.1775, -47.8103);
 
   @override
   Widget build(BuildContext context) {
+    final pos = _posicao;
+    final center = pos != null
+        ? LatLng(pos.latitude, pos.longitude)
+        : _centroRibeirao;
+
+    final markers = pos != null
+        ? [Marker(
+            point: LatLng(pos.latitude, pos.longitude),
+            width: 48,
+            height: 48,
+            child: Icon(Icons.delivery_dining,
+                color: _rastreandoAtivo ? Colors.green : Colors.orange,
+                size: 40),
+          )]
+        : <Marker>[];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Painel do Entregador'),
+        backgroundColor: const Color(0xFFFF6B00),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -72,36 +49,97 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _rastreandoAtivo ? Icons.location_on : Icons.location_off,
-              size: 80,
-              color: _rastreandoAtivo ? Colors.green : Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            Text(_status, style: const TextStyle(fontSize: 20)),
-            if (_lat != null) ...[
-              const SizedBox(height: 8),
-              Text('Lat: ${_lat!.toStringAsFixed(6)}'),
-              Text('Lng: ${_lng!.toStringAsFixed(6)}'),
-            ],
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              icon: Icon(_rastreandoAtivo ? Icons.stop : Icons.play_arrow),
-              label: Text(_rastreandoAtivo ? 'Parar' : 'Iniciar Rastreamento'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _rastreandoAtivo ? Colors.red : Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      body: Column(
+        children: [
+          Expanded(
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: 15,
               ),
-              onPressed: _rastreandoAtivo ? _pararRastreamento : _iniciarRastreamento,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.letsgo.entregador',
+                ),
+                MarkerLayer(markers: markers),
+              ],
             ),
-          ],
-        ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _rastreandoAtivo ? Icons.location_on : Icons.location_off,
+                      color: _rastreandoAtivo ? Colors.green : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      pos != null
+                          ? 'Lat: ${pos.latitude.toStringAsFixed(5)}  Lng: ${pos.longitude.toStringAsFixed(5)}'
+                          : 'Aguardando...',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: Icon(_rastreandoAtivo ? Icons.stop : Icons.play_arrow),
+                    label: Text(_rastreandoAtivo ? 'Parar Rastreamento' : 'Iniciar Rastreamento'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _rastreandoAtivo ? Colors.red : Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    onPressed: _rastreandoAtivo ? _stopRastreamento : _initRastreamento,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _initRastreamento() async {
+    final perm = await Geolocator.requestPermission();
+    if (perm == LocationPermission.denied) return;
+    setState(() => _rastreandoAtivo = true);
+    Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5),
+    ).listen((pos) {
+      if (!mounted) return;
+      setState(() => _posicao = pos);
+      _mapController.move(LatLng(pos.latitude, pos.longitude), 15);
+      _salvarPosicao(pos);
+    });
+  }
+
+  void _stopRastreamento() {
+    setState(() {
+      _rastreandoAtivo = false;
+    });
+  }
+
+  Future<void> _salvarPosicao(Position pos) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    await _supabase.from('entregadores').upsert({
+      'id': user.id,
+      'lat': pos.latitude,
+      'lng': pos.longitude,
+      'disponiVel': true,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
   }
 }
