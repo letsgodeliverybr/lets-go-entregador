@@ -1,99 +1,158 @@
 import 'package:flutter/material.dart';
-import 'selecionar_conta_screen.dart';
 
 class CarteiraScreen extends StatefulWidget {
-  final double saldo;
-  const CarteiraScreen({super.key, this.saldo = 8.19});
+  const CarteiraScreen({super.key});
   @override
   State<CarteiraScreen> createState() => _CarteiraScreenState();
 }
 
-class _CarteiraScreenState extends State<CarteiraScreen> {
+class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   bool _saldoVisivel = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0F14),
-        elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
-        title: const Text('Carteira', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        actions: [IconButton(icon: const Icon(Icons.notifications_outlined, color: Colors.white), onPressed: () {})],
+        backgroundColor: const Color(0xFF1A1E2A),
+        foregroundColor: Colors.white,
+        title: const Text('Carteira', style: TextStyle(fontWeight: FontWeight.bold)),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFF1A56DB),
+          labelColor: const Color(0xFF1A56DB),
+          unselectedLabelColor: Colors.white54,
+          tabs: const [
+            Tab(text: 'Extrato'),
+            Tab(text: 'Histórico'),
+          ],
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161820),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF2A2D35)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Saldo atual', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text(
-                        _saldoVisivel ? 'R\$ ${widget.saldo.toStringAsFixed(2)}' : 'R\$ ••••',
-                        style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: Icon(_saldoVisivel ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: const Color(0xFF6B7280)),
-                        onPressed: () => setState(() => _saldoVisivel = !_saldoVisivel),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SelecionarContaScreen(valor: 'R\$ 8,19'))),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A56DB),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
-                      child: const Text('Sacar saldo', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
-            Row(
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            color: const Color(0xFF1A1E2A),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Historico', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.filter_list, color: Colors.white, size: 16),
-                  label: const Text('Filtrar', style: TextStyle(color: Colors.white, fontSize: 13)),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF2A2D35)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Saldo disponível', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(_saldoVisivel ? 'R\$ 0,00' : '••••••',
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                IconButton(
+                  icon: Icon(_saldoVisivel ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    color: const Color(0xFF6B7280)),
+                  onPressed: () => setState(() => _saldoVisivel = !_saldoVisivel),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            const Center(
-              child: Text('Nao ha informacoes a serem apresentadas.', style: TextStyle(color: Color(0xFF6B7280), fontSize: 14)),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildExtrato(),
+                _buildHistorico(),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExtrato() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Últimas movimentações', style: TextStyle(color: Colors.white54, fontSize: 13)),
+        const SizedBox(height: 12),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4819', 'Hoje, 14:22', '+ R\$ 7,00', Colors.green),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4815', 'Hoje, 13:10', '+ R\$ 12,50', Colors.green),
+        _extratoItem(Icons.arrow_upward, 'Saque', 'Ontem, 19:00', '- R\$ 100,00', Colors.redAccent),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4810', 'Ontem, 16:44', '+ R\$ 9,00', Colors.green),
+        _extratoItem(Icons.star, 'Bônus feriado', '25/05, 08:00', '+ R\$ 25,00', Colors.amber),
+        const SizedBox(height: 16),
+        const Center(child: Text('Nenhuma outra movimentação.', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13))),
+      ],
+    );
+  }
+
+  Widget _buildHistorico() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Histórico por semana', style: TextStyle(color: Colors.white54, fontSize: 13)),
+        const SizedBox(height: 12),
+        _historicoItem('Semana 19–25/05', '42 entregas', 'R\$ 543,00'),
+        _historicoItem('Semana 12–18/05', '38 entregas', 'R\$ 472,00'),
+        _historicoItem('Semana 05–11/05', '35 entregas', 'R\$ 410,50'),
+        _historicoItem('Semana 28/04–04/05', '40 entregas', 'R\$ 498,00'),
+      ],
+    );
+  }
+
+  Widget _extratoItem(IconData icon, String title, String date, String value, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFF1A1E2A), borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          CircleAvatar(radius: 18, backgroundColor: color.withOpacity(0.15),
+            child: Icon(icon, color: color, size: 16)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              Text(date, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          )),
+          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _historicoItem(String semana, String entregas, String total) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFF1A1E2A), borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          const CircleAvatar(radius: 18, backgroundColor: Color(0xFF1A56DB),
+            child: Icon(Icons.moped, color: Colors.white, size: 16)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(semana, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              Text(entregas, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          )),
+          Text(total, style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14)),
+        ],
       ),
     );
   }
