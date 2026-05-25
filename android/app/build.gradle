@@ -25,7 +25,7 @@ if (flutterVersionName == null) {
 android {
     namespace "com.letsgodelivery.entregador"
     compileSdkVersion 34
-cat -n android/app/build.gradle | head -60    ndkVersion flutter.ndkVersion
+        ndkVersion flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
