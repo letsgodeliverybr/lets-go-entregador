@@ -6,9 +6,9 @@ class VagasScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vagas = [
-      {'nome': 'CANTO BRASIL PIZZARIA', 'tel': '(16) 99700-9075', 'endereco': 'Centro, R. Gen. Osorio, 987', 'valor': 'R$ 30,00', 'inicio': '17:30', 'fim': '23:59'},
-      {'nome': 'PESTO PIZZA', 'tel': '(16) 98165-3507', 'endereco': 'Centro, R. Rui Barbosa, 602', 'valor': 'R$ 30,00', 'inicio': '18:00', 'fim': '23:59'},
-      {'nome': 'FRANGUZ', 'tel': '(16) 3441-7121', 'endereco': 'Jardim America, Rua Jacomo Tonetto, 71', 'valor': 'R$ 30,00', 'inicio': '18:30', 'fim': '23:30'},
+      {'nome': 'CANTO BRASIL PIZZARIA', 'tel': '(16) 99700-9075', 'endereco': 'Centro, R. Gen. Osorio, 987', 'valor': 'R\$ 30,00', 'inicio': '17:30', 'fim': '23:59'},
+      {'nome': 'PESTO PIZZA', 'tel': '(16) 98165-3507', 'endereco': 'Centro, R. Rui Barbosa, 602', 'valor': 'R\$ 30,00', 'inicio': '18:00', 'fim': '23:59'},
+      {'nome': 'FRANGUZ', 'tel': '(16) 3441-7121', 'endereco': 'Jardim America, Rua Jacomo Tonetto, 71', 'valor': 'R\$ 30,00', 'inicio': '18:30', 'fim': '23:30'},
     ];
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A2E),
