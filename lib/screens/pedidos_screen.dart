@@ -10,8 +10,8 @@ class PedidosScreen extends StatefulWidget {
 
 class _PedidosScreenState extends State<PedidosScreen> {
   final List<Map<String, dynamic>> _pedidos = [
-    {'nome': 'ARMAZEM DA CERVEJA - CENTRO', 'distancia': '1,777km', 'valor': 'R\$ 8,19', 'data': '24/05/2025', 'status': 'Disponível'},
-    {'nome': 'PIZZARIA BOA MESA - CENTRO', 'distancia': '2,312km', 'valor': 'R\$ 12,50', 'data': '24/05/2025', 'status': 'Disponível'},
+    {'nome': 'ARMAZEM DA CERVEJA - CENTRO', 'distancia': '1,777km', 'valor': 'R\$ 8,19', 'data': '24/05/2025', 'status': 'Disponível', 'enderecoLoja': 'R. Álvares Cabral, 1600 - Centro', 'enderecoPedido': 'R. General Osório, 987 - Centro'},
+    {'nome': 'PIZZARIA BOA MESA - CENTRO', 'distancia': '2,312km', 'valor': 'R\$ 12,50', 'data': '24/05/2025', 'status': 'Disponível', 'enderecoLoja': 'R. Tibiriçá, 10 - Centro', 'enderecoPedido': 'R. Rui Barbosa, 602 - Centro'},
   ];
 
   @override
@@ -37,7 +37,7 @@ class _PedidosScreenState extends State<PedidosScreen> {
                   secondaryBackground: Container(color: Colors.red.shade900, margin: const EdgeInsets.only(bottom: 12), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.close, color: Colors.white)),
                   onDismissed: (_) => setState(() => _pedidos.removeAt(i)),
                   child: GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MapaPedidoScreen(nomeLoja: p['nome'], localLoja: const LatLng(-21.1775, -47.8100), localPedido: const LatLng(-21.1800, -47.8150)))),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MapaPedidoScreen(nomeLoja: p['nome'], enderecoLoja: p['enderecoLoja'] ?? '', enderecoPedido: p['enderecoPedido'] ?? '', localLoja: const LatLng(-21.1775, -47.8100), localPedido: const LatLng(-21.1800, -47.8150)))),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),

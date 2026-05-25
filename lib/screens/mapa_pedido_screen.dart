@@ -4,10 +4,12 @@ import 'package:latlong2/latlong.dart';
 
 class MapaPedidoScreen extends StatelessWidget {
   final String nomeLoja;
+  final String enderecoLoja;
+  final String enderecoPedido;
   final LatLng localLoja;
   final LatLng localPedido;
 
-  const MapaPedidoScreen({super.key, required this.nomeLoja, required this.localLoja, required this.localPedido});
+  const MapaPedidoScreen({super.key, required this.nomeLoja, required this.enderecoLoja, required this.enderecoPedido, required this.localLoja, required this.localPedido});
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +42,9 @@ class MapaPedidoScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(16)),
               child: Column(children: [
-                Row(children: const [Icon(Icons.store, color: Color(0xFF1A56DB), size: 18), SizedBox(width: 8), Text('Loja', style: TextStyle(color: Colors.white54, fontSize: 12))]),
-                const SizedBox(height: 4),
-                Row(children: const [Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18), SizedBox(width: 8), Text('Pedido', style: TextStyle(color: Colors.white54, fontSize: 12))]),
+                Row(children: [const Icon(Icons.store, color: Color(0xFF1A56DB), size: 18), const SizedBox(width: 8), Expanded(child: Text(enderecoLoja, style: const TextStyle(color: Colors.white, fontSize: 12)))]),
+                const SizedBox(height: 8),
+                Row(children: [const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18), const SizedBox(width: 8), Expanded(child: Text(enderecoPedido, style: const TextStyle(color: Colors.white, fontSize: 12)))]),
                 const SizedBox(height: 16),
                 Row(children: [
                   Expanded(child: SizedBox(height: 48, child: ElevatedButton(onPressed: () { Navigator.pop(context); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0), child: const Text('Rejeitar', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold))))),
