@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'vagas_screen.dart';
 import 'login_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
   bool _online = false;
   bool _contaExpanded = false;
   bool _sobreExpanded = false;
+  bool _oportunidadesExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +55,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
             _buildItem(Icons.account_balance_wallet_outlined, 'CARTEIRA', trailing: const Icon(Icons.chevron_right, color: Color(0xFF1A56DB))),
             _buildExpandable(Icons.manage_accounts_outlined, 'CONTA', _contaExpanded, () => setState(() => _contaExpanded = !_contaExpanded),
               ['Minha conta', 'Ranking', 'Histórico', 'Notificações']),
-            _buildItem(Icons.auto_awesome_outlined, 'OPORTUNIDADES'),
+            _buildExpandable(Icons.auto_awesome_outlined, 'OPORTUNIDADES', _oportunidadesExpanded, () => setState(() => _oportunidadesExpanded = !_oportunidadesExpanded), ['Vagas de Motoboy Fixo']),
             _buildExpandable(Icons.info_outline, 'SOBRE O APP', _sobreExpanded, () => setState(() => _sobreExpanded = !_sobreExpanded),
               ['Termos de uso', 'Termos de privacidade', 'Log']),
             const Spacer(),
@@ -92,7 +94,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
             padding: const EdgeInsets.only(left: 56),
             child: ListTile(
               title: Text(item, style: const TextStyle(color: Colors.white70)),
-              onTap: () {},
+              onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const VagasScreen())); },
             ),
           )),
       ],
