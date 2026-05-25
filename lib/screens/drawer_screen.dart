@@ -80,7 +80,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _buildItem(Icons.inventory_2_outlined, 'ENTREGAS', onTap: () => Navigator.pop(context)),
+                  _buildItem(Icons.inventory_2_outlined, 'ENTREGAS', onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/pedidos'); }),
                   _buildItem(Icons.account_balance_wallet_outlined, 'CARTEIRA',
                     trailing: const Icon(Icons.chevron_right, color: Color(0xFF1A56DB)),
                     onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const CarteiraScreen())); }),
