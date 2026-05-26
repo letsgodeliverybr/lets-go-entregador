@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -19,11 +20,24 @@ class LocationService {
   }
 
   static Stream<Position> getPositionStream() {
-    return Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
+    final LocationSettings settings;
+    if (Platform.isAndroid) {
+      settings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
-    );
+        distanceFilter: 5, // metros mínimos antes de emitir novo evento
+        intervalDuration: const Duration(seconds: 10), // atualiza a cada 10s
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: 'LetsGo está monitorando sua localização',
+          notificationTitle: 'Localização ativa',
+          enableWakeLock: true,
+        ),
+      );
+    } else {
+      settings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      );
+    }
+    return Geolocator.getPositionStream(locationSettings: settings);
   }
 }

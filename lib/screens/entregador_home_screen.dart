@@ -15,6 +15,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
   Map<String, dynamic>? _entregador;
   StreamSubscription? _locationSub;
+  Timer? _locationTimer;
   bool _online = false;
 
   @override
@@ -41,27 +42,49 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     }
   }
 
+  /// Envia lat/lng para a tabela entregadores
+  Future<void> _enviarLocalizacao(String userId, double lat, double lng) async {
+    try {
+      await _supabase.from('entregadores').update({
+        'lat': lat,
+        'lng': lng,
+        'online': true,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
+    } catch (_) {}
+  }
+
   void _iniciarLocalizacao() {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    _locationSub = LocationService.getPositionStream().listen((pos) async {
-      await _supabase.from('entregadores').update({
-        'lat': pos.latitude,
-        'lng': pos.longitude,
-        'online': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user.id);
+
+    // Stream de distância (dispara ao mover >= 5 m)
+    _locationSub = LocationService.getPositionStream().listen((pos) {
+      _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
+    });
+
+    // Timer periódico garante envio a cada 10 segundos mesmo sem movimento
+    _locationTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null) {
+        await _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
+      }
     });
   }
 
   void _pararLocalizacao() async {
-    await _locationSub?.cancel();
+    _locationSub?.cancel();
     _locationSub = null;
+    _locationTimer?.cancel();
+    _locationTimer = null;
+
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    await _supabase.from('entregadores').update({
-      'online': false,
-    }).eq('id', user.id);
+    try {
+      await _supabase.from('entregadores').update({
+        'online': false,
+      }).eq('id', user.id);
+    } catch (_) {}
   }
 
   Future<void> _logout() async {
@@ -75,6 +98,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   @override
   void dispose() {
     _locationSub?.cancel();
+    _locationTimer?.cancel();
     super.dispose();
   }
 
@@ -119,7 +143,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       Text(_online ? '🟢 Online' : '🔴 Offline',
                           style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      Text(_online ? 'Sua localização está sendo enviada' : 'Ative para receber pedidos',
+                      Text(_online ? 'Localização sendo enviada (10s)' : 'Ative para receber pedidos',
                           style: const TextStyle(color: Colors.white54, fontSize: 12)),
                     ],
                   ),
