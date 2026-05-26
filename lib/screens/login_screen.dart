@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,9 +26,31 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _carregando = true);
     try {
-      await Future.delayed(const Duration(seconds: 1));
+      final supabase = Supabase.instance.client;
+      final response = await supabase.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _senhaController.text,
+      );
+      final user = response.user;
+      if (user != null) {
+        await supabase.from('entregadores').upsert({
+          'id': user.id,
+          'nome': user.email ?? 'Entregador',
+          'status': 'ativo',
+          'disponivel': false,
+          'lat': -21.1775,
+          'lng': -47.8103,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+        if (mounted) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+        }
+      }
+    } on AuthException catch (e) {
       if (mounted) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro de autenticação: ${e.message}')),
+        );
       }
     } catch (e) {
       if (mounted) {
