@@ -31,9 +31,9 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
+      backgroundColor: const Color(0xFF0D0F14),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: const Color(0xFF0D0F14),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -49,7 +49,7 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
           children: [
             const Text('Para qual conta voce deseja transferir?', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('Selecione ou exclua uma conta, ou adicione uma nova conta:', style: TextStyle(color: Color.fromARGB(255, 155, 163, 175), fontSize: 14)),
+            const Text('Selecione ou exclua uma conta, ou adicione uma nova conta:', style: TextStyle(color: Colors.white70, fontSize: 14)),
             const SizedBox(height: 24),
             Expanded(
               child: ListView.builder(
@@ -63,26 +63,29 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A3E),
+                        color: const Color(0xFF161820),
                         borderRadius: BorderRadius.circular(12),
-                        border: selecionada ? Border.all(color: const Color(0xFFFF9500), width: 2) : null,
+                        border: Border.all(
+                          color: selecionada ? const Color(0xFF1A56DB) : const Color(0xFF2A2D35),
+                          width: selecionada ? 2 : 1,
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.more_vert, color: Color.fromARGB(255, 155, 163, 175), size: 20),
+                          const Icon(Icons.more_vert, color: Colors.white70, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(conta['banco'] ?? '', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
-                                Text('Agencia: ${conta['agencia']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
-                                Text('Conta: ${conta['conta']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
-                                Text('CPF: ${conta['cpf']}', style: const TextStyle(color: Color.fromARGB(255, 249, 202, 175), fontSize: 13)),
+                                Text(conta['banco'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                Text('Agencia: ${conta['agencia']}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                Text('Conta: ${conta['conta']}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                Text('CPF: ${conta['cpf']}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                               ],
                             ),
                           ),
-                          Icon(Icons.chevron_right, color: Color.fromARGB(255, 107, 159, 228)),
+                          const Icon(Icons.chevron_right, color: Color(0xFF1A56DB)),
                         ],
                       ),
                     ),
@@ -96,7 +99,7 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
               child: ElevatedButton(
                 onPressed: _contaSelecionada == null ? null : _confirmarSaque,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF9500),
+                  backgroundColor: const Color(0xFF1A56DB),
                   disabledBackgroundColor: const Color(0xFF2A2D35),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,

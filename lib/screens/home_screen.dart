@@ -1,10 +1,10 @@
 import 'vagas_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 import 'carteira_screen.dart';
-import 'pedidos_screen.dart';
 import 'estabelecimentos_screen.dart';
 import 'carteira_screen.dart';
 import 'package:flutter/material.dart';
+import 'pedidos_disponiveis_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
 
@@ -259,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           IconButton(icon: const Icon(Icons.home, color: Color(0xFF1A56DB)), onPressed: () { Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const HomeScreen()), (r) => false); }),
-          IconButton(icon: const Icon(Icons.inventory_2_outlined, color: Color(0xFF1A56DB)), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const PedidosScreen())); }),
+          IconButton(icon: const Icon(Icons.inventory_2_outlined, color: Color(0xFF1A56DB)), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const PedidosDisponiveisScreen())); }),
           IconButton(icon: const Icon(Icons.check_circle_outline, color: Colors.white54), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const PedidosAceitosScreen())); }),
           IconButton(icon: const Icon(Icons.work_outline, color: Colors.white54), onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (_) => const VagasScreen())); }),
         ],

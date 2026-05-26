@@ -16,6 +16,7 @@ dependencies:
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.8
   cloud_firestore: ^4.15.8
+  geolocator: ^11.1.0
 
 dev_dependencies:
   flutter_test:

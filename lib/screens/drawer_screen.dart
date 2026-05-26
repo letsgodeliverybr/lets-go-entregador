@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'pedidos_disponiveis_screen.dart';
 import 'vagas_screen.dart';
 import 'login_screen.dart';
 import 'carteira_screen.dart';
-import 'pedidos_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
@@ -28,7 +28,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              color: const Color(0xFF1A1E2A),
+              color: const Color(0xFF161820),
               child: Row(
                 children: [
                   CircleAvatar(

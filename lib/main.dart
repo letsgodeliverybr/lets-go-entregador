@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
+import 'screens/entregador_home_screen.dart';
+import 'screens/pedidos_disponiveis_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+  await Supabase.initialize(
+    url: 'https://astbkmpegcmqljltmdpx.supabase.co',
+    anonKey: 'sb_publishable_8ocBGGO6EM8GYlg-6HBdmQ_LA6VDL9O',
   );
   runApp(const MyApp());
 }
@@ -16,6 +18,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = Supabase.instance.client.auth.currentSession;
     return MaterialApp(
       title: 'Lets Go Delivery',
       debugShowCheckedModeBanner: false,
@@ -26,7 +29,14 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      // Rota inicial
+      home: session != null ? const EntregadorHomeScreen() : const LoginScreen(),
+      // Rotas nomeadas
+      routes: {
+        '/pedidos': (context) => const PedidosDisponiveisScreen(),
+        '/home':    (context) => const EntregadorHomeScreen(),
+        '/login':   (context) => const LoginScreen(),
+      },
     );
   }
 }
