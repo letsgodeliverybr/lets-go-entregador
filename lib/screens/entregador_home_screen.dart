@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -16,38 +18,80 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   Map<String, dynamic>? _entregador;
   StreamSubscription? _locationSub;
   Timer? _locationTimer;
+  Timer? _statsTimer;
   bool _online = false;
+  double _saldoDia = 0;
+  int _entregasHoje = 0;
+  LatLng? _posicaoAtual;
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
     super.initState();
     _carregarEntregador();
+    _carregarStats();
+    _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _carregarStats());
+    _iniciarLocalizacaoPassiva();
   }
 
   Future<void> _carregarEntregador() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final response = await _supabase.from('entregadores').select().eq('id', user.id).single();
-      setState(() => _entregador = response);
+      final response = await _supabase
+          .from('entregadores')
+          .select()
+          .eq('id', user.id)
+          .single();
+      setState(() {
+        _entregador = response;
+        _online = response['disponivel'] == true;
+      });
+      if (_online) _iniciarLocalizacao();
     } catch (_) {}
   }
 
-  void _toggleOnline(bool value) {
-    setState(() => _online = value);
-    if (value) {
-      _iniciarLocalizacao();
-    } else {
-      _pararLocalizacao();
-    }
+  Future<void> _carregarStats() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      final hoje = DateTime.now();
+      final inicioDia = DateTime(hoje.year, hoje.month, hoje.day).toIso8601String();
+      final pedidos = await _supabase
+          .from('pedidos')
+          .select('valor, taxa_entrega')
+          .eq('motoboy_id', user.id)
+          .eq('status', 'finalizado')
+          .gte('finalizado_em', inicioDia);
+      final lista = List<Map<String, dynamic>>.from(pedidos);
+      double total = 0;
+      for (final p in lista) {
+        total += (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0);
+      }
+      if (mounted) setState(() {
+        _saldoDia = total;
+        _entregasHoje = lista.length;
+      });
+    } catch (_) {}
   }
 
-  /// Envia lat/lng para a tabela entregadores
+  // Localização passiva — só atualiza o mapa, não envia pro Supabase
+  void _iniciarLocalizacaoPassiva() {
+    LocationService.getPositionStream().listen((pos) {
+      if (!mounted) return;
+      final ll = LatLng(pos.latitude, pos.longitude);
+      setState(() => _posicaoAtual = ll);
+      if (_online) {
+        try { _mapController.move(ll, _mapController.camera.zoom); } catch (_) {}
+      }
+    });
+  }
+
   Future<void> _enviarLocalizacao(String userId, double lat, double lng) async {
     try {
       await _supabase.from('entregadores').update({
-        'lat': lat,
-        'lng': lng,
+        'lat': lat, 'lng': lng,
+        'latitude': lat, 'longitude': lng,
         'disponivel': true, 'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
@@ -57,104 +101,348 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   void _iniciarLocalizacao() {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-
-    // Stream de distância (dispara ao mover >= 5 m)
+    LocationService.getCurrentPosition().then((pos) {
+      if (pos != null) {
+        _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
+        final ll = LatLng(pos.latitude, pos.longitude);
+        setState(() => _posicaoAtual = ll);
+        try { _mapController.move(ll, 15); } catch (_) {}
+      }
+    });
     _locationSub = LocationService.getPositionStream().listen((pos) {
       _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
     });
-
-    // Timer periódico garante envio a cada 10 segundos mesmo sem movimento
     _locationTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       final pos = await LocationService.getCurrentPosition();
-      if (pos != null) {
-        await _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
-      }
+      if (pos != null) _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
     });
   }
 
   void _pararLocalizacao() async {
-    _locationSub?.cancel();
-    _locationSub = null;
-    _locationTimer?.cancel();
-    _locationTimer = null;
-
+    _locationSub?.cancel(); _locationSub = null;
+    _locationTimer?.cancel(); _locationTimer = null;
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
       await _supabase.from('entregadores').update({
         'disponivel': false, 'status': 'offline',
+        'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', user.id);
     } catch (_) {}
   }
 
+  void _toggleOnline(bool value) {
+    setState(() => _online = value);
+    if (value) _iniciarLocalizacao();
+    else _pararLocalizacao();
+  }
+
   Future<void> _logout() async {
     _pararLocalizacao();
+    _statsTimer?.cancel();
     await _supabase.auth.signOut();
-    if (mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-    }
+    if (mounted) Navigator.pushReplacement(
+      context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
   @override
   void dispose() {
     _locationSub?.cancel();
     _locationTimer?.cancel();
+    _statsTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final nome = _entregador?['nome'] ?? 'Entregador';
+    final pos = _posicaoAtual ?? const LatLng(-21.1775, -47.8103);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A2E),
-        automaticallyImplyLeading: false,
-        title: const Text('Home', style: TextStyle(color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF0D0F14),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Olá, $nome!', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Lets Go Delivery', style: TextStyle(color: Color(0xFFF5A623), fontSize: 16)),
-            const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.all(20),
+      body: Stack(
+        children: [
+          // MAPA
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: pos,
+              initialZoom: 15,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                subdomains: const ['a', 'b', 'c', 'd'],
+              ),
+              if (_posicaoAtual != null)
+                MarkerLayer(markers: [
+                  Marker(
+                    point: _posicaoAtual!,
+                    width: 64, height: 80,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 44, height: 44,
+                          decoration: BoxDecoration(
+                            color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 8)],
+                          ),
+                          child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            nome.split(' ').first,
+                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]),
+            ],
+          ),
+
+          // OVERLAY ESCURO NO TOPO
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: Container(
+              height: 100,
               decoration: BoxDecoration(
-                color: const Color(0xFF16213E),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(.7), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+
+          // TOPBAR
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A56DB),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(child: Text('🛵', style: TextStyle(fontSize: 16))),
+                    ),
+                    const SizedBox(width: 8),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Lets Go', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                        Text('DELIVERY', style: TextStyle(color: Color(0xFFf97316), fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const Spacer(),
+                    // Botão chat
+                    Stack(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _abrirChat(),
+                          child: Container(
+                            width: 42, height: 42,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF22c55e),
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
+                            ),
+                            child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
+                          ),
+                        ),
+                        Positioned(
+                          top: 0, right: 0,
+                          child: Container(
+                            width: 16, height: 16,
+                            decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
+                            child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _logout,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.logout, color: Colors.white54, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // CARDS SALDO E ENTREGAS
+          Positioned(
+            top: 90, left: 16, right: 16,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161820).withOpacity(.92),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF2a2d3a)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Saldo do dia', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'R\$ ${_saldoDia.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161820).withOpacity(.92),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF2a2d3a)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Entregas hoje', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$_entregasHoje',
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // BOTÃO CENTRALIZAR
+          Positioned(
+            bottom: 160, right: 16,
+            child: GestureDetector(
+              onTap: () {
+                if (_posicaoAtual != null) {
+                  _mapController.move(_posicaoAtual!, 15);
+                }
+              },
+              child: Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161820),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF2a2d3a)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
+                ),
+                child: const Icon(Icons.my_location, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+
+          // TOGGLE ONLINE/OFFLINE
+          Positioned(
+            bottom: 80, left: 16, right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161820),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _online ? const Color(0xFF22c55e) : const Color(0xFF2a2d3a),
+                  width: 1.5,
+                ),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 12)],
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Container(
+                    width: 12, height: 12,
+                    decoration: BoxDecoration(
+                      color: _online ? const Color(0xFF22c55e) : const Color(0xFFef4444),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_online ? '🟢 Online' : '🔴 Offline',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(_online ? 'Localização sendo enviada (10s)' : 'Ative para receber pedidos',
-                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(
+                        _online ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          color: _online ? const Color(0xFF22c55e) : const Color(0xFFef4444),
+                          fontSize: 16, fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        _online ? 'Localização ativa' : 'Ative para receber pedidos',
+                        style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 11),
+                      ),
                     ],
                   ),
+                  const Spacer(),
                   Switch(
                     value: _online,
                     onChanged: _toggleOnline,
-                    activeColor: const Color(0xFFFF6B00),
+                    activeColor: const Color(0xFF22c55e),
+                    activeTrackColor: const Color(0xFF22c55e30),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _abrirChat() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161820),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFF2a2d3a), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            const Icon(Icons.chat_bubble_outline, color: Color(0xFF22c55e), size: 48),
+            const SizedBox(height: 12),
+            const Text('Chat', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text('Em breve', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
+            const SizedBox(height: 24),
           ],
         ),
       ),
