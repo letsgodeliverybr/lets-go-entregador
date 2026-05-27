@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
@@ -15,10 +17,12 @@ class EntregadorHomeScreen extends StatefulWidget {
 
 class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
+  final _audioPlayer = AudioPlayer();
   Map<String, dynamic>? _entregador;
   StreamSubscription? _locationSub;
   Timer? _locationTimer;
   Timer? _statsTimer;
+  RealtimeChannel? _pedidosChannel;
   bool _online = false;
   double _saldoDia = 0;
   int _entregasHoje = 0;
@@ -32,6 +36,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     _carregarStats();
     _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _carregarStats());
     _iniciarLocalizacaoPassiva();
+    _assinarPedidosRealtime();
   }
 
   Future<void> _carregarEntregador() async {
@@ -145,11 +150,84 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
+  // ── Realtime: toca som ao chegar pedido novo ─────────────────────────────
+  void _assinarPedidosRealtime() {
+    _pedidosChannel = _supabase
+        .channel('home-pedidos-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'pedidos',
+          callback: (payload) {
+            final status = payload.newRecord['status']?.toString() ?? '';
+            if (status == 'pronto') _alertarNovoPedido();
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'pedidos',
+          callback: (payload) {
+            final novo = payload.newRecord['status']?.toString() ?? '';
+            final antigo = payload.oldRecord['status']?.toString() ?? '';
+            if (novo == 'pronto' && antigo != 'pronto') _alertarNovoPedido();
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _alertarNovoPedido() async {
+    // Som
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setAsset('assets/sounds/novo_pedido.mp3');
+      await _audioPlayer.play();
+    } catch (_) {}
+    // Vibração dupla
+    HapticFeedback.heavyImpact();
+    await Future.delayed(const Duration(milliseconds: 300));
+    HapticFeedback.heavyImpact();
+    // Banner flutuante
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 5),
+          backgroundColor: const Color(0xFFec4899),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Row(children: [
+            const Text('🛵', style: TextStyle(fontSize: 20)),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Novo pedido disponível!',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                  Text('Toque para ver', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+          ]),
+          action: SnackBarAction(
+            label: 'Ver',
+            textColor: Colors.white,
+            onPressed: () => Navigator.pushNamed(context, '/pedidos'),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _locationSub?.cancel();
     _locationTimer?.cancel();
     _statsTimer?.cancel();
+    _pedidosChannel?.unsubscribe();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
