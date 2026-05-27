@@ -48,7 +48,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       await _supabase.from('entregadores').update({
         'lat': lat,
         'lng': lng,
-        'online': true,
+        'disponivel': true, 'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
     } catch (_) {}
@@ -82,7 +82,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (user == null) return;
     try {
       await _supabase.from('entregadores').update({
-        'online': false,
+        'disponivel': false, 'status': 'offline',
       }).eq('id', user.id);
     } catch (_) {}
   }
