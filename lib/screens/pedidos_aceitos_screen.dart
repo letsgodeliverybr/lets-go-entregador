@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../widgets/pedido_card_widget.dart';
@@ -16,12 +18,32 @@ class _State extends State<PedidosAceitosScreen> {
   List<Map<String, dynamic>> _pedidos = [];
   bool _carregando = true;
   Timer? _timer;
+  Position? _posicaoAtual;
 
   @override
   void initState() {
     super.initState();
     _buscar();
+    _obterPosicao();
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
+  }
+
+  Future<void> _obterPosicao() async {
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null && mounted) setState(() => _posicaoAtual = last);
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+      if (mounted) setState(() => _posicaoAtual = pos);
+    } catch (_) {}
+  }
+
+  double _calcularDistancia(double lat1, double lng1, double lat2, double lng2) {
+    const R = 6371.0;
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLng = (lng2 - lng1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLng / 2) * sin(dLng / 2);
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
   @override
@@ -36,7 +58,7 @@ class _State extends State<PedidosAceitosScreen> {
     try {
       final data = await _supabase
           .from('pedidos')
-          .select('*, lojas(nome, latitude, longitude)')
+          .select('*, lojas(nome, lat, lng, endereco, logradouro)')
           .eq('motoboy_id', user.id)
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
           .not('status', 'in', '("finalizado","cancelado")')
@@ -115,12 +137,25 @@ class _State extends State<PedidosAceitosScreen> {
                       final p = _pedidos[i];
                       final status = p['status_detalhado'] ?? p['status'] ?? 'aceito';
                       final isRetornando = status == 'retornando';
+                      double? distMotoboyLoja;
+                      if (_posicaoAtual != null) {
+                        final loja = p['lojas'];
+                        final lat = (loja?['lat'] ?? loja?['latitude']) as num?;
+                        final lng = (loja?['lng'] ?? loja?['longitude']) as num?;
+                        if (lat != null && lng != null) {
+                          distMotoboyLoja = _calcularDistancia(
+                            _posicaoAtual!.latitude, _posicaoAtual!.longitude,
+                            lat.toDouble(), lng.toDouble(),
+                          );
+                        }
+                      }
                       return PedidoCardWidget(
                         pedido: p,
                         statusLabel: _label(status),
                         statusCor: _cor(status),
                         botaoCor: _cor(status),
                         isRetornando: isRetornando,
+                        distMotoboyLojaKm: distMotoboyLoja,
                         onTap: () => _abrirEntrega(p),
                       );
                     },

@@ -24,6 +24,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   Position? _posicaoAtual;
   double? _distanciaLojaKm;
+  String? _enderecoLoja;
+  String? _nomeLoja;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -44,6 +46,40 @@ class _EntregaScreenState extends State<EntregaScreen> {
       _iniciarPollingPagamento();
     }
     _obterPosicao();
+    _buscarInfoLoja();
+  }
+
+  Future<void> _buscarInfoLoja() async {
+    // 1. Tenta a partir do join já carregado
+    final loja = widget.pedido['lojas'];
+    if (loja != null) {
+      final nome = loja['nome']?.toString() ?? '';
+      final end = loja['endereco']?.toString() ?? loja['logradouro']?.toString() ?? '';
+      if (nome.isNotEmpty || end.isNotEmpty) {
+        if (mounted) setState(() { _nomeLoja = nome.isNotEmpty ? nome : null; _enderecoLoja = end.isNotEmpty ? end : null; });
+        if (end.isNotEmpty) return;
+      }
+    }
+    // 2. Tenta campos diretos do pedido
+    final endPedido = widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '';
+    if (endPedido.isNotEmpty) {
+      if (mounted) setState(() => _enderecoLoja = endPedido);
+      return;
+    }
+    // 3. Busca na tabela lojas usando loja_id
+    final lojaId = widget.pedido['loja_id']?.toString();
+    if (lojaId == null || lojaId.isEmpty) return;
+    try {
+      final data = await _supabase.from('lojas').select('nome, endereco, logradouro').eq('id', lojaId).maybeSingle();
+      if (data != null && mounted) {
+        final nome = data['nome']?.toString() ?? '';
+        final end = data['endereco']?.toString() ?? data['logradouro']?.toString() ?? '';
+        setState(() {
+          if (nome.isNotEmpty) _nomeLoja = nome;
+          if (end.isNotEmpty) _enderecoLoja = end;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _obterPosicao() async {
@@ -52,13 +88,13 @@ class _EntregaScreenState extends State<EntregaScreen> {
       if (!mounted) return;
       setState(() => _posicaoAtual = pos);
       final loja = widget.pedido['lojas'];
-      if (loja != null && loja['latitude'] != null && loja['longitude'] != null) {
-        final dist = _calcularDistancia(
-          pos.latitude, pos.longitude,
-          (loja['latitude'] as num).toDouble(),
-          (loja['longitude'] as num).toDouble(),
-        );
-        if (mounted) setState(() => _distanciaLojaKm = dist);
+      if (loja != null) {
+        final lat = (loja['lat'] ?? loja['latitude']) as num?;
+        final lng = (loja['lng'] ?? loja['longitude']) as num?;
+        if (lat != null && lng != null) {
+          final dist = _calcularDistancia(pos.latitude, pos.longitude, lat.toDouble(), lng.toDouble());
+          if (mounted) setState(() => _distanciaLojaKm = dist);
+        }
       }
     } catch (_) {}
   }
@@ -177,7 +213,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final numero = widget.pedido['numero'] ?? _pedidoId.substring(0, 6);
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),
+      bottomNavigationBar: const AppBottomNavBar(currentIndex: 2),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0F14),
         foregroundColor: Colors.white,
@@ -311,8 +347,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   Widget _buildCardTela1(dynamic numero) {
     final loja = widget.pedido['lojas'];
-    final nomeLoja = loja?['nome'] ?? widget.pedido['nome_loja'] ?? 'Loja';
-    final enderecoColeta = widget.pedido['endereco_loja'] ?? '—';
+    final nomeLoja = _nomeLoja ?? loja?['nome']?.toString() ?? widget.pedido['nome_loja']?.toString() ?? 'Loja';
+    final enderecoColeta = _enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '—';
 
     return Container(
       width: double.infinity,
