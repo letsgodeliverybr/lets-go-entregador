@@ -67,7 +67,7 @@ class PedidoCardWidget extends StatelessWidget {
               child: Column(children: [
                 // Coleta
                 Row(children: [
-                  _iconBox(Icons.store, const Color(0xFF8b5cf6)),
+                  _iconBox(Icons.store, const Color(0xFF1A56DB)),
                   const SizedBox(width: 10),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('COLETA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
@@ -84,7 +84,7 @@ class PedidoCardWidget extends StatelessWidget {
                 ),
                 // Entrega
                 Row(children: [
-                  _iconBox(Icons.location_on, const Color(0xFFec4899)),
+                  _iconBox(Icons.location_on, const Color(0xFF1A56DB)),
                   const SizedBox(width: 10),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('ENTREGA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
@@ -117,31 +117,19 @@ class PedidoCardWidget extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10b98120),
-                            border: Border.all(color: const Color(0xFF10b981).withOpacity(0.4)),
+                            color: const Color(0xFF1A56DB),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(children: [
-                            const Icon(Icons.attach_money, color: Color(0xFF10b981), size: 13),
+                            const Icon(Icons.attach_money, color: Colors.white, size: 13),
                             Text('R\$ ${taxa.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Color(0xFF10b981), fontSize: 12, fontWeight: FontWeight.w600)),
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                           ]),
                         ),
                         const SizedBox(height: 6),
                       ],
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFFf59e0b), Color(0xFFf97316)]),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(children: [
-                          const Text('⭐', style: TextStyle(fontSize: 11)),
-                          const SizedBox(width: 4),
-                          Text('$pontos pts',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ]),
-                      ),
+                      Text('$pontos pts',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ],
