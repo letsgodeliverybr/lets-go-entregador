@@ -159,6 +159,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             'status_detalhado': 'aceito',
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
+            'entregador_id': user.id,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('status', 'pronto')

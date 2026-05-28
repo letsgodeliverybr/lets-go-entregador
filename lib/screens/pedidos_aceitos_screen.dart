@@ -59,9 +59,8 @@ class _State extends State<PedidosAceitosScreen> {
       final data = await _supabase
           .from('pedidos')
           .select('*, lojas(nome, lat, lng, endereco, logradouro)')
-          .eq('motoboy_id', user.id)
+          .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
-          .not('status', 'in', '("finalizado","cancelado")')
           .order('aceito_em', ascending: false);
       if (mounted) setState(() {
         _pedidos = List<Map<String, dynamic>>.from(data);
