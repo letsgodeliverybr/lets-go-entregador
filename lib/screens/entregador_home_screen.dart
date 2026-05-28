@@ -10,8 +10,8 @@ import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
-import 'entrega_screen.dart';
 import 'login_screen.dart';
+import 'pedidos_aceitos_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -52,20 +52,12 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final response = await _supabase
-          .from('entregadores')
-          .select()
-          .eq('id', user.id)
-          .single();
+      final response = await _supabase.from('entregadores').select().eq('id', user.id).single();
       setState(() {
         _entregador = response;
-        if (!TrackingService.ativo) {
-          _online = response['disponivel'] == true;
-        }
+        if (!TrackingService.ativo) _online = response['disponivel'] == true;
       });
-      if (_online && !TrackingService.ativo) {
-        await TrackingService.iniciar(user.id);
-      }
+      if (_online && !TrackingService.ativo) await TrackingService.iniciar(user.id);
     } catch (_) {}
   }
 
@@ -140,7 +132,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
-  // ── Realtime ────────────────────────────────────────────────────────────────
+  // ── Realtime ─────────────────────────────────────────────────────────────────
 
   void _assinarPedidosRealtime() {
     _pedidosChannel = _supabase
@@ -150,7 +142,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           schema: 'public',
           table: 'pedidos',
           callback: (payload) {
-            if (payload.newRecord['status'] == 'pronto') {
+            final s = payload.newRecord['status']?.toString() ?? '';
+            if (s == 'pronto' || s == 'disponivel') {
               _buscarEMostrarPedido(payload.newRecord['id'].toString());
             }
           },
@@ -162,7 +155,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           callback: (payload) {
             final novo = payload.newRecord['status']?.toString() ?? '';
             final antigo = payload.oldRecord['status']?.toString() ?? '';
-            if (novo == 'pronto' && antigo != 'pronto') {
+            if ((novo == 'pronto' || novo == 'disponivel') && antigo != novo) {
               _buscarEMostrarPedido(payload.newRecord['id'].toString());
             }
           },
@@ -177,7 +170,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           .from('pedidos')
           .select('*, lojas(nome, endereco, latitude, longitude)')
           .eq('id', pedidoId)
-          .eq('status', 'pronto')
+          .inFilter('status', ['pronto', 'disponivel'])
           .maybeSingle();
       if (data == null || !mounted) return;
       try {
@@ -192,6 +185,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     } catch (_) {}
   }
 
+  // Toque no card = aceitar
   Future<void> _aceitarPedido() async {
     final pedido = _pedidoPendente;
     if (pedido == null || _aceitando) return;
@@ -211,7 +205,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', pedido['id'])
-          .eq('status', 'pronto')
+          .inFilter('status', ['pronto', 'disponivel'])
           .select();
 
       if (!mounted) return;
@@ -225,20 +219,13 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         return;
       }
 
-      final pedidoAtualizado = Map<String, dynamic>.from(pedido);
-      pedidoAtualizado['status'] = 'aceito';
-      pedidoAtualizado['motoboy_id'] = user.id;
-      pedidoAtualizado['entregador_id'] = user.id;
-
       setState(() { _pedidoPendente = null; _temPedidoEmAndamento = true; _aceitando = false; });
       HapticFeedback.heavyImpact();
 
-      await Navigator.push(
+      await Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedidoAtualizado)),
+        MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
       );
-      // Ao voltar da EntregaScreen, verifica se ainda há pedido em andamento
-      _verificarPedidoEmAndamento();
     } catch (e) {
       if (mounted) {
         setState(() => _aceitando = false);
@@ -248,9 +235,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     }
   }
 
-  void _recusarPedido() {
-    setState(() => _pedidoPendente = null);
-  }
+  // Swipe horizontal = recusar
+  void _recusarPedido() => setState(() => _pedidoPendente = null);
 
   double _calcularDistancia(double lat1, double lng1, double lat2, double lng2) {
     const R = 6371.0;
@@ -269,7 +255,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     super.dispose();
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -284,6 +270,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
       body: Stack(
         children: [
+
           // MAPA
           FlutterMap(
             mapController: _mapController,
@@ -318,7 +305,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                             color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(nome, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                          child: Text(nome,
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                         ),
                       ],
                     ),
@@ -348,31 +336,29 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(8)),
-                      child: const Center(child: Text('🛵', style: TextStyle(fontSize: 16))),
+                child: Row(children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(8)),
+                    child: const Center(child: Text('🛵', style: TextStyle(fontSize: 16))),
+                  ),
+                  const SizedBox(width: 8),
+                  const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Lets Go', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                    Text('DELIVERY', style: TextStyle(color: Color(0xFFf97316), fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.w600)),
+                  ]),
+                  const Spacer(),
+                  _buildToggleCompacto(),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                    child: Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(.1), shape: BoxShape.circle),
+                      child: const Icon(Icons.menu, color: Colors.white, size: 20),
                     ),
-                    const SizedBox(width: 8),
-                    const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Lets Go', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
-                      Text('DELIVERY', style: TextStyle(color: Color(0xFFf97316), fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.w600)),
-                    ]),
-                    const Spacer(),
-                    _buildToggleCompacto(),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                      child: Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(.1), shape: BoxShape.circle),
-                        child: const Icon(Icons.menu, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ]),
               ),
             ),
           ),
@@ -438,7 +424,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                     child: Container(
                       width: 16, height: 16,
                       decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-                      child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
+                      child: const Center(child: Text('1',
+                          style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
                     ),
                   ),
                 ]),
@@ -460,32 +447,81 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             ]),
           ),
 
-          // CARD NOVO PEDIDO
+          // OVERLAY ESCURO quando card está visível
+          if (_pedidoPendente != null && _online)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _recusarPedido,
+                child: Container(color: Colors.black.withOpacity(0.55)),
+              ),
+            ),
+
+          // CARD NOVO PEDIDO — centralizado, toque aceita, swipe recusa
           if (_pedidoPendente != null && _online)
             Positioned(
-              bottom: 80, left: 16, right: 16,
-              child: _buildCardNovoPedido(_pedidoPendente!),
+              left: 16, right: 16,
+              top: 0, bottom: 0,
+              child: Center(
+                child: Dismissible(
+                  key: ValueKey(_pedidoPendente!['id']),
+                  direction: DismissDirection.horizontal,
+                  onDismissed: (_) => _recusarPedido(),
+                  background: _buildSwipeBackground(Alignment.centerLeft),
+                  secondaryBackground: _buildSwipeBackground(Alignment.centerRight),
+                  child: GestureDetector(
+                    onTap: _aceitando ? null : _aceitarPedido,
+                    child: _buildCardPedidoPendente(_pedidoPendente!),
+                  ),
+                ),
+              ),
             ),
         ],
       ),
     );
   }
 
-  // ── Widgets ──────────────────────────────────────────────────────────────────
+  // ── Widgets ───────────────────────────────────────────────────────────────────
 
-  Widget _buildCardNovoPedido(Map<String, dynamic> pedido) {
+  Widget _buildSwipeBackground(Alignment align) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFef4444).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFef4444).withOpacity(0.4)),
+      ),
+      child: Align(
+        alignment: align,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.close, color: Color(0xFFef4444), size: 24),
+              SizedBox(width: 6),
+              Text('Recusar', style: TextStyle(color: Color(0xFFef4444), fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardPedidoPendente(Map<String, dynamic> pedido) {
+    final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
+    final taxaBase = taxa;
+    final taxaReal = taxa * 1.20;
+    final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
+    final pontos = pedido['pontos'] ?? 4;
+    final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? pedido['nome_loja']?.toString() ?? 'Estabelecimento';
-    final endereco = pedido['endereco']?.toString() ?? pedido['endereco_entrega']?.toString() ?? '—';
-    final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final taxaReal = taxa > 0 ? taxa * 1.20 : 0.0;
 
-    double? distKm;
+    double distMotoboyLoja = 0;
     if (_posicaoAtual != null && loja != null) {
       final lat = (loja['latitude'] ?? loja['lat']) as num?;
       final lng = (loja['longitude'] ?? loja['lng']) as num?;
       if (lat != null && lng != null) {
-        distKm = _calcularDistancia(
+        distMotoboyLoja = _calcularDistancia(
           _posicaoAtual!.latitude, _posicaoAtual!.longitude,
           lat.toDouble(), lng.toDouble(),
         );
@@ -493,105 +529,111 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1A56DB), width: 1.5),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 24, offset: const Offset(0, -4))],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2A2D35)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 24)],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(width: 40, height: 4,
-              decoration: BoxDecoration(color: const Color(0xFF2a2d3a), borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
 
-          // Cabeçalho: loja + taxa
-          Row(children: [
-            Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.store, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Novo pedido!',
-                    style: TextStyle(color: Color(0xFF1A56DB), fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                Text(nomeLoja,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-              ]),
-            ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              if (taxa > 0) ...[
-                Text('R\$${taxa.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.red, fontSize: 12,
-                        decoration: TextDecoration.lineThrough, decorationColor: Colors.red)),
-                Text('R\$${taxaReal.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-              ] else
-                const Text('—', style: TextStyle(color: Colors.white54, fontSize: 16)),
+            // Dica de interação
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.swipe, color: Colors.white38, size: 14),
+              const SizedBox(width: 4),
+              const Text('Toque para aceitar · Deslize para recusar',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
             ]),
-          ]),
-          const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-          // Endereço de entrega
-          Row(children: [
-            const Icon(Icons.location_on_outlined, color: Color(0xFF1A56DB), size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(endereco,
-                style: const TextStyle(color: Colors.white70, fontSize: 13), maxLines: 2)),
-          ]),
-
-          // Distância até a loja
-          if (distKm != null) ...[
-            const SizedBox(height: 6),
+            // Linha 1: ícone loja + nome + número
             Row(children: [
-              const Icon(Icons.route_outlined, color: Colors.white38, size: 16),
-              const SizedBox(width: 6),
-              Text('${distKm.toStringAsFixed(2)} km até a loja',
-                  style: const TextStyle(color: Colors.white38, fontSize: 13)),
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A56DB),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.store, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(nomeLoja,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
+              Text('#$numero', style: const TextStyle(color: Colors.white54, fontSize: 13)),
             ]),
-          ],
-          const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
-          // Botões
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white54,
-                  side: const BorderSide(color: Color(0xFF2a2d3a)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onPressed: _aceitando ? null : _recusarPedido,
-                child: const Text('Recusar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            // Linha 2: km de onde você está
+            Row(children: [
+              const Icon(Icons.location_on, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                distMotoboyLoja > 0
+                    ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
+                    : '— km de onde você está',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A56DB),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-                onPressed: _aceitando ? null : _aceitarPedido,
-                child: _aceitando
-                    ? const SizedBox(width: 20, height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                    : const Text('Aceitar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ]),
+            const SizedBox(height: 8),
+
+            // Linha 3: pontos
+            Row(children: [
+              const Icon(Icons.star_border, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text('$pontos pontos', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ]),
+            const SizedBox(height: 8),
+
+            // Linha 4: tag Bag térmica
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white),
               ),
+              child: const Text('Bag térmica', style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
-          ]),
-        ],
+            const SizedBox(height: 12),
+
+            // Linha 5: rota + km | preços
+            Row(children: [
+              const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
+              const SizedBox(width: 4),
+              Text('${distanciaKm.toStringAsFixed(2)} km',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const Spacer(),
+              if (taxaBase > 0) ...[
+                Text('R\$${taxaBase.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.red, fontSize: 13,
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Colors.red,
+                    )),
+                const SizedBox(width: 8),
+              ],
+              Text('R\$${taxaReal.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            ]),
+
+            // Loading ao aceitar
+            if (_aceitando) ...[
+              const SizedBox(height: 14),
+              const Center(
+                child: SizedBox(width: 22, height: 22,
+                    child: CircularProgressIndicator(color: Color(0xFF1A56DB), strokeWidth: 2.5)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
