@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
-import 'entrega_screen.dart';
+import 'pedidos_aceitos_screen.dart';
 
 class PedidosDisponiveisScreen extends StatefulWidget {
   const PedidosDisponiveisScreen({super.key});
@@ -175,15 +175,10 @@ class _State extends State<PedidosDisponiveisScreen> {
         return;
       }
 
-      final pedidoAtualizado = Map<String, dynamic>.from(pedido);
-      pedidoAtualizado['status'] = 'aceito';
-      pedidoAtualizado['status_detalhado'] = 'aceito';
-      pedidoAtualizado['motoboy_id'] = user.id;
-
       if (mounted) {
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedidoAtualizado)),
+          MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
         );
       }
     } catch (e) {

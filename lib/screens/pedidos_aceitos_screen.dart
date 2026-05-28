@@ -38,7 +38,7 @@ class _State extends State<PedidosAceitosScreen> {
           .from('pedidos')
           .select('*, lojas(nome, latitude, longitude)')
           .eq('motoboy_id', user.id)
-          .inFilter('status', ['aceito', 'chegou_local', 'em_rota', 'retornando'])
+          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
           .not('status', 'in', '("finalizado","cancelado")')
           .order('aceito_em', ascending: false);
       if (mounted) setState(() {
@@ -63,6 +63,7 @@ class _State extends State<PedidosAceitosScreen> {
   String _label(String s) {
     switch (s) {
       case 'aceito':       return 'Aceito';
+      case 'no_local':
       case 'chegou_local': return 'No local';
       case 'em_rota':      return 'Em rota';
       case 'retornando':   return 'Retornando';

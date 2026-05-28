@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import 'pedidos_aceitos_screen.dart';
 
 enum EtapaEntrega { aceito, chegouLocal, emRota, retornando, aguardandoPagamento, finalizado }
 
@@ -478,9 +479,9 @@ class _EntregaScreenState extends State<EntregaScreen> {
       EtapaEntrega.aceito:      (const Color(0xFF1A56DB), 'Cheguei no local',   Icons.store),
       EtapaEntrega.chegouLocal: (const Color(0xFF1A56DB), 'Saí para entregar',  Icons.moped),
       EtapaEntrega.emRota:      (const Color(0xFF1A56DB), 'Finalizar entrega',  Icons.check_circle),
-      EtapaEntrega.finalizado:  (const Color(0xFF10b981), 'Voltar para pedidos', Icons.home),
+      EtapaEntrega.finalizado:  (const Color(0xFF1A56DB), 'Voltar para pedidos', Icons.list_alt),
     };
-    final (cor, label, icon) = config[_etapa] ?? (const Color(0xFF10b981), 'Voltar', Icons.home);
+    final (cor, label, icon) = config[_etapa] ?? (const Color(0xFF1A56DB), 'Voltar', Icons.list_alt);
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -531,7 +532,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   Widget _buildFinalizado() {
     return Column(children: [
-      const Icon(Icons.check_circle, color: Color(0xFF10b981), size: 90),
+      const Icon(Icons.check_circle, color: Color(0xFF1A56DB), size: 90),
       const SizedBox(height: 16),
       const Text('Entrega finalizada!', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
@@ -541,14 +542,17 @@ class _EntregaScreenState extends State<EntregaScreen> {
         width: double.infinity,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF10b981), foregroundColor: Colors.white,
+            backgroundColor: const Color(0xFF1A56DB), foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
+          ),
           child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.arrow_back, size: 20), SizedBox(width: 8),
+            Icon(Icons.list_alt, size: 20), SizedBox(width: 8),
             Text('Voltar para pedidos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
         ),
