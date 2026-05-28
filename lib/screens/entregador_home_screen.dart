@@ -325,7 +325,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             options: MapOptions(initialCenter: pos, initialZoom: 15),
             children: [
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
               ),
               // Pins dos pedidos em andamento
