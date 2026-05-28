@@ -45,8 +45,12 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Future<void> _obterPosicao() async {
     try {
+      // Usa posição conhecida imediatamente para não bloquear o render
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null && mounted) setState(() => _posicaoAtual = last);
+      // Atualiza com posição atual
       final pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+          desiredAccuracy: LocationAccuracy.medium);
       if (mounted) setState(() => _posicaoAtual = pos);
     } catch (_) {}
   }

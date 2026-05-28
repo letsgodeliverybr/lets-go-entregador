@@ -20,14 +20,22 @@ class PedidoCardWidget extends StatelessWidget {
     this.mostrarBotao = false,
   });
 
+  String _titleCase(String text) => text
+      .split(' ')
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+      .join(' ');
+
   @override
   Widget build(BuildContext context) {
     final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
+    final acrescimo = double.tryParse(pedido['taxa_acrescimo']?.toString() ?? '0') ?? 0;
+    final taxaFinal = taxa + acrescimo;
+    final temAcrescimo = acrescimo > 0 && taxaFinal != taxa;
     final distancia = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
-    final enderecoColeta = pedido['endereco_loja'] ?? 'Estabelecimento';
-    final enderecoEntrega = pedido['endereco'] ?? '—';
+    final enderecoColeta = _titleCase(pedido['endereco_loja']?.toString() ?? 'Estabelecimento');
+    final enderecoEntrega = _titleCase(pedido['endereco']?.toString() ?? '—');
     final cor = statusCor ?? botaoCor;
 
     return GestureDetector(
@@ -111,18 +119,18 @@ class PedidoCardWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       if (taxa > 0) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A56DB),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(children: [
-                            const Icon(Icons.attach_money, color: Colors.white, size: 13),
-                            Text('R\$ ${taxa.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                          ]),
-                        ),
+                        if (temAcrescimo) ...[
+                          Text('R\$ ${taxa.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: Colors.red,
+                              )),
+                          const SizedBox(height: 2),
+                        ],
+                        Text('R\$ ${taxaFinal.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 6),
                       ],
                       Text('$pontos pts',
