@@ -94,13 +94,17 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
+      // Filtra estritamente por motoboy_id OU entregador_id do usuário logado
       final data = await _supabase
           .from('pedidos')
           .select('id, status, latitude, longitude, endereco, numero')
           .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
-          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota'])
-          .not('latitude', 'is', null);
-      if (mounted) setState(() => _pedidosEmAndamento = List<Map<String, dynamic>>.from(data));
+          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota']);
+      // Filtra null de lat/lng no lado do cliente para evitar syntax issue no PostgREST
+      final lista = List<Map<String, dynamic>>.from(data)
+          .where((p) => p['latitude'] != null && p['longitude'] != null)
+          .toList();
+      if (mounted) setState(() => _pedidosEmAndamento = lista);
     } catch (_) {}
   }
 
