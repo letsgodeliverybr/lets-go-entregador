@@ -58,7 +58,7 @@ class _State extends State<PedidosAceitosScreen> {
     try {
       final data = await _supabase
           .from('pedidos')
-          .select('*, lojas(nome, lat, lng, endereco, logradouro)')
+          .select('*, lojas(nome, endereco, latitude, longitude)')
           .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
           .order('aceito_em', ascending: false);

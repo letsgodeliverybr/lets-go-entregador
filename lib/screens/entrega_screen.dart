@@ -54,7 +54,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final loja = widget.pedido['lojas'];
     if (loja != null) {
       final nome = loja['nome']?.toString() ?? '';
-      final end = loja['endereco']?.toString() ?? loja['logradouro']?.toString() ?? '';
+      final end = loja['endereco']?.toString() ?? '';
       if (nome.isNotEmpty || end.isNotEmpty) {
         if (mounted) setState(() { _nomeLoja = nome.isNotEmpty ? nome : null; _enderecoLoja = end.isNotEmpty ? end : null; });
         if (end.isNotEmpty) return;
@@ -70,10 +70,10 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final lojaId = widget.pedido['loja_id']?.toString();
     if (lojaId == null || lojaId.isEmpty) return;
     try {
-      final data = await _supabase.from('lojas').select('nome, endereco, logradouro').eq('id', lojaId).maybeSingle();
+      final data = await _supabase.from('lojas').select('nome, endereco, latitude, longitude').eq('id', lojaId).maybeSingle();
       if (data != null && mounted) {
         final nome = data['nome']?.toString() ?? '';
-        final end = data['endereco']?.toString() ?? data['logradouro']?.toString() ?? '';
+        final end = data['endereco']?.toString() ?? '';
         setState(() {
           if (nome.isNotEmpty) _nomeLoja = nome;
           if (end.isNotEmpty) _enderecoLoja = end;
