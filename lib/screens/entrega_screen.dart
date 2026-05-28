@@ -26,6 +26,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
   double? _distanciaLojaKm;
   String? _enderecoLoja;
   String? _nomeLoja;
+  double? _lojaLat;
+  double? _lojaLng;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -74,9 +76,13 @@ class _EntregaScreenState extends State<EntregaScreen> {
       if (data != null && mounted) {
         final nome = data['nome']?.toString() ?? '';
         final end = data['endereco']?.toString() ?? '';
+        final lat = (data['latitude'] ?? data['lat']) as num?;
+        final lng = (data['longitude'] ?? data['lng']) as num?;
         setState(() {
           if (nome.isNotEmpty) _nomeLoja = nome;
           if (end.isNotEmpty) _enderecoLoja = end;
+          if (lat != null) _lojaLat = lat.toDouble();
+          if (lng != null) _lojaLng = lng.toDouble();
         });
       }
     } catch (_) {}
@@ -93,7 +99,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
         final lng = (loja['lng'] ?? loja['longitude']) as num?;
         if (lat != null && lng != null) {
           final dist = _calcularDistancia(pos.latitude, pos.longitude, lat.toDouble(), lng.toDouble());
-          if (mounted) setState(() => _distanciaLojaKm = dist);
+          if (mounted) setState(() {
+            _distanciaLojaKm = dist;
+            _lojaLat = lat.toDouble();
+            _lojaLng = lng.toDouble();
+          });
         }
       }
     } catch (_) {}
@@ -139,6 +149,19 @@ class _EntregaScreenState extends State<EntregaScreen> {
       switch (_etapa) {
 
         case EtapaEntrega.aceito:
+          if (_lojaLat != null && _lojaLng != null) {
+            final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+            final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
+            if (distM > 35) {
+              setState(() => _carregando = false);
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Você precisa estar a menos de 35 metros da loja (atual: ${distM.toStringAsFixed(0)}m)'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ));
+              return;
+            }
+          }
           await _supabase.from('pedidos').update({
             'status': 'no_local',
             'status_detalhado': 'no_local',
@@ -164,6 +187,21 @@ class _EntregaScreenState extends State<EntregaScreen> {
           if (codigo.length != 4 || int.tryParse(codigo) == null) {
             setState(() { _erro = 'Digite os 4 dígitos do código'; _carregando = false; });
             return;
+          }
+          final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
+          final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
+          if (clienteLat != null && clienteLng != null) {
+            final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+            final distM = _calcularDistancia(pos.latitude, pos.longitude, clienteLat.toDouble(), clienteLng.toDouble()) * 1000;
+            if (distM > 35) {
+              setState(() => _carregando = false);
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Você precisa estar a menos de 35 metros do cliente (atual: ${distM.toStringAsFixed(0)}m)'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ));
+              return;
+            }
           }
           await _supabase.from('pedidos').update({
             'status': 'finalizado',
