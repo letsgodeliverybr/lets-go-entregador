@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
@@ -11,7 +8,6 @@ import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'login_screen.dart';
-import 'pedidos_aceitos_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -21,10 +17,8 @@ class EntregadorHomeScreen extends StatefulWidget {
 
 class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
-  final _audioPlayer = AudioPlayer();
   Map<String, dynamic>? _entregador;
   Timer? _statsTimer;
-  RealtimeChannel? _pedidosChannel;
   bool _online = TrackingService.ativo;
   double _saldoDia = 0;
   int _entregasHoje = 0;
@@ -32,27 +26,20 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final MapController _mapController = MapController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Card de novo pedido
-  Map<String, dynamic>? _pedidoPendente;
-  bool _temPedidoEmAndamento = false;
-  bool _aceitando = false;
-
   // Pedidos em andamento para pins no mapa
   List<Map<String, dynamic>> _pedidosEmAndamento = [];
 
   @override
   void initState() {
     super.initState();
-    _carregarEntregador(); // chama _buscarPedidoPendenteInicial ao final
+    _carregarEntregador();
     _carregarStats();
-    _verificarPedidoEmAndamento();
     _carregarPedidosEmAndamento();
     _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _carregarStats();
       _carregarPedidosEmAndamento();
     });
     _iniciarLocalizacaoPassiva();
-    _assinarPedidosRealtime();
   }
 
   Future<void> _carregarEntregador() async {
@@ -65,42 +52,18 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         if (!TrackingService.ativo) _online = response['disponivel'] == true;
       });
       if (_online && !TrackingService.ativo) await TrackingService.iniciar(user.id);
-      // Depois de saber se está online, busca pedido pendente inicial
-      _buscarPedidoPendenteInicial();
     } catch (_) {}
   }
 
-  // Busca pedido pronto/disponível já existente ao abrir a tela
-  Future<void> _buscarPedidoPendenteInicial() async {
-    if (!_online) return;
-    await _verificarPedidoEmAndamento();
-    if (_temPedidoEmAndamento || _pedidoPendente != null) return;
-    try {
-      final data = await _supabase
-          .from('pedidos')
-          .select('*, lojas(nome, endereco, latitude, longitude)')
-          .inFilter('status', ['pronto', 'disponivel'])
-          .order('pronto_em', ascending: true)
-          .limit(1)
-          .maybeSingle();
-      if (data != null && mounted && _pedidoPendente == null) {
-        setState(() => _pedidoPendente = data);
-      }
-    } catch (_) {}
-  }
-
-  // Busca pedidos em andamento para exibir pins no mapa
   Future<void> _carregarPedidosEmAndamento() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      // Filtra estritamente por motoboy_id OU entregador_id do usuário logado
       final data = await _supabase
           .from('pedidos')
           .select('id, status, latitude, longitude, endereco, numero')
           .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota']);
-      // Filtra null de lat/lng no lado do cliente para evitar syntax issue no PostgREST
       final lista = List<Map<String, dynamic>>.from(data)
           .where((p) => p['latitude'] != null && p['longitude'] != null)
           .toList();
@@ -129,20 +92,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     } catch (_) {}
   }
 
-  Future<void> _verificarPedidoEmAndamento() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-    try {
-      final data = await _supabase
-          .from('pedidos')
-          .select('id')
-          .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
-          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
-          .limit(1);
-      if (mounted) setState(() => _temPedidoEmAndamento = data.isNotEmpty);
-    } catch (_) {}
-  }
-
   void _iniciarLocalizacaoPassiva() {
     LocationService.getPositionStream().listen((pos) {
       if (!mounted) return;
@@ -166,7 +115,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       }
     } else {
       await TrackingService.ficarOffline(user.id);
-      if (mounted) setState(() => _pedidoPendente = null);
     }
   }
 
@@ -179,131 +127,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
-  // ── Realtime ─────────────────────────────────────────────────────────────────
-
-  void _assinarPedidosRealtime() {
-    _pedidosChannel = _supabase
-        .channel('home-pedidos-realtime')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'pedidos',
-          callback: (payload) {
-            final s = payload.newRecord['status']?.toString() ?? '';
-            if (s == 'pronto' || s == 'disponivel') {
-              _buscarEMostrarPedido(payload.newRecord['id'].toString());
-            }
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'pedidos',
-          callback: (payload) {
-            final novo = payload.newRecord['status']?.toString() ?? '';
-            final antigo = payload.oldRecord['status']?.toString() ?? '';
-            if ((novo == 'pronto' || novo == 'disponivel') && antigo != novo) {
-              _buscarEMostrarPedido(payload.newRecord['id'].toString());
-            }
-          },
-        )
-        .subscribe();
-  }
-
-  Future<void> _buscarEMostrarPedido(String pedidoId) async {
-    if (!_online || _temPedidoEmAndamento || _pedidoPendente != null) return;
-    try {
-      final data = await _supabase
-          .from('pedidos')
-          .select('*, lojas(nome, endereco, latitude, longitude)')
-          .eq('id', pedidoId)
-          .inFilter('status', ['pronto', 'disponivel'])
-          .maybeSingle();
-      if (data == null || !mounted) return;
-      try {
-        await _audioPlayer.stop();
-        await _audioPlayer.setAsset('assets/sounds/novo_pedido.mp3');
-        await _audioPlayer.play();
-      } catch (_) {}
-      HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 300));
-      HapticFeedback.heavyImpact();
-      if (mounted) setState(() => _pedidoPendente = data);
-    } catch (_) {}
-  }
-
-  // Toque no card = aceitar
-  Future<void> _aceitarPedido() async {
-    final pedido = _pedidoPendente;
-    if (pedido == null || _aceitando) return;
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-
-    setState(() => _aceitando = true);
-    try {
-      final result = await _supabase
-          .from('pedidos')
-          .update({
-            'status': 'aceito',
-            'status_detalhado': 'aceito',
-            'aceito_em': DateTime.now().toIso8601String(),
-            'motoboy_id': user.id,
-            'entregador_id': user.id,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', pedido['id'])
-          .inFilter('status', ['pronto', 'disponivel'])
-          .select();
-
-      if (!mounted) return;
-
-      if (result.isEmpty) {
-        setState(() { _pedidoPendente = null; _aceitando = false; });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Pedido já foi aceito por outro entregador'),
-          backgroundColor: Colors.orange,
-        ));
-        return;
-      }
-
-      setState(() { _pedidoPendente = null; _temPedidoEmAndamento = true; _aceitando = false; });
-      HapticFeedback.heavyImpact();
-      _carregarPedidosEmAndamento();
-
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() => _aceitando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  // Swipe horizontal = recusar
-  void _recusarPedido() => setState(() => _pedidoPendente = null);
-
-  double _calcularDistancia(double lat1, double lng1, double lat2, double lng2) {
-    const R = 6371.0;
-    final dLat = (lat2 - lat1) * pi / 180;
-    final dLng = (lng2 - lng1) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLng / 2) * sin(dLng / 2);
-    return R * 2 * atan2(sqrt(a), sqrt(1 - a));
-  }
-
   @override
   void dispose() {
     _statsTimer?.cancel();
-    _pedidosChannel?.unsubscribe();
-    _audioPlayer.dispose();
     super.dispose();
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -328,6 +156,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                 urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
               ),
+
               // Pins dos pedidos em andamento
               if (_pedidosEmAndamento.isNotEmpty)
                 MarkerLayer(
@@ -336,7 +165,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       .map((p) {
                         final lat = (p['latitude'] as num).toDouble();
                         final lng = (p['longitude'] as num).toDouble();
-                        final status = p['status']?.toString() ?? '';
                         final numero = p['numero']?.toString() ?? '—';
                         return Marker(
                           point: LatLng(lat, lng),
@@ -369,6 +197,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       }).toList(),
                 ),
 
+              // Pin do motoboy
               if (_posicaoAtual != null)
                 MarkerLayer(markers: [
                   Marker(
@@ -535,194 +364,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
               ),
             ]),
           ),
-
-          // OVERLAY ESCURO quando card está visível
-          if (_pedidoPendente != null && _online)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _recusarPedido,
-                child: Container(color: Colors.black.withOpacity(0.55)),
-              ),
-            ),
-
-          // CARD NOVO PEDIDO — centralizado, toque aceita, swipe recusa
-          if (_pedidoPendente != null && _online)
-            Positioned(
-              left: 16, right: 16,
-              top: 0, bottom: 0,
-              child: Center(
-                child: Dismissible(
-                  key: ValueKey(_pedidoPendente!['id']),
-                  direction: DismissDirection.horizontal,
-                  onDismissed: (_) => _recusarPedido(),
-                  background: _buildSwipeBackground(Alignment.centerLeft),
-                  secondaryBackground: _buildSwipeBackground(Alignment.centerRight),
-                  child: GestureDetector(
-                    onTap: _aceitando ? null : _aceitarPedido,
-                    child: _buildCardPedidoPendente(_pedidoPendente!),
-                  ),
-                ),
-              ),
-            ),
         ],
-      ),
-    );
-  }
-
-  // ── Widgets ───────────────────────────────────────────────────────────────────
-
-  Widget _buildSwipeBackground(Alignment align) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFef4444).withOpacity(0.15),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFef4444).withOpacity(0.4)),
-      ),
-      child: Align(
-        alignment: align,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.close, color: Color(0xFFef4444), size: 24),
-              SizedBox(width: 6),
-              Text('Recusar', style: TextStyle(color: Color(0xFFef4444), fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCardPedidoPendente(Map<String, dynamic> pedido) {
-    final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final taxaBase = taxa;
-    final taxaReal = taxa * 1.20;
-    final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
-    final pontos = pedido['pontos'] ?? 4;
-    final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
-    final loja = pedido['lojas'];
-    final nomeLoja = loja?['nome']?.toString() ?? pedido['nome_loja']?.toString() ?? 'Estabelecimento';
-
-    double distMotoboyLoja = 0;
-    if (_posicaoAtual != null && loja != null) {
-      final lat = (loja['latitude'] ?? loja['lat']) as num?;
-      final lng = (loja['longitude'] ?? loja['lng']) as num?;
-      if (lat != null && lng != null) {
-        distMotoboyLoja = _calcularDistancia(
-          _posicaoAtual!.latitude, _posicaoAtual!.longitude,
-          lat.toDouble(), lng.toDouble(),
-        );
-      }
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2A2D35)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 24)],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
-            // Dica de interação
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.swipe, color: Colors.white38, size: 14),
-              const SizedBox(width: 4),
-              const Text('Toque para aceitar · Deslize para recusar',
-                  style: TextStyle(color: Colors.white38, fontSize: 11)),
-            ]),
-            const SizedBox(height: 10),
-
-            // Linha 1: ícone loja + nome + número
-            Row(children: [
-              Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A56DB),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.store, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(nomeLoja,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 8),
-              Text('#$numero', style: const TextStyle(color: Colors.white54, fontSize: 13)),
-            ]),
-            const SizedBox(height: 10),
-
-            // Linha 2: km de onde você está
-            Row(children: [
-              const Icon(Icons.location_on, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                distMotoboyLoja > 0
-                    ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
-                    : '— km de onde você está',
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ]),
-            const SizedBox(height: 8),
-
-            // Linha 3: pontos
-            Row(children: [
-              const Icon(Icons.star_border, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text('$pontos pontos', style: const TextStyle(color: Colors.white, fontSize: 13)),
-            ]),
-            const SizedBox(height: 8),
-
-            // Linha 4: tag Bag térmica
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white),
-              ),
-              child: const Text('Bag térmica', style: TextStyle(color: Colors.white, fontSize: 12)),
-            ),
-            const SizedBox(height: 12),
-
-            // Linha 5: rota + km | preços
-            Row(children: [
-              const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
-              const SizedBox(width: 4),
-              Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              const Spacer(),
-              if (taxaBase > 0) ...[
-                Text('R\$${taxaBase.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.red, fontSize: 13,
-                      decoration: TextDecoration.lineThrough,
-                      decorationColor: Colors.red,
-                    )),
-                const SizedBox(width: 8),
-              ],
-              Text('R\$${taxaReal.toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            ]),
-
-            // Loading ao aceitar
-            if (_aceitando) ...[
-              const SizedBox(height: 14),
-              const Center(
-                child: SizedBox(width: 22, height: 22,
-                    child: CircularProgressIndicator(color: Color(0xFF1A56DB), strokeWidth: 2.5)),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

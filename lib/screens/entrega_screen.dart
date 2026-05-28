@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -149,9 +150,21 @@ class _EntregaScreenState extends State<EntregaScreen> {
       switch (_etapa) {
 
         case EtapaEntrega.aceito:
-          if (_lojaLat != null && _lojaLng != null) {
+          debugPrint('[EntregaScreen] _lojaLat=$_lojaLat, _lojaLng=$_lojaLng');
+          if (_lojaLat == null || _lojaLng == null) {
+            setState(() => _carregando = false);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Coordenadas da loja não encontradas, contate o suporte'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ));
+            return;
+          }
+          {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
+            debugPrint('[EntregaScreen] distância da loja: ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -190,9 +203,21 @@ class _EntregaScreenState extends State<EntregaScreen> {
           }
           final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
           final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
-          if (clienteLat != null && clienteLng != null) {
+          debugPrint('[EntregaScreen] clienteLat=$clienteLat, clienteLng=$clienteLng');
+          if (clienteLat == null || clienteLng == null) {
+            setState(() => _carregando = false);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Coordenadas do cliente não encontradas, contate o suporte'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ));
+            return;
+          }
+          {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, clienteLat.toDouble(), clienteLng.toDouble()) * 1000;
+            debugPrint('[EntregaScreen] distância do cliente: ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
