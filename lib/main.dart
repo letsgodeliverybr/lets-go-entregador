@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
       ),
       // Rota inicial
       home: session != null
-          ? const HomeScreen()
+          ? const EntregadorHomeScreen()
           : const LoginScreen(),
       // Rotas nomeadas
       routes: {
