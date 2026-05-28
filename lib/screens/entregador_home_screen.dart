@@ -198,7 +198,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final nome = _entregador?['nome'] ?? 'Entregador';
+    final nomeCompleto = _entregador?['nome']?.toString() ?? '';
+    final nome = nomeCompleto.isNotEmpty ? nomeCompleto.split(' ').first : 'Motoboy';
     final pos = _posicaoAtual ?? const LatLng(-21.1775, -47.8103);
 
     return Scaffold(
@@ -224,7 +225,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                 MarkerLayer(markers: [
                   Marker(
                     point: _posicaoAtual!,
-                    width: 64, height: 80,
+                    width: 64, height: 90,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -246,7 +247,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            nome.split(' ').first,
+                            nome,
                             style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
                           ),
                         ),
