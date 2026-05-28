@@ -94,7 +94,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
                   _buildExpandable(Icons.info_outline, 'SOBRE O APP', _sobreExpanded,
                     () => setState(() => _sobreExpanded = !_sobreExpanded),
                     ['Termos de uso', 'Termos de privacidade', 'Log']),
-                  const Spacer(),
+                  const SizedBox(height: 24),
                   _buildItem(Icons.power_settings_new, 'LOGOUT', cor: Colors.redAccent, onTap: () {
                     Navigator.pop(context);
                     if (widget.onLogout != null) {

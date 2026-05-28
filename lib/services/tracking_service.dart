@@ -56,8 +56,6 @@ class TrackingService {
       await _supabase.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
-        'latitude': pos.latitude,
-        'longitude': pos.longitude,
         'disponivel': true,
         'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
@@ -93,8 +91,6 @@ class TrackingService {
         'status': 'disponivel',
         'lat': pos?.latitude,
         'lng': pos?.longitude,
-        'latitude': pos?.latitude,
-        'longitude': pos?.longitude,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
     } catch (_) {}
