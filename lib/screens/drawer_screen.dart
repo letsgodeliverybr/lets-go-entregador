@@ -6,7 +6,8 @@ import 'carteira_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
-  const DrawerScreen({super.key});
+  final VoidCallback? onLogout;
+  const DrawerScreen({super.key, this.onLogout});
   @override
   State<DrawerScreen> createState() => _DrawerScreenState();
 }
@@ -95,7 +96,12 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     ['Termos de uso', 'Termos de privacidade', 'Log']),
                   const Spacer(),
                   _buildItem(Icons.power_settings_new, 'LOGOUT', cor: Colors.redAccent, onTap: () {
-                    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+                    Navigator.pop(context);
+                    if (widget.onLogout != null) {
+                      widget.onLogout!();
+                    } else {
+                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+                    }
                   }),
                   const SizedBox(height: 8),
                   const Text('4.4.7 (4157)', style: TextStyle(color: Color(0xFF374151), fontSize: 12), textAlign: TextAlign.center),

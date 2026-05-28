@@ -24,8 +24,8 @@ class LocationService {
     if (Platform.isAndroid) {
       settings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-        intervalDuration: const Duration(seconds: 5),
+        distanceFilter: 0,
+        intervalDuration: const Duration(seconds: 3),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationText: 'LetsGo está monitorando sua localização',
           notificationTitle: 'Localização ativa',
@@ -35,7 +35,7 @@ class LocationService {
     } else {
       settings = const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
+        distanceFilter: 0,
       );
     }
     return Geolocator.getPositionStream(locationSettings: settings);

@@ -10,34 +10,44 @@ class TrackingService {
   static Timer? _timer;
   static bool _ativo = false;
   static Position? _ultimaPosicao;
+  static String? _entregadorId;
 
   static Future<void> iniciar(String entregadorId) async {
     if (_ativo) return;
     _ativo = true;
+    _entregadorId = entregadorId;
 
-    debugPrint('[TrackingService] Iniciando rastreamento para $entregadorId');
+    debugPrint('[TrackingService] ▶ Iniciando rastreamento para $entregadorId');
 
-    // Envia posição inicial imediatamente
+    // 1. Posição inicial imediata
     final posInicial = await LocationService.getCurrentPosition();
     if (posInicial != null) {
       _ultimaPosicao = posInicial;
       await _enviar(entregadorId, posInicial);
     }
 
-    // Stream de posição do GPS
+    // 2. Stream do GPS — recebe atualizações quando há movimento
     _sub = LocationService.getPositionStream().listen(
-      (pos) async {
+      (pos) {
         _ultimaPosicao = pos;
-        await _enviar(entregadorId, pos);
+        _enviar(entregadorId, pos);
       },
-      onError: (e) => debugPrint('[TrackingService] Erro no stream: $e'),
+      onError: (e) => debugPrint('[TrackingService] ⚠ Erro no stream: $e'),
       cancelOnError: false,
     );
+    debugPrint('[TrackingService] Stream GPS assinado: $_sub');
 
-    // Timer fallback: garante envio a cada 5s mesmo que o stream não dispare
+    // 3. Timer independente: busca posição atual a cada 5s e envia
+    //    Garante envio contínuo mesmo que o stream não dispare (dispositivo parado)
     _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      final pos = _ultimaPosicao;
-      if (pos != null) await _enviar(entregadorId, pos);
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null) {
+        _ultimaPosicao = pos;
+        await _enviar(entregadorId, pos);
+      } else if (_ultimaPosicao != null) {
+        // Se getCurrentPosition falhar, reenvia a última posição conhecida
+        await _enviar(entregadorId, _ultimaPosicao!);
+      }
     });
   }
 
@@ -52,9 +62,9 @@ class TrackingService {
         'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
-      debugPrint('[TrackingService] GPS enviado: ${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}');
+      debugPrint('[TrackingService] ✓ GPS: ${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}');
     } catch (e) {
-      debugPrint('[TrackingService] Erro ao enviar GPS: $e');
+      debugPrint('[TrackingService] ✗ Erro ao enviar GPS: $e');
     }
   }
 
@@ -65,7 +75,8 @@ class TrackingService {
     await _sub?.cancel();
     _sub = null;
     _ultimaPosicao = null;
-    debugPrint('[TrackingService] Rastreamento parado');
+    _entregadorId = null;
+    debugPrint('[TrackingService] ■ Rastreamento parado');
     try {
       await _supabase.from('entregadores').update({
         'status': 'disponivel',
@@ -74,7 +85,6 @@ class TrackingService {
     } catch (_) {}
   }
 
-  /// Marca motoboy como online/disponível
   static Future<void> ficarOnline(String entregadorId) async {
     final pos = await LocationService.getCurrentPosition();
     try {
@@ -90,7 +100,6 @@ class TrackingService {
     } catch (_) {}
   }
 
-  /// Marca motoboy como offline e para o rastreamento
   static Future<void> ficarOffline(String entregadorId) async {
     await parar(entregadorId);
     try {

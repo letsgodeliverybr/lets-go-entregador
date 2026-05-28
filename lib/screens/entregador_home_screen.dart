@@ -8,7 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
-import 'home_screen.dart';
+import 'drawer_screen.dart';
 import 'login_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
@@ -28,6 +28,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   int _entregasHoje = 0;
   LatLng? _posicaoAtual;
   final MapController _mapController = MapController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -84,15 +85,13 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     } catch (_) {}
   }
 
-  // Localização passiva — só atualiza o mapa; TrackingService cuida do Supabase
+  // Localização passiva — atualiza o mapa sempre, independente de online/offline
   void _iniciarLocalizacaoPassiva() {
     LocationService.getPositionStream().listen((pos) {
       if (!mounted) return;
       final ll = LatLng(pos.latitude, pos.longitude);
       setState(() => _posicaoAtual = ll);
-      if (_online) {
-        try { _mapController.move(ll, _mapController.camera.zoom); } catch (_) {}
-      }
+      try { _mapController.move(ll, _mapController.camera.zoom); } catch (_) {}
     });
   }
 
@@ -110,10 +109,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       }
     } else {
       await TrackingService.ficarOffline(user.id);
-      if (mounted) {
-        Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const HomeScreen()));
-      }
     }
   }
 
@@ -207,7 +202,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     final pos = _posicaoAtual ?? const LatLng(-21.1775, -47.8103);
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFF0D0F14),
+      drawer: DrawerScreen(onLogout: _logout),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
       body: Stack(
         children: [
@@ -303,16 +300,16 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                     // Toggle online/offline compacto na topbar
                     _buildToggleCompacto(),
                     const SizedBox(width: 8),
-                    // Botão logout
+                    // Botão menu hamburguer abre Drawer
                     GestureDetector(
-                      onTap: _logout,
+                      onTap: () => _scaffoldKey.currentState?.openDrawer(),
                       child: Container(
                         width: 36, height: 36,
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.logout, color: Colors.white54, size: 18),
+                        child: const Icon(Icons.menu, color: Colors.white, size: 20),
                       ),
                     ),
                   ],
