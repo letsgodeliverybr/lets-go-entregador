@@ -6,7 +6,9 @@ import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
+import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
@@ -23,7 +25,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   Timer? _locationTimer;
   Timer? _statsTimer;
   RealtimeChannel? _pedidosChannel;
-  bool _online = false;
+  bool _online = TrackingService.ativo;
   double _saldoDia = 0;
   int _entregasHoje = 0;
   LatLng? _posicaoAtual;
@@ -50,9 +52,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           .single();
       setState(() {
         _entregador = response;
-        _online = response['disponivel'] == true;
+        if (!TrackingService.ativo) {
+          _online = response['disponivel'] == true;
+        }
       });
-      if (_online) _iniciarLocalizacao();
+      if (_online && !TrackingService.ativo) _iniciarLocalizacao();
     } catch (_) {}
   }
 
@@ -138,8 +142,15 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   void _toggleOnline(bool value) {
     setState(() => _online = value);
-    if (value) _iniciarLocalizacao();
-    else _pararLocalizacao();
+    if (value) {
+      _iniciarLocalizacao();
+    } else {
+      _pararLocalizacao();
+      if (mounted) {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      }
+    }
   }
 
   Future<void> _logout() async {

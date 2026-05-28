@@ -2,11 +2,13 @@ import 'vagas_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 import 'carteira_screen.dart';
 import 'estabelecimentos_screen.dart';
-import 'carteira_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'pedidos_disponiveis_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
+import 'entregador_home_screen.dart';
+import '../services/tracking_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,7 +18,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _online = false;
+  bool _carregando = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  Future<void> _toggleOnline(bool value) async {
+    if (!value) {
+      setState(() => _online = false);
+      return;
+    }
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    setState(() => _carregando = true);
+    try {
+      await Supabase.instance.client.from('entregadores').update({
+        'disponivel': true,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', user.id);
+      await TrackingService.iniciar(user.id);
+    } catch (_) {}
+    if (mounted) {
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const EntregadorHomeScreen()));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildToggleOffline() {
     return GestureDetector(
-      onTap: () => setState(() => _online = !_online),
+      onTap: _carregando ? null : () => _toggleOnline(!_online),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -92,12 +116,14 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(_online ? 'ONLINE' : 'OFFLINE',
                 style: TextStyle(color: _online ? const Color(0xFF1A56DB) : Colors.white60, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(width: 6),
-            Switch(
-              value: _online,
-              onChanged: (v) => setState(() => _online = v),
-              activeColor: const Color(0xFF1A56DB),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            _carregando
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1A56DB)))
+                : Switch(
+                    value: _online,
+                    onChanged: _toggleOnline,
+                    activeColor: const Color(0xFF1A56DB),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
           ],
         ),
       ),
@@ -137,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 GestureDetector(
-                  onTap: () => setState(() => _online = !_online),
+                  onTap: _carregando ? null : () => _toggleOnline(!_online),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     decoration: BoxDecoration(
@@ -151,12 +177,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(_online ? 'ONLINE' : 'OFFLINE',
                             style: TextStyle(color: _online ? const Color(0xFF1A56DB) : Colors.white60, fontWeight: FontWeight.bold)),
                         const SizedBox(width: 8),
-                        Switch(
-                          value: _online,
-                          onChanged: (v) => setState(() => _online = v),
-                          activeColor: const Color(0xFF1A56DB),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
+                        _carregando
+                            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1A56DB)))
+                            : Switch(
+                                value: _online,
+                                onChanged: _toggleOnline,
+                                activeColor: const Color(0xFF1A56DB),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
                       ],
                     ),
                   ),

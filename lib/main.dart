@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
@@ -37,12 +38,12 @@ class MyApp extends StatelessWidget {
       ),
       // Rota inicial
       home: session != null
-          ? const EntregadorHomeScreen()
+          ? const HomeScreen()
           : const LoginScreen(),
       // Rotas nomeadas
       routes: {
         '/pedidos': (context) => const PedidosDisponiveisScreen(),
-        '/home':    (context) => const EntregadorHomeScreen(),
+        '/home':    (context) => const HomeScreen(),
         '/login':   (context) => const LoginScreen(),
         '/extrato': (context) => const ExtratoScreen(),
       },
