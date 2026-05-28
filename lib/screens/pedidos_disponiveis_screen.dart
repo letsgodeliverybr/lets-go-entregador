@@ -245,7 +245,19 @@ class _State extends State<PedidosDisponiveisScreen> {
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
-    final enderecoEntrega = pedido['endereco']?.toString() ?? '—';
+
+    double distMotoboyLoja = 0;
+    if (_posicaoAtual != null &&
+        loja != null &&
+        loja['latitude'] != null &&
+        loja['longitude'] != null) {
+      distMotoboyLoja = _calcularDistancia(
+        _posicaoAtual!.latitude,
+        _posicaoAtual!.longitude,
+        (loja['latitude'] as num).toDouble(),
+        (loja['longitude'] as num).toDouble(),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -259,7 +271,7 @@ class _State extends State<PedidosDisponiveisScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Row 1: ícone loja (fundo azul) + nome da loja + badge número
+            // Linha 1: ícone loja + nome + número do pedido
             Row(children: [
               Container(
                 width: 42,
@@ -280,54 +292,53 @@ class _State extends State<PedidosDisponiveisScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2D35),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text('#$numero',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
-              ),
+              const SizedBox(width: 8),
+              Text('#$numero',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
             ]),
             const SizedBox(height: 10),
 
-            // Row 2: endereço de entrega com ícone localização branco
+            // Linha 2: ícone localização + "X km de onde você está"
             Row(children: [
               const Icon(Icons.location_on, color: Colors.white, size: 16),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(enderecoEntrega,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
+              Text(
+                distMotoboyLoja > 0
+                    ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
+                    : '— km de onde você está',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
             ]),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
-            // Row 3: km + pontos + tag "Bag térmica"
+            // Linha 3: ícone estrela + pontos
             Row(children: [
-              Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Colors.white60, fontSize: 13)),
-              const SizedBox(width: 12),
-              Text('$pontos pts',
-                  style: const TextStyle(color: Colors.white60, fontSize: 13)),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A56DB).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF1A56DB)),
-                ),
-                child: const Text('Bag térmica',
-                    style: TextStyle(color: Color(0xFF1A56DB), fontSize: 11)),
-              ),
+              const Icon(Icons.star_border, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text('$pontos pontos',
+                  style: const TextStyle(color: Colors.white, fontSize: 13)),
             ]),
+            const SizedBox(height: 8),
+
+            // Linha 4: tag "Bag térmica" — borda branca, texto branco, sem fundo
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white),
+              ),
+              child: const Text('Bag térmica',
+                  style: TextStyle(color: Colors.white, fontSize: 12)),
+            ),
             const SizedBox(height: 12),
 
-            // Row 4: preço original riscado (vermelho) + preço final (branco) + botão Aceitar
+            // Linha 5 (rodapé): ícone rota + km à esquerda | preços à direita
             Row(children: [
+              const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
+              const SizedBox(width: 4),
+              Text('${distanciaKm.toStringAsFixed(2)} km',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              const Spacer(),
               if (taxaBase > 0) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',
                     style: const TextStyle(
@@ -343,24 +354,26 @@ class _State extends State<PedidosDisponiveisScreen> {
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold)),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => _aceitar(pedido),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A56DB),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text('Aceitar',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700)),
-                ),
-              ),
             ]),
+            const SizedBox(height: 12),
+
+            // Linha 6: botão Aceitar largura total
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A56DB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+                onPressed: () => _aceitar(pedido),
+                child: const Text('Aceitar',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ),
           ],
         ),
       ),
