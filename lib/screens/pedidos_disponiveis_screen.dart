@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
-import 'entrega_screen.dart';
 
 class PedidosDisponiveisScreen extends StatefulWidget {
   const PedidosDisponiveisScreen({super.key});
@@ -22,7 +21,6 @@ class _State extends State<PedidosDisponiveisScreen> {
   Timer? _timer;
   RealtimeChannel? _channel;
 
-  // Controle de IDs já exibidos para detectar novidades
   final Set<String> _idsConhecidos = {};
   bool _primeiraCarregada = true;
 
@@ -33,9 +31,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     super.initState();
     _obterPosicao();
     _buscar();
-    // Polling como fallback (8s)
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
-    // Realtime — toca som ao INSERT de pedido novo
     _assinarRealtime();
   }
 
@@ -68,7 +64,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     return R * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
-  // ── busca pedidos com status 'pronto' (exclui finalizado/cancelado) ──────
   Future<void> _buscar() async {
     try {
       final user = _supabase.auth.currentUser;
@@ -77,25 +72,23 @@ class _State extends State<PedidosDisponiveisScreen> {
       final data = await _supabase
           .from('pedidos')
           .select('*, lojas(nome, latitude, longitude)')
-          .inFilter('status', ['pronto']) // garante que finalizado/cancelado nunca entram
+          .inFilter('status', ['pronto'])
           .not('status', 'in', '("finalizado","cancelado")')
           .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
           .order('pronto_em', ascending: true);
 
       final lista = List<Map<String, dynamic>>.from(data);
 
-      // Detecta novidades (ignora na primeira carga para não tocar ao abrir)
       if (!_primeiraCarregada) {
         for (final p in lista) {
           final id = p['id'].toString();
           if (!_idsConhecidos.contains(id)) {
             await _tocarNotificacao();
-            break; // toca só uma vez por lote
+            break;
           }
         }
       }
 
-      // Atualiza set de IDs conhecidos
       for (final p in lista) {
         _idsConhecidos.add(p['id'].toString());
       }
@@ -112,7 +105,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     }
   }
 
-  // ── toca ringtone + vibra ─────────────────────────────────────────────────
   Future<void> _tocarNotificacao() async {
     try {
       await _audioPlayer.stop();
@@ -124,7 +116,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     HapticFeedback.heavyImpact();
   }
 
-  // ── realtime: toca som imediatamente ao INSERT de pedido ─────────────────
   void _assinarRealtime() {
     _channel = _supabase.channel('pedidos-disp-realtime').onPostgresChanges(
       event: PostgresChangeEvent.insert,
@@ -132,7 +123,6 @@ class _State extends State<PedidosDisponiveisScreen> {
       table: 'pedidos',
       callback: (payload) {
         final status = payload.newRecord['status']?.toString() ?? '';
-        // Só reage a pedidos prontos (não finalizado/cancelado/outros)
         if (status == 'pronto') {
           _tocarNotificacao();
           _buscar();
@@ -145,7 +135,6 @@ class _State extends State<PedidosDisponiveisScreen> {
       callback: (payload) {
         final novo = payload.newRecord['status']?.toString() ?? '';
         final antigo = payload.oldRecord['status']?.toString() ?? '';
-        // Toca som se pedido acabou de ficar pronto
         if (novo == 'pronto' && antigo != 'pronto') {
           _tocarNotificacao();
         }
@@ -154,7 +143,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     ).subscribe();
   }
 
-  // ── aceita pedido ─────────────────────────────────────────────────────────
   Future<void> _aceitar(Map<String, dynamic> pedido) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -162,8 +150,8 @@ class _State extends State<PedidosDisponiveisScreen> {
       final result = await _supabase
           .from('pedidos')
           .update({
-            'status': 'aceito',
-            'status_detalhado': 'aceito',
+            'status': 'em_rota',
+            'status_detalhado': 'em_rota',
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
             'updated_at': DateTime.now().toIso8601String(),
@@ -182,13 +170,12 @@ class _State extends State<PedidosDisponiveisScreen> {
         return;
       }
 
-      _timer?.cancel();
-      _channel?.unsubscribe();
-      await Navigator.push(
-          context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedido)));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Pedido aceito!'),
+        backgroundColor: Color(0xFF1A56DB),
+        duration: Duration(seconds: 2),
+      ));
       _buscar();
-      _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
-      _assinarRealtime();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -196,8 +183,6 @@ class _State extends State<PedidosDisponiveisScreen> {
       }
     }
   }
-
-  // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -217,7 +202,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                  color: const Color(0xFFec4899),
+                  color: const Color(0xFF1A56DB),
                   borderRadius: BorderRadius.circular(20)),
               child: Text('${_pedidos.length}',
                   style: const TextStyle(
@@ -235,12 +220,12 @@ class _State extends State<PedidosDisponiveisScreen> {
       ),
       body: _carregando
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFec4899)))
+              child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
           : _pedidos.isEmpty
               ? _buildVazio()
               : RefreshIndicator(
                   onRefresh: _buscar,
-                  color: const Color(0xFFec4899),
+                  color: const Color(0xFF1A56DB),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _pedidos.length,
@@ -258,31 +243,9 @@ class _State extends State<PedidosDisponiveisScreen> {
     final pontos = pedido['pontos'] ?? 4;
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
-    final descricao = pedido['descricao']?.toString() ?? '';
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
-
-    // Distância motoboy → loja
-    double distMotoboyLoja = 0;
-    if (_posicaoAtual != null &&
-        loja != null &&
-        loja['latitude'] != null &&
-        loja['longitude'] != null) {
-      distMotoboyLoja = _calcularDistancia(
-        _posicaoAtual!.latitude,
-        _posicaoAtual!.longitude,
-        (loja['latitude'] as num).toDouble(),
-        (loja['longitude'] as num).toDouble(),
-      );
-    }
-
-    final tags = descricao.isNotEmpty
-        ? descricao
-            .split(',')
-            .map((t) => t.trim())
-            .where((t) => t.isNotEmpty)
-            .toList()
-        : <String>[];
+    final enderecoEntrega = pedido['endereco']?.toString() ?? '—';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -291,146 +254,103 @@ class _State extends State<PedidosDisponiveisScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
-      child: Column(
-        children: [
-          // HEADER — loja
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A56DB20),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF1A56DB50)),
-                    ),
-                    child: const Center(
-                        child: Text('🏪', style: TextStyle(fontSize: 20))),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(nomeLoja,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                  // Badge pedido número
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2D35),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('#$numero',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11)),
-                  ),
-                ]),
-                const SizedBox(height: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: ícone loja (fundo azul) + nome da loja + badge número
+            Row(children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A56DB),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.store, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(nomeLoja,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2D35),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('#$numero',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              ),
+            ]),
+            const SizedBox(height: 10),
 
-                // Distância até a loja
-                Row(children: [
-                  const Icon(Icons.location_on_outlined,
-                      color: Color(0xFF94a3b8), size: 16),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      distMotoboyLoja > 0
-                          ? '${distMotoboyLoja.toStringAsFixed(2)} km de você até a loja'
-                          : (pedido['endereco']?.toString() ?? '—'),
-                      style: const TextStyle(
-                          color: Color(0xFF94a3b8), fontSize: 13),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 6),
+            // Row 2: endereço de entrega com ícone localização branco
+            Row(children: [
+              const Icon(Icons.location_on, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(enderecoEntrega,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ]),
+            const SizedBox(height: 10),
 
-                // Pontos
-                Row(children: [
-                  const Icon(Icons.star_border,
-                      color: Color(0xFF94a3b8), size: 16),
-                  const SizedBox(width: 4),
-                  Text('$pontos pontos',
-                      style: const TextStyle(
-                          color: Color(0xFF94a3b8), fontSize: 13)),
-                ]),
-
-                // Tags
-                if (tags.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                      spacing: 6,
-                      children: tags
-                          .map((tag) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2A2D35),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(tag,
-                                    style: const TextStyle(
-                                        color: Color(0xFF94a3b8), fontSize: 12)),
-                              ))
-                          .toList()),
-                ],
-              ],
-            ),
-          ),
-
-          // FOOTER — distância entrega + valores + botão
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFF2A2D35))),
-            ),
-            child: Row(children: [
-              // Distância loja→cliente
-              const Icon(Icons.route_outlined,
-                  color: Color(0xFF94a3b8), size: 16),
-              const SizedBox(width: 4),
+            // Row 3: km + pontos + tag "Bag térmica"
+            Row(children: [
               Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(
-                      color: Color(0xFF94a3b8), fontSize: 13)),
-              const Spacer(),
+                  style: const TextStyle(color: Colors.white60, fontSize: 13)),
+              const SizedBox(width: 12),
+              Text('$pontos pts',
+                  style: const TextStyle(color: Colors.white60, fontSize: 13)),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A56DB).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF1A56DB)),
+                ),
+                child: const Text('Bag térmica',
+                    style: TextStyle(color: Color(0xFF1A56DB), fontSize: 11)),
+              ),
+            ]),
+            const SizedBox(height: 12),
 
-              // Valor tachado
+            // Row 4: preço original riscado (vermelho) + preço final (branco) + botão Aceitar
+            Row(children: [
               if (taxaBase > 0) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',
                     style: const TextStyle(
-                      color: Color(0xFF94a3b8),
+                      color: Colors.red,
                       fontSize: 13,
                       decoration: TextDecoration.lineThrough,
-                      decorationColor: Color(0xFF94a3b8),
+                      decorationColor: Colors.red,
                     )),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
               ],
-
-              // Valor real (com bônus)
               Text('R\$${taxaReal.toStringAsFixed(2)}',
                   style: const TextStyle(
-                      color: Color(0xFF22c55e),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800)),
-              const SizedBox(width: 12),
-
-              // Botão aceitar
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
+              const Spacer(),
               GestureDetector(
                 onTap: () => _aceitar(pedido),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFec4899),
+                    color: const Color(0xFF1A56DB),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Text('Aceitar',
@@ -441,8 +361,8 @@ class _State extends State<PedidosDisponiveisScreen> {
                 ),
               ),
             ]),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -460,9 +380,9 @@ class _State extends State<PedidosDisponiveisScreen> {
         const SizedBox(height: 24),
         TextButton.icon(
           onPressed: _buscar,
-          icon: const Icon(Icons.refresh, color: Color(0xFFec4899)),
+          icon: const Icon(Icons.refresh, color: Color(0xFF1A56DB)),
           label: const Text('Atualizar',
-              style: TextStyle(color: Color(0xFFec4899))),
+              style: TextStyle(color: Color(0xFF1A56DB))),
         ),
       ]),
     );

@@ -34,10 +34,9 @@ class _State extends State<PedidosAceitosScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      // Filtra apenas status ativos — finalizado e cancelado são excluídos explicitamente
       final data = await _supabase
           .from('pedidos')
-          .select()
+          .select('*, lojas(nome, latitude, longitude)')
           .eq('motoboy_id', user.id)
           .inFilter('status', ['aceito', 'chegou_local', 'em_rota', 'retornando'])
           .not('status', 'in', '("finalizado","cancelado")')
@@ -58,15 +57,8 @@ class _State extends State<PedidosAceitosScreen> {
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
   }
 
-  Color _cor(String s) {
-    switch (s) {
-      case 'aceito':       return const Color(0xFF8b5cf6);
-      case 'chegou_local': return const Color(0xFF60a5fa);
-      case 'em_rota':      return const Color(0xFF1A56DB);
-      case 'retornando':   return const Color(0xFFf59e0b);
-      default:             return Colors.grey;
-    }
-  }
+  // Borda sempre azul independente do status
+  Color _cor(String s) => const Color(0xFF1A56DB);
 
   String _label(String s) {
     switch (s) {
@@ -75,24 +67,6 @@ class _State extends State<PedidosAceitosScreen> {
       case 'em_rota':      return 'Em rota';
       case 'retornando':   return 'Retornando';
       default:             return s;
-    }
-  }
-
-  String _botaoLabel(String s) {
-    switch (s) {
-      case 'aceito':       return 'Cheguei no local';
-      case 'chegou_local': return 'Saí para entregar';
-      case 'em_rota':      return 'Finalizar entrega';
-      default:             return 'Continuar';
-    }
-  }
-
-  IconData _botaoIcone(String s) {
-    switch (s) {
-      case 'aceito':       return Icons.store;
-      case 'chegou_local': return Icons.moped;
-      case 'em_rota':      return Icons.check_circle;
-      default:             return Icons.arrow_forward;
     }
   }
 
@@ -111,7 +85,7 @@ class _State extends State<PedidosAceitosScreen> {
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: const Color(0xFF8b5cf6), borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(20)),
               child: Text('${_pedidos.length}',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
             ),
@@ -120,7 +94,7 @@ class _State extends State<PedidosAceitosScreen> {
         actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _buscar)],
       ),
       body: _carregando
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8b5cf6)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
           : _pedidos.isEmpty
               ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.check_circle_outline, color: Colors.grey.shade700, size: 72),
@@ -132,7 +106,7 @@ class _State extends State<PedidosAceitosScreen> {
                 ]))
               : RefreshIndicator(
                   onRefresh: _buscar,
-                  color: const Color(0xFF8b5cf6),
+                  color: const Color(0xFF1A56DB),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _pedidos.length,
@@ -144,11 +118,9 @@ class _State extends State<PedidosAceitosScreen> {
                         pedido: p,
                         statusLabel: _label(status),
                         statusCor: _cor(status),
-                        // sem botão
-                        
                         botaoCor: _cor(status),
                         isRetornando: isRetornando,
-                        onTap: isRetornando ? null : () => _abrirEntrega(p),
+                        onTap: () => _abrirEntrega(p),
                       );
                     },
                   ),

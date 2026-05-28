@@ -14,7 +14,7 @@ class PedidoCardWidget extends StatelessWidget {
     required this.pedido,
     this.statusLabel,
     this.statusCor,
-    this.botaoCor = const Color(0xFFec4899),
+    this.botaoCor = const Color(0xFF1A56DB),
     this.onTap,
     this.isRetornando = false,
     this.mostrarBotao = false,
@@ -22,7 +22,6 @@ class PedidoCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valor = double.tryParse(pedido['valor']?.toString() ?? '0') ?? 0;
     final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
     final distancia = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final pontos = pedido['pontos'] as int? ?? 4;
@@ -32,12 +31,12 @@ class PedidoCardWidget extends StatelessWidget {
     final cor = statusCor ?? botaoCor;
 
     return GestureDetector(
-      onTap: isRetornando ? null : onTap,
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: const Color(0xFF161820),
-          border: Border.all(color: cor, width: 1.5),
+          border: Border.all(color: const Color(0xFF1A56DB), width: 1.5),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -100,7 +99,6 @@ class PedidoCardWidget extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Distância
                   if (distancia > 0) ...[
                     _infoChip(Icons.route,
                         '${distancia.toStringAsFixed(1)} km',
@@ -109,7 +107,6 @@ class PedidoCardWidget extends StatelessWidget {
 
                   const Spacer(),
 
-                  // Taxa + Pontos empilhados no canto direito
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -144,16 +141,16 @@ class PedidoCardWidget extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFf59e0b10),
-                    border: Border.all(color: const Color(0xFFf59e0b40)),
+                    color: const Color(0xFF1A56DB10),
+                    border: Border.all(color: const Color(0xFF1A56DB40)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     SizedBox(width: 14, height: 14,
-                        child: CircularProgressIndicator(color: Color(0xFFf59e0b), strokeWidth: 2)),
+                        child: CircularProgressIndicator(color: Color(0xFF1A56DB), strokeWidth: 2)),
                     SizedBox(width: 10),
                     Text('Aguardando confirmação da loja',
-                        style: TextStyle(color: Color(0xFFf59e0b), fontSize: 13, fontWeight: FontWeight.w500)),
+                        style: TextStyle(color: Color(0xFF1A56DB), fontSize: 13, fontWeight: FontWeight.w500)),
                   ]),
                 ),
               ),
