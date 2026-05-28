@@ -37,13 +37,20 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   bool _temPedidoEmAndamento = false;
   bool _aceitando = false;
 
+  // Pedidos em andamento para pins no mapa
+  List<Map<String, dynamic>> _pedidosEmAndamento = [];
+
   @override
   void initState() {
     super.initState();
-    _carregarEntregador();
+    _carregarEntregador(); // chama _buscarPedidoPendenteInicial ao final
     _carregarStats();
     _verificarPedidoEmAndamento();
-    _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _carregarStats());
+    _carregarPedidosEmAndamento();
+    _statsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _carregarStats();
+      _carregarPedidosEmAndamento();
+    });
     _iniciarLocalizacaoPassiva();
     _assinarPedidosRealtime();
   }
@@ -58,6 +65,42 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         if (!TrackingService.ativo) _online = response['disponivel'] == true;
       });
       if (_online && !TrackingService.ativo) await TrackingService.iniciar(user.id);
+      // Depois de saber se está online, busca pedido pendente inicial
+      _buscarPedidoPendenteInicial();
+    } catch (_) {}
+  }
+
+  // Busca pedido pronto/disponível já existente ao abrir a tela
+  Future<void> _buscarPedidoPendenteInicial() async {
+    if (!_online) return;
+    await _verificarPedidoEmAndamento();
+    if (_temPedidoEmAndamento || _pedidoPendente != null) return;
+    try {
+      final data = await _supabase
+          .from('pedidos')
+          .select('*, lojas(nome, endereco, latitude, longitude)')
+          .inFilter('status', ['pronto', 'disponivel'])
+          .order('pronto_em', ascending: true)
+          .limit(1)
+          .maybeSingle();
+      if (data != null && mounted && _pedidoPendente == null) {
+        setState(() => _pedidoPendente = data);
+      }
+    } catch (_) {}
+  }
+
+  // Busca pedidos em andamento para exibir pins no mapa
+  Future<void> _carregarPedidosEmAndamento() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await _supabase
+          .from('pedidos')
+          .select('id, status, latitude, longitude, endereco, numero')
+          .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
+          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota'])
+          .not('latitude', 'is', null);
+      if (mounted) setState(() => _pedidosEmAndamento = List<Map<String, dynamic>>.from(data));
     } catch (_) {}
   }
 
@@ -221,6 +264,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
       setState(() { _pedidoPendente = null; _temPedidoEmAndamento = true; _aceitando = false; });
       HapticFeedback.heavyImpact();
+      _carregarPedidosEmAndamento();
 
       await Navigator.pushReplacement(
         context,
@@ -280,6 +324,47 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                 urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
               ),
+              // Pins dos pedidos em andamento
+              if (_pedidosEmAndamento.isNotEmpty)
+                MarkerLayer(
+                  markers: _pedidosEmAndamento
+                      .where((p) => p['latitude'] != null && p['longitude'] != null)
+                      .map((p) {
+                        final lat = (p['latitude'] as num).toDouble();
+                        final lng = (p['longitude'] as num).toDouble();
+                        final status = p['status']?.toString() ?? '';
+                        final numero = p['numero']?.toString() ?? '—';
+                        return Marker(
+                          point: LatLng(lat, lng),
+                          width: 56, height: 60,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 36, height: 36,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1A56DB),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
+                                ),
+                                child: const Icon(Icons.location_on, color: Colors.white, size: 18),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1A56DB),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text('#$numero',
+                                    style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                ),
+
               if (_posicaoAtual != null)
                 MarkerLayer(markers: [
                   Marker(
