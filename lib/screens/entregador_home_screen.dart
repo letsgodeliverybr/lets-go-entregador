@@ -21,8 +21,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
   final _audioPlayer = AudioPlayer();
   Map<String, dynamic>? _entregador;
-  StreamSubscription? _locationSub;
-  Timer? _locationTimer;
   Timer? _statsTimer;
   RealtimeChannel? _pedidosChannel;
   bool _online = TrackingService.ativo;
@@ -56,7 +54,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           _online = response['disponivel'] == true;
         }
       });
-      if (_online && !TrackingService.ativo) _iniciarLocalizacao();
+      if (_online && !TrackingService.ativo) {
+        await TrackingService.iniciar(user.id);
+      }
     } catch (_) {}
   }
 
@@ -84,7 +84,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     } catch (_) {}
   }
 
-  // Localização passiva — só atualiza o mapa, não envia pro Supabase
+  // Localização passiva — só atualiza o mapa; TrackingService cuida do Supabase
   void _iniciarLocalizacaoPassiva() {
     LocationService.getPositionStream().listen((pos) {
       if (!mounted) return;
@@ -96,56 +96,20 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     });
   }
 
-  Future<void> _enviarLocalizacao(String userId, double lat, double lng) async {
-    try {
-      await _supabase.from('entregadores').update({
-        'lat': lat, 'lng': lng,
-        'latitude': lat, 'longitude': lng,
-        'disponivel': true, 'status': 'disponivel',
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
-    } catch (_) {}
-  }
-
-  void _iniciarLocalizacao() {
+  void _toggleOnline(bool value) async {
+    setState(() => _online = value);
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    LocationService.getCurrentPosition().then((pos) {
-      if (pos != null) {
-        _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
+    if (value) {
+      await TrackingService.iniciar(user.id);
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null && mounted) {
         final ll = LatLng(pos.latitude, pos.longitude);
         setState(() => _posicaoAtual = ll);
         try { _mapController.move(ll, 15); } catch (_) {}
       }
-    });
-    _locationSub = LocationService.getPositionStream().listen((pos) {
-      _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
-    });
-    _locationTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
-      final pos = await LocationService.getCurrentPosition();
-      if (pos != null) _enviarLocalizacao(user.id, pos.latitude, pos.longitude);
-    });
-  }
-
-  void _pararLocalizacao() async {
-    _locationSub?.cancel(); _locationSub = null;
-    _locationTimer?.cancel(); _locationTimer = null;
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-    try {
-      await _supabase.from('entregadores').update({
-        'disponivel': false, 'status': 'offline',
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user.id);
-    } catch (_) {}
-  }
-
-  void _toggleOnline(bool value) {
-    setState(() => _online = value);
-    if (value) {
-      _iniciarLocalizacao();
     } else {
-      _pararLocalizacao();
+      await TrackingService.ficarOffline(user.id);
       if (mounted) {
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => const HomeScreen()));
@@ -154,14 +118,14 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   }
 
   Future<void> _logout() async {
-    _pararLocalizacao();
+    final user = _supabase.auth.currentUser;
+    if (user != null) await TrackingService.ficarOffline(user.id);
     _statsTimer?.cancel();
     await _supabase.auth.signOut();
     if (mounted) Navigator.pushReplacement(
       context, MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
-  // ── Realtime: toca som ao chegar pedido novo ─────────────────────────────
   void _assinarPedidosRealtime() {
     _pedidosChannel = _supabase
         .channel('home-pedidos-realtime')
@@ -188,17 +152,14 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   }
 
   Future<void> _alertarNovoPedido() async {
-    // Som
     try {
       await _audioPlayer.stop();
       await _audioPlayer.setAsset('assets/sounds/novo_pedido.mp3');
       await _audioPlayer.play();
     } catch (_) {}
-    // Vibração dupla
     HapticFeedback.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 300));
     HapticFeedback.heavyImpact();
-    // Banner flutuante
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -234,8 +195,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   @override
   void dispose() {
-    _locationSub?.cancel();
-    _locationTimer?.cancel();
     _statsTimer?.cancel();
     _pedidosChannel?.unsubscribe();
     _audioPlayer.dispose();
@@ -341,32 +300,10 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       ],
                     ),
                     const Spacer(),
-                    // Botão chat
-                    Stack(
-                      children: [
-                        GestureDetector(
-                          onTap: () => _abrirChat(),
-                          child: Container(
-                            width: 42, height: 42,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF22c55e),
-                              shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                            ),
-                            child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
-                          ),
-                        ),
-                        Positioned(
-                          top: 0, right: 0,
-                          child: Container(
-                            width: 16, height: 16,
-                            decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-                            child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
-                          ),
-                        ),
-                      ],
-                    ),
+                    // Toggle online/offline compacto na topbar
+                    _buildToggleCompacto(),
                     const SizedBox(width: 8),
+                    // Botão logout
                     GestureDetector(
                       onTap: _logout,
                       child: Container(
@@ -436,76 +373,96 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             ),
           ),
 
-          // BOTÃO CENTRALIZAR
+          // BOTÕES DIREITA: CHAT + CENTRALIZAR
           Positioned(
             bottom: 160, right: 16,
-            child: GestureDetector(
-              onTap: () {
-                if (_posicaoAtual != null) {
-                  _mapController.move(_posicaoAtual!, 15);
-                }
-              },
-              child: Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161820),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF2a2d3a)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                ),
-                child: const Icon(Icons.my_location, color: Colors.white, size: 20),
-              ),
-            ),
-          ),
-
-          // TOGGLE ONLINE/OFFLINE
-          Positioned(
-            bottom: 80, left: 16, right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161820),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _online ? const Color(0xFF22c55e) : const Color(0xFF2a2d3a),
-                  width: 1.5,
-                ),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 12)],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(
-                      color: _online ? const Color(0xFF22c55e) : const Color(0xFFef4444),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Chat
+                GestureDetector(
+                  onTap: _abrirChat,
+                  child: Stack(
                     children: [
-                      Text(
-                        _online ? 'Online' : 'Offline',
-                        style: TextStyle(
-                          color: _online ? const Color(0xFF22c55e) : const Color(0xFFef4444),
-                          fontSize: 16, fontWeight: FontWeight.w700,
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF22c55e),
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
                         ),
+                        child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
                       ),
-                      Text(
-                        _online ? 'Localização ativa' : 'Ative para receber pedidos',
-                        style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 11),
+                      Positioned(
+                        top: 0, right: 0,
+                        child: Container(
+                          width: 16, height: 16,
+                          decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
+                          child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
+                        ),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  Switch(
-                    value: _online,
-                    onChanged: _toggleOnline,
-                    activeColor: const Color(0xFF22c55e),
-                    activeTrackColor: const Color(0xFF22c55e30),
+                ),
+                const SizedBox(height: 8),
+                // Centralizar mapa
+                GestureDetector(
+                  onTap: () {
+                    if (_posicaoAtual != null) {
+                      _mapController.move(_posicaoAtual!, 15);
+                    }
+                  },
+                  child: Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161820),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF2a2d3a)),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
+                    ),
+                    child: const Icon(Icons.my_location, color: Colors.white, size: 20),
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleCompacto() {
+    final cor = _online ? const Color(0xFF22c55e) : const Color(0xFFef4444);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: cor.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor, width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7, height: 7,
+            decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _online ? 'Online' : 'Offline',
+            style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(
+            height: 28,
+            child: Transform.scale(
+              scale: 0.8,
+              child: Switch(
+                value: _online,
+                onChanged: _toggleOnline,
+                activeColor: const Color(0xFF22c55e),
+                inactiveThumbColor: const Color(0xFFef4444),
+                inactiveTrackColor: const Color(0xFFef4444).withOpacity(0.3),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
           ),

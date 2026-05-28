@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import 'entrega_screen.dart';
 
 class PedidosDisponiveisScreen extends StatefulWidget {
   const PedidosDisponiveisScreen({super.key});
@@ -154,8 +155,8 @@ class _State extends State<PedidosDisponiveisScreen> {
       final result = await _supabase
           .from('pedidos')
           .update({
-            'status': 'em_rota',
-            'status_detalhado': 'em_rota',
+            'status': 'aceito',
+            'status_detalhado': 'aceito',
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
             'updated_at': DateTime.now().toIso8601String(),
@@ -174,12 +175,17 @@ class _State extends State<PedidosDisponiveisScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Pedido aceito!'),
-        backgroundColor: Color(0xFF1A56DB),
-        duration: Duration(seconds: 2),
-      ));
-      _buscar();
+      final pedidoAtualizado = Map<String, dynamic>.from(pedido);
+      pedidoAtualizado['status'] = 'aceito';
+      pedidoAtualizado['status_detalhado'] = 'aceito';
+      pedidoAtualizado['motoboy_id'] = user.id;
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedidoAtualizado)),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

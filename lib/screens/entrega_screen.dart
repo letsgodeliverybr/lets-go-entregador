@@ -32,6 +32,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final status = widget.pedido['status_detalhado'] ?? widget.pedido['status'] ?? '';
     switch (status) {
       case 'aceito':               _etapa = EtapaEntrega.aceito; break;
+      case 'no_local':
       case 'chegou_local':         _etapa = EtapaEntrega.chegouLocal; break;
       case 'em_rota':              _etapa = EtapaEntrega.emRota; break;
       case 'retornando':           _etapa = EtapaEntrega.retornando; break;
@@ -102,8 +103,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
         case EtapaEntrega.aceito:
           await _supabase.from('pedidos').update({
-            'status': 'chegou_local',
-            'status_detalhado': 'chegou_local',
+            'status': 'no_local',
+            'status_detalhado': 'no_local',
             'updated_at': DateTime.now().toIso8601String(),
           }).eq('id', _pedidoId);
           setState(() => _etapa = EtapaEntrega.chegouLocal);
