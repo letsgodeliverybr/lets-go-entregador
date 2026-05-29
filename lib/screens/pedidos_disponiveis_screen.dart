@@ -118,25 +118,20 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _tocarNotificacao() async {
-    // Notificação local (funciona em foreground e background)
     NotificationService.showNovoPedidoLocal().catchError((_) {});
-
-    // Vibração imediata
     HapticFeedback.heavyImpact();
-
-    // Tocar letsgo.wav 7 vezes em sequência (foreground)
-    for (int i = 0; i < 7; i++) {
-      try {
-        await _audioPlayer.stop();
-        await _audioPlayer.setAsset('assets/sounds/letsgo.wav');
-        await _audioPlayer.play();
-        await _audioPlayer.playerStateStream.firstWhere(
-          (s) => s.processingState == ProcessingState.completed,
-        );
-      } catch (_) {
-        break;
-      }
-    }
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setAudioSource(
+        ConcatenatingAudioSource(
+          children: List.generate(
+            7,
+            (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
+          ),
+        ),
+      );
+      await _audioPlayer.play();
+    } catch (_) {}
   }
 
   void _assinarRealtime() {
