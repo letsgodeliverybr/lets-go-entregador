@@ -19,6 +19,10 @@ class NotificationService {
   static const String _channelName = 'Pedidos';
   static const String _channelDesc = 'Notificações de novos pedidos';
 
+  static const String _channelPedidoId = 'letsgo_novo_pedido';
+  static const String _channelPedidoName = 'Novo Pedido';
+  static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
+
   // ── Inicialização principal ──────────────────────────────────────────────
   static Future<void> initialize() async {
     // Garante que o Firebase está inicializado
@@ -69,20 +73,33 @@ class NotificationService {
       },
     );
 
-    // Cria canal Android (obrigatório Android 8+)
+    // Cria canais Android (obrigatório Android 8+)
     if (Platform.isAndroid) {
-      const channel = AndroidNotificationChannel(
+      final plugin = _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      // Canal padrão
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
         _channelId,
         _channelName,
         description: _channelDesc,
         importance: Importance.high,
         playSound: true,
         enableVibration: true,
-      );
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+      ));
+
+      // Canal de novo pedido com som customizado
+      await plugin?.createNotificationChannel(AndroidNotificationChannel(
+        _channelPedidoId,
+        _channelPedidoName,
+        description: _channelPedidoDesc,
+        importance: Importance.max,
+        playSound: true,
+        sound: const RawResourceAndroidNotificationSound('letsgo'),
+        enableVibration: true,
+        enableLights: true,
+      ));
     }
   }
 
@@ -146,6 +163,37 @@ class NotificationService {
       notification.body ?? 'Um novo pedido está disponível para você.',
       details,
       payload: message.data.toString(),
+    );
+  }
+
+  // ── Notificação local de novo pedido (foreground + background) ───────────
+  static Future<void> showNovoPedidoLocal() async {
+    final androidDetails = AndroidNotificationDetails(
+      _channelPedidoId,
+      _channelPedidoName,
+      channelDescription: _channelPedidoDesc,
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      sound: const RawResourceAndroidNotificationSound('letsgo'),
+      enableVibration: true,
+      enableLights: true,
+      ticker: 'Novo pedido disponível',
+      icon: '@mipmap/ic_launcher',
+      fullScreenIntent: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      '🛵 Lets Go Delivery',
+      'Pedido Na Tela! Vem Pra Rua E Fature Mais Com A Lets Go Delivery',
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
 

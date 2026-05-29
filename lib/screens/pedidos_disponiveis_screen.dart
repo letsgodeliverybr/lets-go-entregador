@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import '../services/notification_service.dart';
 import 'pedidos_aceitos_screen.dart';
 
 class PedidosDisponiveisScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   bool _primeiraCarregada = true;
 
   Position? _posicaoAtual;
+  double _precoDinamico = 0.0;
 
   @override
   void initState() {
@@ -46,26 +48,20 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Future<void> _obterPosicao() async {
     try {
-      // Usa posição conhecida imediatamente para não bloquear o render
       final last = await Geolocator.getLastKnownPosition();
       if (last != null && mounted) setState(() => _posicaoAtual = last);
-      // Atualiza com posição atual
       final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.medium);
       if (mounted) setState(() => _posicaoAtual = pos);
     } catch (_) {}
   }
 
-  double _calcularDistancia(
-      double lat1, double lon1, double lat2, double lon2) {
+  double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = (lat2 - lat1) * pi / 180;
     final dLon = (lon2 - lon1) * pi / 180;
     final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) *
-            cos(lat2 * pi / 180) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLon / 2) * sin(dLon / 2);
     return R * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 
@@ -74,15 +70,25 @@ class _State extends State<PedidosDisponiveisScreen> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      final data = await _supabase
-          .from('pedidos')
-          .select('*, lojas(nome, latitude, longitude)')
-          .inFilter('status', ['pronto'])
-          .not('status', 'in', '("finalizado","cancelado")')
-          .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
-          .order('pronto_em', ascending: true);
+      final results = await Future.wait([
+        _supabase
+            .from('pedidos')
+            .select('*, lojas(nome, latitude, longitude)')
+            .inFilter('status', ['pronto'])
+            .not('status', 'in', '("finalizado","cancelado")')
+            .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
+            .order('pronto_em', ascending: true),
+        _supabase
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'preco_dinamico_entregador')
+            .maybeSingle(),
+      ]);
 
-      final lista = List<Map<String, dynamic>>.from(data);
+      final lista = List<Map<String, dynamic>>.from(results[0] as List);
+      final precoDinamico = double.tryParse(
+              (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
+          0.0;
 
       if (!_primeiraCarregada) {
         for (final p in lista) {
@@ -102,6 +108,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       if (mounted) {
         setState(() {
           _pedidos = lista;
+          _precoDinamico = precoDinamico;
           _carregando = false;
         });
       }
@@ -111,14 +118,25 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _tocarNotificacao() async {
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAsset('assets/sounds/novo_pedido.mp3');
-      await _audioPlayer.play();
-    } catch (_) {}
+    // Notificação local (funciona em foreground e background)
+    NotificationService.showNovoPedidoLocal().catchError((_) {});
+
+    // Vibração imediata
     HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 300));
-    HapticFeedback.heavyImpact();
+
+    // Tocar letsgo.wav 7 vezes em sequência (foreground)
+    for (int i = 0; i < 7; i++) {
+      try {
+        await _audioPlayer.stop();
+        await _audioPlayer.setAsset('assets/sounds/letsgo.wav');
+        await _audioPlayer.play();
+        await _audioPlayer.playerStateStream.firstWhere(
+          (s) => s.processingState == ProcessingState.completed,
+        );
+      } catch (_) {
+        break;
+      }
+    }
   }
 
   void _assinarRealtime() {
@@ -243,8 +261,10 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Widget _buildCard(Map<String, dynamic> pedido) {
     final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final taxaBase = taxa;
-    final taxaReal = taxa * 1.20;
+    final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final taxaFinal = taxa + gorjeta + _precoDinamico;
+    final temBonus = gorjeta > 0 || _precoDinamico > 0;
+
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final pontos = pedido['pontos'] ?? 4;
     final distanciaKm =
@@ -265,19 +285,21 @@ class _State extends State<PedidosDisponiveisScreen> {
       );
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2A2D35)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
+    return GestureDetector(
+      onTap: () => _aceitar(pedido),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161820),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF2A2D35)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Linha 1: ícone loja + nome + número do pedido
+            // Linha 1: ícone loja + nome + número
             Row(children: [
               Container(
                 width: 42,
@@ -304,7 +326,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 10),
 
-            // Linha 2: ícone localização + "X km de onde você está"
+            // Linha 2: distância até a loja
             Row(children: [
               const Icon(Icons.location_on, color: Colors.white, size: 16),
               const SizedBox(width: 6),
@@ -317,7 +339,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 8),
 
-            // Linha 3: ícone estrela + pontos
+            // Linha 3: pontos
             Row(children: [
               const Icon(Icons.star_border, color: Colors.white, size: 16),
               const SizedBox(width: 6),
@@ -326,7 +348,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 8),
 
-            // Linha 4: tag "Bag térmica" — borda branca, texto branco, sem fundo
+            // Linha 4: tag Bag térmica
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -336,17 +358,18 @@ class _State extends State<PedidosDisponiveisScreen> {
               child: const Text('Bag térmica',
                   style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
+
             const SizedBox(height: 12),
 
-            // Linha 5 (rodapé): ícone rota + km à esquerda | preços à direita
+            // Linha 5: distância percurso + valor
             Row(children: [
               const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
               const SizedBox(width: 4),
               Text('${distanciaKm.toStringAsFixed(2)} km',
                   style: const TextStyle(color: Colors.white70, fontSize: 13)),
               const Spacer(),
-              if (taxaBase > 0) ...[
-                Text('R\$${taxaBase.toStringAsFixed(2)}',
+              if (temBonus) ...[
+                Text('R\$${taxa.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: Colors.red,
                       fontSize: 13,
@@ -355,32 +378,14 @@ class _State extends State<PedidosDisponiveisScreen> {
                     )),
                 const SizedBox(width: 8),
               ],
-              Text('R\$${taxaReal.toStringAsFixed(2)}',
+              Text('R\$${taxaFinal.toStringAsFixed(2)}',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold)),
             ]),
-            const SizedBox(height: 12),
-
-            // Linha 6: botão Aceitar largura total
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A56DB),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-                onPressed: () => _aceitar(pedido),
-                child: const Text('Aceitar',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              ),
-            ),
           ],
+          ),
         ),
       ),
     );
