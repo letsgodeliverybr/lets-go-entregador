@@ -96,12 +96,31 @@ class TrackingService {
     } catch (_) {}
   }
 
+  /// Tenta marcar o entregador como offline.
+  ///
+  /// Lança [Exception] se houver pedido ativo (aceito / chegou_local /
+  /// em_rota / retornando) — o chamador deve capturar e exibir o alerta.
   static Future<void> ficarOffline(String entregadorId) async {
+    final ativos = await _supabase
+        .from('pedidos')
+        .select('id')
+        .eq('motoboy_id', entregadorId)
+        .inFilter('status', ['aceito', 'chegou_local', 'em_rota', 'retornando']);
+
+    if (ativos.isNotEmpty) {
+      throw Exception(
+        'Você possui uma entrega em andamento. '
+        'Finalize a entrega antes de ficar offline.',
+      );
+    }
+
     await parar(entregadorId);
     try {
       await _supabase.from('entregadores').update({
         'disponivel': false,
         'status': 'offline',
+        'lat': null,
+        'lng': null,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
     } catch (_) {}

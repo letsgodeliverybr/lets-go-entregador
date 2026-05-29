@@ -8,6 +8,7 @@ import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'login_screen.dart';
+import 'online_status_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -102,19 +103,47 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   }
 
   void _toggleOnline(bool value) async {
-    setState(() => _online = value);
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-    if (value) {
-      await TrackingService.iniciar(user.id);
-      final pos = await LocationService.getCurrentPosition();
-      if (pos != null && mounted) {
-        final ll = LatLng(pos.latitude, pos.longitude);
-        setState(() => _posicaoAtual = ll);
-        try { _mapController.move(ll, 15); } catch (_) {}
+    setState(() => _online = value);
+    try {
+      if (value) {
+        await TrackingService.iniciar(user.id);
+        final pos = await LocationService.getCurrentPosition();
+        if (pos != null && mounted) {
+          final ll = LatLng(pos.latitude, pos.longitude);
+          setState(() => _posicaoAtual = ll);
+          try { _mapController.move(ll, 15); } catch (_) {}
+        }
+      } else {
+        await TrackingService.ficarOffline(user.id);
       }
-    } else {
-      await TrackingService.ficarOffline(user.id);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _online = !value); // reverte o switch
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF161820),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFf59e0b), size: 22),
+            SizedBox(width: 8),
+            Text('Entrega em andamento',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+          ]),
+          content: Text(msg,
+              style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido',
+                  style: TextStyle(color: Color(0xFF1A56DB))),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -371,7 +400,13 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   Widget _buildToggleCompacto() {
     final cor = _online ? const Color(0xFF22c55e) : const Color(0xFFef4444);
-    return Container(
+    return GestureDetector(
+      onLongPress: () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const OnlineStatusScreen()));
+        _carregarEntregador(); // recarrega estado ao voltar
+      },
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: cor.withOpacity(0.12),
@@ -398,7 +433,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           ),
         ),
       ]),
-    );
+      ), // Container
+    ); // GestureDetector
   }
 
   void _abrirChat() {
