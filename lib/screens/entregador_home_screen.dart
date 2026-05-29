@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
@@ -9,6 +11,7 @@ import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'login_screen.dart';
 import 'online_status_screen.dart';
+import 'rota_disponivel_screen.dart';
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -18,6 +21,7 @@ class EntregadorHomeScreen extends StatefulWidget {
 
 class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
+  final AudioPlayer _audioPlayer = AudioPlayer();
   Map<String, dynamic>? _entregador;
   Timer? _statsTimer;
   bool _online = TrackingService.ativo;
@@ -30,6 +34,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   // Pedidos em andamento para pins no mapa
   List<Map<String, dynamic>> _pedidosEmAndamento = [];
 
+  // Rota disponível
+  Map<String, dynamic>? _rotaAtual;
+  RealtimeChannel? _channelRota;
+  Timer? _rotaAutorecusaTimer;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +50,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       _carregarPedidosEmAndamento();
     });
     _iniciarLocalizacaoPassiva();
+    _assinarRealtimeRota();
   }
 
   Future<void> _carregarEntregador() async {
@@ -152,13 +162,70 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (user != null) await TrackingService.ficarOffline(user.id);
     _statsTimer?.cancel();
     await _supabase.auth.signOut();
-    if (mounted) Navigator.pushReplacement(
-      context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+    if (mounted) {
+      Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+    }
+  }
+
+  void _assinarRealtimeRota() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    _channelRota = _supabase
+        .channel('home-entregador-rota-${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'entregadores',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: user.id,
+          ),
+          callback: (payload) async {
+            final novaNotif = payload.newRecord['notificacao_rota'];
+            final antigaNotif = payload.oldRecord['notificacao_rota'];
+            if (novaNotif == null || novaNotif.toString() == antigaNotif?.toString()) return;
+            try {
+              final rota = await _supabase
+                  .from('rotas')
+                  .select()
+                  .eq('id', novaNotif.toString())
+                  .maybeSingle();
+              if (!mounted || rota == null) return;
+              // Tocar som 10x
+              HapticFeedback.heavyImpact();
+              try {
+                await _audioPlayer.stop();
+                await _audioPlayer.setAudioSource(ConcatenatingAudioSource(
+                  children: List.generate(10, (_) => AudioSource.asset('assets/sounds/letsgo.wav')),
+                ));
+                await _audioPlayer.play();
+              } catch (_) {}
+              setState(() => _rotaAtual = rota);
+              _rotaAutorecusaTimer?.cancel();
+              _rotaAutorecusaTimer = Timer(const Duration(seconds: 60), _recusarRotaTimeout);
+            } catch (_) {}
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _recusarRotaTimeout() async {
+    if (_rotaAtual == null) return;
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try { await _supabase.from('entregadores').update({'notificacao_rota': null}).eq('id', user.id); } catch (_) {}
+    }
+    if (mounted) setState(() => _rotaAtual = null);
   }
 
   @override
   void dispose() {
     _statsTimer?.cancel();
+    _rotaAutorecusaTimer?.cancel();
+    _channelRota?.unsubscribe();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -350,6 +417,13 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             ]),
           ),
 
+          // CARD ROTA DISPONÍVEL
+          if (_rotaAtual != null)
+            Positioned(
+              bottom: 160, left: 16, right: 16,
+              child: _buildCardRota(),
+            ),
+
           // BOTÕES DIREITA: CHAT + CENTRALIZAR
           Positioned(
             bottom: 160, right: 16,
@@ -394,6 +468,45 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             ]),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCardRota() {
+    final rota = _rotaAtual!;
+    final count = (rota['pedido_ids'] as List?)?.length ?? 0;
+    return GestureDetector(
+      onTap: () {
+        _rotaAutorecusaTimer?.cancel();
+        _audioPlayer.stop();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => RotaDisponivelScreen(rota: rota)),
+        ).then((_) {
+          if (mounted) setState(() => _rotaAtual = null);
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A56DB), Color(0xFF0E3A99)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: const Color(0xFF1A56DB).withOpacity(.45), blurRadius: 16, offset: const Offset(0, 4))],
+        ),
+        child: Row(children: [
+          const Icon(Icons.route_outlined, color: Colors.white, size: 32),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('🛵 Nova Rota!', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('$count ${count == 1 ? 'entrega' : 'entregas'} agrupadas — toque para ver',
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ])),
+          const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+        ]),
       ),
     );
   }
