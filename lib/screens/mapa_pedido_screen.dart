@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -206,69 +207,82 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
 
                 MarkerLayer(
                   markers: [
-                    // Marcador da loja — pino GPS azul
+                    // Marcador da loja — pino GPS azul SVG
                     Marker(
                       point: _lojaLatLng,
-                      width: 40,
+                      width: 32,
                       height: 40,
                       child: Tooltip(
                         message: loja,
-                        child: const Icon(
-                          Icons.location_on,
-                          color: Color(0xFF1A56DB),
-                          size: 40,
-                          shadows: [Shadow(color: Colors.black38, blurRadius: 6)],
+                        child: CustomPaint(
+                          size: const Size(32, 40),
+                          painter: _GpsPinPainter(const Color(0xFF1A56DB)),
                         ),
                       ),
                     ),
-                    // Marcador do cliente (vermelho)
+                    // Marcador do pedido — círculo azul + número em etiqueta
                     Marker(
                       point: _clienteLatLng,
-                      width: 48,
-                      height: 48,
+                      width: 64,
+                      height: 54,
                       child: Tooltip(
                         message: endereco,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: const [
-                              BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2))
-                            ],
-                          ),
-                          child: const Icon(Icons.person_pin_circle,
-                              color: Colors.white, size: 22),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A56DB),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: const [BoxShadow(
+                                    color: Colors.black38,
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2))],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  numero.replaceAll('#', ''),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A56DB),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                numero,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    // Marcador do motoboy — capacete 🪖
+                    // Marcador do motoboy — capacete SVG
                     if (_motoLatLng != null)
                       Marker(
                         point: _motoLatLng!,
                         width: 44,
-                        height: 44,
-                        child: Container(
-                          decoration: BoxDecoration(
+                        height: 54,
+                        child: _HelmetMarker(
                             color: const Color(0xFF10B981),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: const [
-                              BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2))
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text('🪖',
-                                style: TextStyle(fontSize: 20),
-                                textAlign: TextAlign.center),
-                          ),
-                        ),
+                            visorColor: const Color(0xFF065F46)),
                       ),
                   ],
                 ),
@@ -285,7 +299,7 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
               children: [
                 _legendaDot(const Color(0xFF1A56DB), 'Loja'),
                 const SizedBox(width: 16),
-                _legendaDot(Colors.redAccent, 'Cliente'),
+                _legendaDot(const Color(0xFF1A56DB), 'Pedido'),
                 if (_motoLatLng != null) ...[
                   const SizedBox(width: 16),
                   _legendaDot(const Color(0xFF10B981), 'Você'),
@@ -451,6 +465,71 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
         const SizedBox(width: 4),
         Text(label,
             style: const TextStyle(color: Colors.white54, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+// ── Pino GPS (CustomPainter) ─────────────────────────────────
+class _GpsPinPainter extends CustomPainter {
+  final Color color;
+  const _GpsPinPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final r = w / 2;
+    final cx = w / 2;
+    final cy = r;
+    final fill = Paint()..color = color..style = PaintingStyle.fill;
+
+    final path = ui.Path()
+      ..moveTo(cx, h)
+      ..cubicTo(cx - r * 0.65, h * 0.78, cx - r, cy + r * 0.55, cx - r, cy)
+      ..arcTo(Rect.fromLTWH(0, 0, w, w), pi, -pi, false)
+      ..cubicTo(cx + r, cy + r * 0.55, cx + r * 0.65, h * 0.78, cx, h)
+      ..close();
+
+    canvas.drawPath(path, fill);
+    // círculo branco interno
+    canvas.drawCircle(
+      Offset(cx, cy),
+      r * 0.42,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
+}
+
+// ── Capacete SVG (widget composto) ───────────────────────────
+class _HelmetMarker extends StatelessWidget {
+  final Color color;
+  final Color visorColor;
+  const _HelmetMarker({required this.color, required this.visorColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))
+            ],
+          ),
+          child: const Center(
+            child: Text('🪖', style: TextStyle(fontSize: 22), textAlign: TextAlign.center),
+          ),
+        ),
       ],
     );
   }
