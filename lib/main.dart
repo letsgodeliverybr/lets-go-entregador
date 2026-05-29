@@ -32,10 +32,15 @@ Future<void> _salvarFcmToken(String token) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp();
-
-  // Registra handler de background antes de qualquer listener
-  FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+  // Inicializa Firebase — se falhar o app continua só com Supabase
+  bool firebaseOk = false;
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+    firebaseOk = true;
+  } catch (e) {
+    debugPrint('[FCM] Firebase.initializeApp falhou: $e');
+  }
 
   await Supabase.initialize(
     url: 'https://astbkmpegcmqljltmdpx.supabase.co',
@@ -44,22 +49,21 @@ void main() async {
 
   await NotificationService.initLocal();
 
-  // Permissão FCM (Android 13+)
-  await FirebaseMessaging.instance.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  // Salva token atual e escuta renovações
-  final fcmToken = await FirebaseMessaging.instance.getToken();
-  if (fcmToken != null) _salvarFcmToken(fcmToken);
-  FirebaseMessaging.instance.onTokenRefresh.listen(_salvarFcmToken);
-
-  // Notificações FCM com app em foreground
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-    await NotificationService.showNovoPedidoLocal();
-  });
+  if (firebaseOk) {
+    try {
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true, badge: true, sound: true,
+      );
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) _salvarFcmToken(fcmToken);
+      FirebaseMessaging.instance.onTokenRefresh.listen(_salvarFcmToken);
+      FirebaseMessaging.onMessage.listen((_) async {
+        await NotificationService.showNovoPedidoLocal();
+      });
+    } catch (e) {
+      debugPrint('[FCM] Erro ao configurar mensagens: $e');
+    }
+  }
 
   runApp(const MyApp());
 }
