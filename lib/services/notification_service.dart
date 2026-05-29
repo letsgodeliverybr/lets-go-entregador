@@ -98,8 +98,8 @@ class NotificationService {
 
     await _localNotifications.show(
       1001,
-      '🛵 Lets Go Delivery',
-      'Pedido Na Tela! Vem Pra Rua E Fature Mais Com A Lets Go Delivery',
+      "LET'S GO MOTOCA 🛵",
+      "Pedidos na tela! Vem Pra Rua! Aproveite Alta Demanda Para Faturar Mais Com A Let's Go Delivery!",
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
