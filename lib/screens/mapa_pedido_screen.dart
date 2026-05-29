@@ -206,27 +206,18 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
 
                 MarkerLayer(
                   markers: [
-                    // Marcador da loja (azul)
+                    // Marcador da loja — pino GPS azul
                     Marker(
                       point: _lojaLatLng,
-                      width: 48,
-                      height: 48,
+                      width: 40,
+                      height: 40,
                       child: Tooltip(
                         message: loja,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A56DB),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: const [
-                              BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2))
-                            ],
-                          ),
-                          child: const Icon(Icons.store,
-                              color: Colors.white, size: 22),
+                        child: const Icon(
+                          Icons.location_on,
+                          color: Color(0xFF1A56DB),
+                          size: 40,
+                          shadows: [Shadow(color: Colors.black38, blurRadius: 6)],
                         ),
                       ),
                     ),
@@ -254,7 +245,7 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
                         ),
                       ),
                     ),
-                    // Marcador do motoboy (laranja)
+                    // Marcador do motoboy — capacete 🪖
                     if (_motoLatLng != null)
                       Marker(
                         point: _motoLatLng!,
@@ -262,7 +253,7 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
                         height: 44,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.orange,
+                            color: const Color(0xFF10B981),
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
                             boxShadow: const [
@@ -272,8 +263,11 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
                                   offset: Offset(0, 2))
                             ],
                           ),
-                          child: const Icon(Icons.delivery_dining,
-                              color: Colors.white, size: 20),
+                          child: const Center(
+                            child: Text('🪖',
+                                style: TextStyle(fontSize: 20),
+                                textAlign: TextAlign.center),
+                          ),
                         ),
                       ),
                   ],
@@ -294,7 +288,7 @@ class _MapaPedidoScreenState extends State<MapaPedidoScreen> {
                 _legendaDot(Colors.redAccent, 'Cliente'),
                 if (_motoLatLng != null) ...[
                   const SizedBox(width: 16),
-                  _legendaDot(Colors.orange, 'Você'),
+                  _legendaDot(const Color(0xFF10B981), 'Você'),
                 ],
               ],
             ),
