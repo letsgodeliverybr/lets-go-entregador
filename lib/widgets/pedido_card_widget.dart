@@ -7,8 +7,10 @@ class PedidoCardWidget extends StatelessWidget {
   final Color botaoCor;
   final VoidCallback? onTap;
   final bool isRetornando;
+  final bool isChegouDestino;
   final bool mostrarBotao;
   final double? distMotoboyLojaKm;
+  final double precoDinamico;
 
   const PedidoCardWidget({
     super.key,
@@ -18,15 +20,17 @@ class PedidoCardWidget extends StatelessWidget {
     this.botaoCor = const Color(0xFF1A56DB),
     this.onTap,
     this.isRetornando = false,
+    this.isChegouDestino = false,
     this.mostrarBotao = false,
     this.distMotoboyLojaKm,
+    this.precoDinamico = 0.0,
   });
 
   @override
   Widget build(BuildContext context) {
     final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final acrescimo = double.tryParse(pedido['taxa_acrescimo']?.toString() ?? '0') ?? 0;
-    final taxaFinal = taxa > 0 ? taxa * 1.20 : 0.0;
+    final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final taxaFinal = taxa + gorjeta + precoDinamico;
     final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
@@ -40,7 +44,7 @@ class PedidoCardWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF161820),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF1A56DB)),
+          border: Border.all(color: const Color(0xFF2A2D35)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -104,14 +108,14 @@ class PedidoCardWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // Linha 5: rota + km | taxa + status badge
+              // Linha 5: rota + km | valor base riscado → valor final
               Row(children: [
                 const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
                 const SizedBox(width: 4),
                 Text('${distanciaKm.toStringAsFixed(2)} km',
                     style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 const Spacer(),
-                if (taxa > 0) ...[
+                if (taxaFinal > taxa) ...[
                   Text('R\$${taxa.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.red, fontSize: 13,
@@ -119,24 +123,31 @@ class PedidoCardWidget extends StatelessWidget {
                         decorationColor: Colors.red,
                       )),
                   const SizedBox(width: 8),
-                  Text('R\$${taxaFinal.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
                 ],
-                if (statusLabel != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A56DB),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(statusLabel!,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ),
-                ],
+                Text('R\$${taxaFinal.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
               ]),
+
+              // Chegou no destino indicator
+              if (isChegouDestino) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C3AED).withOpacity(0.08),
+                    border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.3)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.location_on, color: Color(0xFF7C3AED), size: 14),
+                    SizedBox(width: 6),
+                    Text('Chegou no destino',
+                        style: TextStyle(color: Color(0xFF7C3AED), fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ],
 
               // Retornando indicator
               if (isRetornando) ...[

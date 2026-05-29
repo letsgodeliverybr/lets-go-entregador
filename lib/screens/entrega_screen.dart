@@ -7,7 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'pedidos_aceitos_screen.dart';
 
-enum EtapaEntrega { aceito, chegouLocal, emRota, retornando, aguardandoPagamento, finalizado }
+enum EtapaEntrega { aceito, chegouLocal, emRota, chegouDestino, retornando, aguardandoPagamento, finalizado }
 
 class EntregaScreen extends StatefulWidget {
   final Map<String, dynamic> pedido;
@@ -29,6 +29,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
   String? _nomeLoja;
   double? _lojaLat;
   double? _lojaLng;
+  double _precoDinamico = 0.0;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -41,6 +42,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
       case 'no_local':
       case 'chegou_local':         _etapa = EtapaEntrega.chegouLocal; break;
       case 'em_rota':              _etapa = EtapaEntrega.emRota; break;
+      case 'chegou_destino':       _etapa = EtapaEntrega.chegouDestino; break;
       case 'retornando':           _etapa = EtapaEntrega.retornando; break;
       case 'aguardando_pagamento': _etapa = EtapaEntrega.aguardandoPagamento; break;
       default:                     _etapa = EtapaEntrega.aceito;
@@ -50,10 +52,22 @@ class _EntregaScreenState extends State<EntregaScreen> {
     }
     _obterPosicao();
     _buscarInfoLoja();
+    _buscarPrecoDinamico();
+  }
+
+  Future<void> _buscarPrecoDinamico() async {
+    try {
+      final data = await _supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'preco_dinamico_entregador')
+          .maybeSingle();
+      final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
+      if (mounted) setState(() => _precoDinamico = valor);
+    } catch (_) {}
   }
 
   Future<void> _buscarInfoLoja() async {
-    // 1. Tenta a partir do join já carregado
     final loja = widget.pedido['lojas'];
     if (loja != null) {
       final nome = loja['nome']?.toString() ?? '';
@@ -63,13 +77,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
         if (end.isNotEmpty) return;
       }
     }
-    // 2. Tenta campos diretos do pedido
     final endPedido = widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '';
     if (endPedido.isNotEmpty) {
       if (mounted) setState(() => _enderecoLoja = endPedido);
       return;
     }
-    // 3. Busca na tabela lojas usando loja_id
     final lojaId = widget.pedido['loja_id']?.toString();
     if (lojaId == null || lojaId.isEmpty) return;
     try {
@@ -124,11 +136,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
       await Future.delayed(const Duration(seconds: 5));
       if (!mounted) return false;
       try {
-        final data = await _supabase
-            .from('pedidos')
-            .select('pagamento_confirmado, status_detalhado')
-            .eq('id', _pedidoId)
-            .single();
+        final data = await _supabase.from('pedidos').select('pagamento_confirmado, status_detalhado').eq('id', _pedidoId).single();
         if (data['pagamento_confirmado'] == true) {
           if (mounted) setState(() => _etapa = EtapaEntrega.finalizado);
           return false;
@@ -164,7 +172,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
-            debugPrint('[EntregaScreen] distância da loja: ${distM.toStringAsFixed(1)}m');
+            debugPrint('[EntregaScreen] distância da loja (cheguei): ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -185,6 +193,31 @@ class _EntregaScreenState extends State<EntregaScreen> {
           break;
 
         case EtapaEntrega.chegouLocal:
+          debugPrint('[EntregaScreen] _lojaLat=$_lojaLat, _lojaLng=$_lojaLng');
+          if (_lojaLat == null || _lojaLng == null) {
+            setState(() => _carregando = false);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Coordenadas da loja não encontradas, contate o suporte'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ));
+            return;
+          }
+          {
+            final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+            final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
+            debugPrint('[EntregaScreen] distância da loja (saindo): ${distM.toStringAsFixed(1)}m');
+            if (distM > 35) {
+              setState(() => _carregando = false);
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Você precisa estar a menos de 35 metros da loja para sair (atual: ${distM.toStringAsFixed(0)}m)'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ));
+              return;
+            }
+          }
           await _supabase.from('pedidos').update({
             'status': 'em_rota',
             'status_detalhado': 'em_rota',
@@ -196,11 +229,6 @@ class _EntregaScreenState extends State<EntregaScreen> {
           break;
 
         case EtapaEntrega.emRota:
-          final codigo = _codigoCtrl.text.trim();
-          if (codigo.length != 4 || int.tryParse(codigo) == null) {
-            setState(() { _erro = 'Digite os 4 dígitos do código'; _carregando = false; });
-            return;
-          }
           final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
           final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
           debugPrint('[EntregaScreen] clienteLat=$clienteLat, clienteLng=$clienteLng');
@@ -227,6 +255,22 @@ class _EntregaScreenState extends State<EntregaScreen> {
               ));
               return;
             }
+          }
+          await _supabase.from('pedidos').update({
+            'status': 'chegou_destino',
+            'status_detalhado': 'chegou_destino',
+            'chegou_destino_em': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          }).eq('id', _pedidoId);
+          setState(() => _etapa = EtapaEntrega.chegouDestino);
+          HapticFeedback.mediumImpact();
+          break;
+
+        case EtapaEntrega.chegouDestino:
+          final codigo = _codigoCtrl.text.trim();
+          if (codigo.length != 4 || int.tryParse(codigo) == null) {
+            setState(() { _erro = 'Digite os 4 dígitos do código'; _carregando = false; });
+            return;
           }
           await _supabase.from('pedidos').update({
             'status': 'finalizado',
@@ -294,21 +338,16 @@ class _EntregaScreenState extends State<EntregaScreen> {
             const SizedBox(height: 28),
             _buildCardPedido(),
             const SizedBox(height: 28),
-
             if (_etapa == EtapaEntrega.retornando) ...[
               _buildRetornando(),
-            ]
-            else if (_etapa == EtapaEntrega.finalizado) ...[
+            ] else if (_etapa == EtapaEntrega.finalizado) ...[
               _buildFinalizado(),
-            ]
-            else ...[
-              // Para emRota: sem ícone/instrução, só campo de código
-              if (_etapa != EtapaEntrega.emRota) ...[
+            ] else ...[
+              if (_etapa != EtapaEntrega.chegouDestino) ...[
                 _buildInstrucao(),
                 const SizedBox(height: 24),
               ],
-
-              if (_etapa == EtapaEntrega.emRota) ...[
+              if (_etapa == EtapaEntrega.chegouDestino) ...[
                 _buildCampoCodigo(),
                 const SizedBox(height: 8),
                 if (_erro != null)
@@ -316,8 +355,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1A56DB),
-                    side: const BorderSide(color: Color(0xFF1A56DB)),
+                    foregroundColor: const Color(0xFF7C3AED),
+                    side: const BorderSide(color: Color(0xFF7C3AED)),
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -327,13 +366,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
-
-              if (_erro != null && _etapa != EtapaEntrega.emRota)
+              if (_erro != null && _etapa != EtapaEntrega.chegouDestino)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
                 ),
-
               _buildBotao(),
             ],
           ],
@@ -343,58 +380,37 @@ class _EntregaScreenState extends State<EntregaScreen> {
   }
 
   Widget _buildProgresso() {
-    final etapas = ['Aceito', 'No local', 'Em rota', 'Entregue'];
-    final atual = _etapa == EtapaEntrega.retornando ? 2 :
-                  _etapa == EtapaEntrega.aguardandoPagamento ? 2 :
-                  _etapa == EtapaEntrega.finalizado ? 3 : _etapa.index;
+    final etapas = ['Aceito', 'No local', 'Em rota', 'No destino', 'Entregue'];
+    final atual = _etapa == EtapaEntrega.retornando ? 3 :
+                  _etapa == EtapaEntrega.aguardandoPagamento ? 3 :
+                  _etapa == EtapaEntrega.finalizado ? 4 : _etapa.index;
     return Row(
       children: List.generate(etapas.length, (i) {
         final feito = i <= atual;
-        final isRetornando = _etapa == EtapaEntrega.retornando && i == 2;
+        final isRetornando = _etapa == EtapaEntrega.retornando && i == 3;
         return Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: 30, height: 30,
-                      decoration: BoxDecoration(
-                        color: isRetornando ? const Color(0xFFf59e0b) :
-                               feito ? const Color(0xFF1A56DB) : const Color(0xFF2a2a3e),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: isRetornando
-                            ? const Icon(Icons.keyboard_return, color: Colors.white, size: 14)
-                            : feito && i < atual
-                                ? const Icon(Icons.check, color: Colors.white, size: 14)
-                                : Text('${i + 1}',
-                                    style: TextStyle(
-                                        color: feito ? Colors.white : Colors.grey,
-                                        fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(isRetornando ? 'Retorno' : etapas[i],
-                        style: TextStyle(
-                            color: isRetornando ? const Color(0xFFf59e0b) :
-                                   feito ? Colors.white : Colors.grey,
-                            fontSize: 10)),
-                  ],
+          child: Row(children: [
+            Expanded(child: Column(children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: isRetornando ? const Color(0xFFf59e0b) : feito ? const Color(0xFF1A56DB) : const Color(0xFF2a2a3e),
+                  shape: BoxShape.circle,
                 ),
+                child: Center(child: isRetornando
+                    ? const Icon(Icons.keyboard_return, color: Colors.white, size: 14)
+                    : feito && i < atual
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
+                        : Text('${i + 1}', style: TextStyle(color: feito ? Colors.white : Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))),
               ),
-              if (i < etapas.length - 1)
-                Expanded(
-                  child: Container(
-                    height: 2,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    color: i < atual ? const Color(0xFF1A56DB) : const Color(0xFF2a2a3e),
-                  ),
-                ),
-            ],
-          ),
+              const SizedBox(height: 4),
+              Text(isRetornando ? 'Retorno' : etapas[i],
+                  style: TextStyle(color: isRetornando ? const Color(0xFFf59e0b) : feito ? Colors.white : Colors.grey, fontSize: 10)),
+            ])),
+            if (i < etapas.length - 1)
+              Expanded(child: Container(height: 2, margin: const EdgeInsets.only(bottom: 20), color: i < atual ? const Color(0xFF1A56DB) : const Color(0xFF2a2a3e))),
+          ]),
         );
       }),
     );
@@ -412,6 +428,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final loja = widget.pedido['lojas'];
     final nomeLoja = _nomeLoja ?? loja?['nome']?.toString() ?? widget.pedido['nome_loja']?.toString() ?? 'Loja';
     final enderecoColeta = _enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '—';
+    final observacao = widget.pedido['descricao']?.toString() ?? '';
 
     return Container(
       width: double.infinity,
@@ -421,43 +438,43 @@ class _EntregaScreenState extends State<EntregaScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
+          const SizedBox(width: 6),
+          Text('Pedido #$numero', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          const Icon(Icons.store, color: Color(0xFF1A56DB), size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(nomeLoja, style: const TextStyle(color: Colors.white, fontSize: 14))),
+        ]),
+        const SizedBox(height: 10),
+        const Text('Endereço de coleta:', style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 0.5)),
+        const SizedBox(height: 4),
+        Row(children: [
+          const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(enderecoColeta, style: const TextStyle(color: Colors.white, fontSize: 14))),
+        ]),
+        if (_distanciaLojaKm != null) ...[
+          const SizedBox(height: 8),
           Row(children: [
-            const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
+            const Icon(Icons.route_outlined, color: Colors.white54, size: 16),
             const SizedBox(width: 6),
-            Text('Pedido #$numero',
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            Text('${_distanciaLojaKm!.toStringAsFixed(2)} km até o ponto de coleta', style: const TextStyle(color: Colors.white54, fontSize: 13)),
           ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            const Icon(Icons.store, color: Color(0xFF1A56DB), size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text(nomeLoja,
-                style: const TextStyle(color: Colors.white, fontSize: 14))),
-          ]),
-          const SizedBox(height: 10),
-          const Text('Endereço de coleta:',
-              style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 0.5)),
-          const SizedBox(height: 4),
-          Row(children: [
-            const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text(enderecoColeta,
-                style: const TextStyle(color: Colors.white, fontSize: 14))),
-          ]),
-          if (_distanciaLojaKm != null) ...[
-            const SizedBox(height: 10),
-            Row(children: [
-              const Icon(Icons.route_outlined, color: Colors.white54, size: 16),
-              const SizedBox(width: 6),
-              Text('${_distanciaLojaKm!.toStringAsFixed(2)} km até a loja',
-                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
-            ]),
-          ],
         ],
-      ),
+        if (observacao.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          const Divider(color: Color(0xFF2A2D35)),
+          const SizedBox(height: 4),
+          const Text('OBSERVAÇÕES', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.0)),
+          const SizedBox(height: 4),
+          Text(observacao, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ],
+      ]),
     );
   }
 
@@ -465,10 +482,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final endereco = widget.pedido['endereco'] ?? '—';
     final complemento = widget.pedido['complemento']?.toString() ?? '';
     final nomeCliente = widget.pedido['cliente'] ?? '—';
-    final telefone = widget.pedido['telefone']?.toString() ??
-        widget.pedido['telefone_cliente']?.toString() ?? '—';
-    final zero800 = widget.pedido['telefone_0800']?.toString() ??
-        widget.pedido['zero_oitocentos']?.toString() ?? '';
+    final telefone = widget.pedido['telefone']?.toString() ?? widget.pedido['telefone_cliente']?.toString() ?? '—';
+    final zero800 = widget.pedido['telefone_0800']?.toString() ?? widget.pedido['zero_oitocentos']?.toString() ?? '';
+    final observacao = widget.pedido['descricao']?.toString() ?? '';
+    final distKm = widget.pedido['distancia_km'];
+    final enderecoColeta = _enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '';
 
     return Container(
       width: double.infinity,
@@ -478,64 +496,85 @@ class _EntregaScreenState extends State<EntregaScreen> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
+          const SizedBox(width: 6),
+          Text('Pedido #$numero', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+        ]),
+        const Divider(color: Color(0xFF2A2D35), height: 20),
+
+        // Endereço de coleta
+        if (enderecoColeta.isNotEmpty) ...[
+          const Text('COLETA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
+          const SizedBox(height: 4),
           Row(children: [
-            const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
+            const Icon(Icons.store, color: Color(0xFF1A56DB), size: 16),
             const SizedBox(width: 6),
-            Text('Pedido #$numero',
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            Expanded(child: Text(enderecoColeta, style: const TextStyle(color: Colors.white70, fontSize: 13))),
           ]),
-          const Divider(color: Color(0xFF2A2D35), height: 20),
-          const Text('ENDEREÇO DE ENTREGA',
-              style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
-          const SizedBox(height: 8),
-          Row(children: [
-            const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
-            const SizedBox(width: 6),
-            Expanded(child: Text(endereco,
-                style: const TextStyle(color: Colors.white, fontSize: 15))),
-          ]),
-          if (complemento.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(children: [
-              const Icon(Icons.info_outline, color: Colors.white38, size: 16),
-              const SizedBox(width: 6),
-              Expanded(child: Text(complemento,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13))),
-            ]),
-          ],
-          const Divider(color: Color(0xFF2A2D35), height: 20),
-          Row(children: [
-            const Icon(Icons.person_outline, color: Colors.white54, size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(nomeCliente,
-                style: const TextStyle(color: Colors.white, fontSize: 14))),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            const Icon(Icons.phone_outlined, color: Colors.white54, size: 16),
-            const SizedBox(width: 6),
-            Text(telefone, style: const TextStyle(color: Colors.white, fontSize: 14)),
-          ]),
-          if (zero800.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.support_agent_outlined, color: Colors.white54, size: 16),
-              const SizedBox(width: 6),
-              Text(zero800, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            ]),
-          ],
+          const SizedBox(height: 10),
         ],
-      ),
+
+        const Text('ENDEREÇO DE ENTREGA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
+          const SizedBox(width: 6),
+          Expanded(child: Text(endereco, style: const TextStyle(color: Colors.white, fontSize: 15))),
+        ]),
+        if (complemento.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Row(children: [
+            const Icon(Icons.info_outline, color: Colors.white38, size: 16),
+            const SizedBox(width: 6),
+            Expanded(child: Text(complemento, style: const TextStyle(color: Colors.white70, fontSize: 13))),
+          ]),
+        ],
+        if (distKm != null) ...[
+          const SizedBox(height: 6),
+          Row(children: [
+            const Icon(Icons.straighten, color: Colors.white38, size: 16),
+            const SizedBox(width: 6),
+            Text('$distKm km da loja ao cliente', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ]),
+        ],
+        const Divider(color: Color(0xFF2A2D35), height: 20),
+        Row(children: [
+          const Icon(Icons.person_outline, color: Colors.white54, size: 16),
+          const SizedBox(width: 6),
+          Expanded(child: Text(nomeCliente, style: const TextStyle(color: Colors.white, fontSize: 14))),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Icon(Icons.phone_outlined, color: Colors.white54, size: 16),
+          const SizedBox(width: 6),
+          Text(telefone, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        ]),
+        if (zero800.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            const Icon(Icons.support_agent_outlined, color: Colors.white54, size: 16),
+            const SizedBox(width: 6),
+            Text(zero800, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ]),
+        ],
+        if (observacao.isNotEmpty) ...[
+          const Divider(color: Color(0xFF2A2D35), height: 20),
+          const Text('OBSERVAÇÕES', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.0)),
+          const SizedBox(height: 4),
+          Text(observacao, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ],
+      ]),
     );
   }
 
   Widget _buildInstrucao() {
     final config = {
-      EtapaEntrega.aceito:      (Icons.store_outlined,       'Vá buscar o pedido',      'Dirija-se ao estabelecimento',   const Color(0xFF1A56DB)),
-      EtapaEntrega.chegouLocal: (Icons.inventory_2_outlined,  'Chegou no local?',        'Pegue o pedido e confirme',      const Color(0xFF1A56DB)),
+      EtapaEntrega.aceito:      (Icons.store_outlined,        'Vá buscar o pedido',       'Dirija-se ao estabelecimento',      const Color(0xFF1A56DB)),
+      EtapaEntrega.chegouLocal: (Icons.inventory_2_outlined,  'Chegou no local?',         'Pegue o pedido e confirme',         const Color(0xFF1A56DB)),
+      EtapaEntrega.emRota:      (Icons.directions_bike,        'A caminho do cliente',     'Confirme a chegada ao destino',     const Color(0xFF1A56DB)),
+      EtapaEntrega.chegouDestino: (Icons.location_on,          'Chegou no destino!',       'Peça o código de confirmação',      const Color(0xFF7C3AED)),
     };
     final entry = config[_etapa];
     if (entry == null) return const SizedBox.shrink();
@@ -575,10 +614,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   Widget _buildBotao() {
     final config = {
-      EtapaEntrega.aceito:      (const Color(0xFF1A56DB), 'Cheguei no local',   Icons.store),
-      EtapaEntrega.chegouLocal: (const Color(0xFF1A56DB), 'Saí para entregar',  Icons.moped),
-      EtapaEntrega.emRota:      (const Color(0xFF1A56DB), 'Finalizar entrega',  Icons.check_circle),
-      EtapaEntrega.finalizado:  (const Color(0xFF1A56DB), 'Voltar para pedidos', Icons.list_alt),
+      EtapaEntrega.aceito:         (const Color(0xFF1A56DB), 'Cheguei no local',    Icons.store),
+      EtapaEntrega.chegouLocal:    (const Color(0xFF1A56DB), 'Saí para entregar',   Icons.moped),
+      EtapaEntrega.emRota:         (const Color(0xFF1A56DB), 'Cheguei no destino',  Icons.location_on),
+      EtapaEntrega.chegouDestino:  (const Color(0xFF7C3AED), 'Finalizar entrega',   Icons.check_circle),
+      EtapaEntrega.finalizado:     (const Color(0xFF1A56DB), 'Voltar para pedidos', Icons.list_alt),
     };
     final (cor, label, icon) = config[_etapa] ?? (const Color(0xFF1A56DB), 'Voltar', Icons.list_alt);
     return SizedBox(
@@ -602,40 +642,55 @@ class _EntregaScreenState extends State<EntregaScreen> {
   }
 
   Widget _buildRetornando() {
-    return Column(children: [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A56DB10),
-          border: Border.all(color: const Color(0xFF1A56DB), width: 1.5),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(children: [
-          const Icon(Icons.keyboard_return, color: Color(0xFF1A56DB), size: 52),
-          const SizedBox(height: 12),
-          const Text('Aguardando confirmação', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Você marcou este pedido como retorno.\nA loja precisa confirmar o pagamento para finalizar.',
-              style: TextStyle(color: Colors.white54, fontSize: 13), textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Color(0xFF1A56DB), strokeWidth: 2)),
-            SizedBox(width: 10),
-            Text('Aguardando loja...', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 13)),
-          ]),
-        ]),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0x101A56DB),
+        border: Border.all(color: const Color(0xFF1A56DB), width: 1.5),
+        borderRadius: BorderRadius.circular(14),
       ),
-    ]);
+      child: const Column(children: [
+        Icon(Icons.keyboard_return, color: Color(0xFF1A56DB), size: 52),
+        SizedBox(height: 12),
+        Text('Aguardando confirmação', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 18, fontWeight: FontWeight.bold)),
+        SizedBox(height: 8),
+        Text('Você marcou este pedido como retorno.\nA loja precisa confirmar o pagamento para finalizar.',
+            style: TextStyle(color: Colors.white54, fontSize: 13), textAlign: TextAlign.center),
+        SizedBox(height: 16),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Color(0xFF1A56DB), strokeWidth: 2)),
+          SizedBox(width: 10),
+          Text('Aguardando loja...', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 13)),
+        ]),
+      ]),
+    );
   }
 
   Widget _buildFinalizado() {
+    final gorjeta = (widget.pedido['gorjeta'] as num?)?.toDouble() ?? 0;
+    final taxa = (widget.pedido['taxa_entrega'] as num?)?.toDouble() ?? 0;
+    final totalMotoboy = taxa + gorjeta + _precoDinamico;
+
     return Column(children: [
       const Icon(Icons.check_circle, color: Color(0xFF1A56DB), size: 90),
       const SizedBox(height: 16),
       const Text('Entrega finalizada!', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       const Text('Pedido entregue com sucesso', style: TextStyle(color: Colors.white54, fontSize: 14)),
+      if (totalMotoboy > 0) ...[
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0x1022c55e),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0x4022c55e)),
+          ),
+          child: Text('💰 Total a receber: R\$ ${totalMotoboy.toStringAsFixed(2)}',
+              style: const TextStyle(color: Color(0xFF22c55e), fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+      ],
       const SizedBox(height: 32),
       SizedBox(
         width: double.infinity,
@@ -646,10 +701,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
-          onPressed: () => Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
-          ),
+          onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PedidosAceitosScreen())),
           child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(Icons.list_alt, size: 20), SizedBox(width: 8),
             Text('Voltar para pedidos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

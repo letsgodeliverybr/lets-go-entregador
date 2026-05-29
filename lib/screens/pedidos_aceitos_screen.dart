@@ -19,6 +19,7 @@ class _State extends State<PedidosAceitosScreen> {
   bool _carregando = true;
   Timer? _timer;
   Position? _posicaoAtual;
+  double _precoDinamico = 0.0;
 
   @override
   void initState() {
@@ -56,14 +57,25 @@ class _State extends State<PedidosAceitosScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final data = await _supabase
-          .from('pedidos')
-          .select('*, lojas(nome, endereco, latitude, longitude)')
-          .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
-          .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'retornando'])
-          .order('aceito_em', ascending: false);
+      final results = await Future.wait([
+        _supabase
+            .from('pedidos')
+            .select('*, lojas(nome, endereco, latitude, longitude)')
+            .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
+            .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'chegou_destino', 'retornando'])
+            .order('aceito_em', ascending: false),
+        _supabase
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'preco_dinamico_entregador')
+            .maybeSingle(),
+      ]);
+      final precoDinamico = double.tryParse(
+              (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
+          0.0;
       if (mounted) setState(() {
-        _pedidos = List<Map<String, dynamic>>.from(data);
+        _pedidos = List<Map<String, dynamic>>.from(results[0] as List);
+        _precoDinamico = precoDinamico;
         _carregando = false;
       });
     } catch (_) {
@@ -86,8 +98,9 @@ class _State extends State<PedidosAceitosScreen> {
       case 'aceito':       return 'Aceito';
       case 'no_local':
       case 'chegou_local': return 'No local';
-      case 'em_rota':      return 'Em rota';
-      case 'retornando':   return 'Retornando';
+      case 'em_rota':         return 'Em rota';
+      case 'chegou_destino':  return 'Chegou no destino';
+      case 'retornando':      return 'Retornando';
       default:             return s;
     }
   }
@@ -136,6 +149,7 @@ class _State extends State<PedidosAceitosScreen> {
                       final p = _pedidos[i];
                       final status = p['status_detalhado'] ?? p['status'] ?? 'aceito';
                       final isRetornando = status == 'retornando';
+                      final isChegouDestino = status == 'chegou_destino';
                       double? distMotoboyLoja;
                       if (_posicaoAtual != null) {
                         final loja = p['lojas'];
@@ -154,7 +168,9 @@ class _State extends State<PedidosAceitosScreen> {
                         statusCor: _cor(status),
                         botaoCor: _cor(status),
                         isRetornando: isRetornando,
+                        isChegouDestino: isChegouDestino,
                         distMotoboyLojaKm: distMotoboyLoja,
+                        precoDinamico: _precoDinamico,
                         onTap: () => _abrirEntrega(p),
                       );
                     },
