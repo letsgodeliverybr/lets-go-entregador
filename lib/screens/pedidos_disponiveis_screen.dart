@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../services/notification_service.dart';
 import 'pedidos_aceitos_screen.dart';
+import 'rota_disponivel_screen.dart';
 
 class PedidosDisponiveisScreen extends StatefulWidget {
   const PedidosDisponiveisScreen({super.key});
@@ -390,7 +391,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     }
 
     return GestureDetector(
-      onTap: () => _aceitar(pedido),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: pedido))).then((_) => _buscar()),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(

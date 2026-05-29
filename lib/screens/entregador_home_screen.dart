@@ -481,7 +481,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         _audioPlayer.stop();
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => RotaDisponivelScreen(rota: rota)),
+          MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: rota)),
         ).then((_) {
           if (mounted) setState(() => _rotaAtual = null);
         });

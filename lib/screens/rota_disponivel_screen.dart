@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/location_service.dart';
 import 'entrega_screen.dart';
+import 'pedidos_disponiveis_screen.dart';
 
 class RotaDisponivelScreen extends StatefulWidget {
-  final Map<String, dynamic> rota;
-  const RotaDisponivelScreen({super.key, required this.rota});
+  final Map<String, dynamic> pedido;
+  const RotaDisponivelScreen({super.key, required this.pedido});
 
   @override
   State<RotaDisponivelScreen> createState() => _RotaDisponivelScreenState();
@@ -17,74 +20,50 @@ class RotaDisponivelScreen extends StatefulWidget {
 class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   final _supabase = Supabase.instance.client;
   final _mapController = MapController();
-
-  List<Map<String, dynamic>> _pedidos = [];
-  Map<String, dynamic>? _loja;
-  bool _carregando = true;
   bool _processando = false;
-  Timer? _timerRestante;
-  int _segundosRestantes = 60;
+  LatLng? _posicaoEntregador;
+
+  Map<String, dynamic> get _pedido => widget.pedido;
+
+  double? get _lojaLat {
+    final l = _pedido['lojas'];
+    return (l?['latitude'] as num?)?.toDouble();
+  }
+
+  double? get _lojaLng {
+    final l = _pedido['lojas'];
+    return (l?['longitude'] as num?)?.toDouble();
+  }
+
+  double? get _clienteLat => (_pedido['latitude'] as num?)?.toDouble();
+  double? get _clienteLng => (_pedido['longitude'] as num?)?.toDouble();
 
   @override
   void initState() {
     super.initState();
-    _carregar();
-    _timerRestante = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
-      setState(() => _segundosRestantes--);
-      if (_segundosRestantes <= 0) {
-        t.cancel();
-        _recusar();
-      }
-    });
+    _obterPosicaoEntregador();
+    Future.delayed(const Duration(milliseconds: 300), _ajustarMapa);
   }
 
-  @override
-  void dispose() {
-    _timerRestante?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _carregar() async {
+  Future<void> _obterPosicaoEntregador() async {
     try {
-      final rawIds = widget.rota['pedido_ids'];
-      final pedidoIds = rawIds is List ? rawIds.map((e) => e.toString()).toList() : <String>[];
-
-      if (pedidoIds.isNotEmpty) {
-        final data = await _supabase
-            .from('pedidos')
-            .select('*, lojas(nome, latitude, longitude, endereco)')
-            .inFilter('id', pedidoIds);
-        _pedidos = List<Map<String, dynamic>>.from(data);
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null && mounted) {
+        setState(() => _posicaoEntregador = LatLng(pos.latitude, pos.longitude));
+        _ajustarMapa();
       }
-
-      final lojaId = widget.rota['loja_id'];
-      if (lojaId != null) {
-        _loja = await _supabase.from('lojas').select().eq('id', lojaId.toString()).maybeSingle();
-      }
-
-      if (mounted) {
-        setState(() => _carregando = false);
-        Future.delayed(const Duration(milliseconds: 200), _ajustarMapa);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _carregando = false);
-    }
+    } catch (_) {}
   }
 
   void _ajustarMapa() {
     final pontos = <LatLng>[];
-    if (_loja?['latitude'] != null && _loja?['longitude'] != null) {
-      pontos.add(LatLng((_loja!['latitude'] as num).toDouble(), (_loja!['longitude'] as num).toDouble()));
-    }
-    for (final p in _pedidos) {
-      if (p['latitude'] != null && p['longitude'] != null) {
-        pontos.add(LatLng((p['latitude'] as num).toDouble(), (p['longitude'] as num).toDouble()));
+    if (_posicaoEntregador != null) pontos.add(_posicaoEntregador!);
+    if (_lojaLat != null && _lojaLng != null) pontos.add(LatLng(_lojaLat!, _lojaLng!));
+    if (_clienteLat != null && _clienteLng != null) pontos.add(LatLng(_clienteLat!, _clienteLng!));
+    if (pontos.length < 2) {
+      if (pontos.isNotEmpty) {
+        try { _mapController.move(pontos.first, 15); } catch (_) {}
       }
-    }
-    if (pontos.isEmpty) return;
-    if (pontos.length == 1) {
-      try { _mapController.move(pontos.first, 15); } catch (_) {}
       return;
     }
     final lats = pontos.map((p) => p.latitude);
@@ -97,54 +76,36 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
         padding: const EdgeInsets.all(60),
       ));
     } catch (_) {
-      final midLat = (sw.latitude + ne.latitude) / 2;
-      final midLng = (sw.longitude + ne.longitude) / 2;
-      try { _mapController.move(LatLng(midLat, midLng), 13); } catch (_) {}
+      try { _mapController.move(LatLng((sw.latitude + ne.latitude) / 2, (sw.longitude + ne.longitude) / 2), 13); } catch (_) {}
     }
-  }
-
-  double get _taxaTotal {
-    double total = 0;
-    for (final p in _pedidos) {
-      total += double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
-      total += double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    }
-    return total;
   }
 
   Future<void> _aceitar() async {
     if (_processando) return;
     setState(() => _processando = true);
-    _timerRestante?.cancel();
     final user = _supabase.auth.currentUser;
-    if (user == null) { if (mounted) Navigator.pop(context); return; }
+    if (user == null) { Navigator.pop(context); return; }
     try {
       final agora = DateTime.now().toIso8601String();
-      final rotaId = widget.rota['id'].toString();
-      final rawIds = widget.rota['pedido_ids'];
-      final pedidoIds = rawIds is List ? rawIds.map((e) => e.toString()).toList() : <String>[];
-
-      await _supabase.from('rotas').update({'status': 'aceita', 'updated_at': agora}).eq('id', rotaId);
-
-      for (final id in pedidoIds) {
-        await _supabase.from('pedidos').update({
-          'status': 'aceito',
-          'status_detalhado': 'aceito',
-          'motoboy_id': user.id,
-          'entregador_id': user.id,
-          'aceito_em': agora,
-          'updated_at': agora,
-        }).eq('id', id);
-      }
-
-      await _supabase.from('entregadores').update({'notificacao_rota': null}).eq('id', user.id);
+      final result = await _supabase.from('pedidos').update({
+        'status': 'aceito',
+        'status_detalhado': 'aceito',
+        'motoboy_id': user.id,
+        'entregador_id': user.id,
+        'aceito_em': agora,
+        'updated_at': agora,
+      }).eq('status', 'pronto').eq('id', _pedido['id']).select();
 
       if (!mounted) return;
-      if (_pedidos.isNotEmpty) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: _pedidos.first)));
-      } else {
-        Navigator.pop(context);
+      if (result.isEmpty) {
+        setState(() => _processando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Pedido já foi aceito por outro entregador'),
+          backgroundColor: Colors.red,
+        ));
+        return;
       }
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: _pedido)));
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
@@ -153,40 +114,38 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     }
   }
 
-  Future<void> _recusar() async {
-    if (_processando) return;
-    setState(() => _processando = true);
-    _timerRestante?.cancel();
-    final user = _supabase.auth.currentUser;
-    if (user != null) {
-      try { await _supabase.from('entregadores').update({'notificacao_rota': null}).eq('id', user.id); } catch (_) {}
-    }
-    if (mounted) Navigator.pop(context);
+  void _rejeitar() {
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PedidosDisponiveisScreen()));
   }
 
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
 
-    // Loja — pino azul
-    if (_loja?['latitude'] != null && _loja?['longitude'] != null) {
+    // Entregador — capacete azul (mesmo padrão do painel adm)
+    if (_posicaoEntregador != null) {
       markers.add(Marker(
-        point: LatLng((_loja!['latitude'] as num).toDouble(), (_loja!['longitude'] as num).toDouble()),
-        width: 52, height: 58,
-        child: const _PinMarker(icon: Icons.store, color: Color(0xFF1A56DB), label: 'Loja'),
+        point: _posicaoEntregador!,
+        width: 64, height: 72,
+        child: _HelmetMarker(),
       ));
     }
 
-    // Pedidos — pinos vermelhos
-    for (var i = 0; i < _pedidos.length; i++) {
-      final p = _pedidos[i];
-      if (p['latitude'] == null || p['longitude'] == null) continue;
-      final numStr = p['numero']?.toString() ?? '${i + 1}';
-      final lat = (p['latitude'] as num).toDouble();
-      final lng = (p['longitude'] as num).toDouble();
+    // Loja — pino GPS azul (mesmo padrão do painel adm)
+    if (_lojaLat != null && _lojaLng != null) {
       markers.add(Marker(
-        point: LatLng(lat, lng),
-        width: 52, height: 58,
-        child: _PinMarker(icon: Icons.location_on, color: const Color(0xFFef4444), label: '#$numStr'),
+        point: LatLng(_lojaLat!, _lojaLng!),
+        width: 44, height: 54,
+        child: _GpsPinMarker(color: const Color(0xFF1A56DB), icon: Icons.store),
+      ));
+    }
+
+    // Cliente — etiqueta vermelha com número (mesmo padrão do painel adm)
+    if (_clienteLat != null && _clienteLng != null) {
+      final numero = _pedido['numero_loja']?.toString() ?? _pedido['numero']?.toString() ?? _pedido['id']?.toString().substring(0, 4) ?? '—';
+      markers.add(Marker(
+        point: LatLng(_clienteLat!, _clienteLng!),
+        width: 64, height: 36,
+        child: _LabelMarker(numero: numero, color: const Color(0xFFEF4444)),
       ));
     }
 
@@ -195,8 +154,15 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lojaLat = (_loja?['latitude'] as num?)?.toDouble() ?? -21.1775;
-    final lojaLng = (_loja?['longitude'] as num?)?.toDouble() ?? -47.8103;
+    final centerLat = _lojaLat ?? _clienteLat ?? -21.1775;
+    final centerLng = _lojaLng ?? _clienteLng ?? -47.8103;
+    final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Estabelecimento').toString();
+    final endLoja = (_pedido['lojas']?['endereco'] ?? '—').toString();
+    final endCliente = (_pedido['endereco'] ?? '—').toString();
+    final taxa = double.tryParse(_pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
+    final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final taxaTotal = taxa + gorjeta;
+    final numero = _pedido['numero']?.toString() ?? '—';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
@@ -204,186 +170,213 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
         backgroundColor: const Color(0xFF0D0F14),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: _recusar,
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: _rejeitar,
         ),
-        title: const Text('Nova Rota', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-        actions: [
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: _segundosRestantes <= 15 ? const Color(0xFFef4444) : const Color(0xFF1A56DB),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text('${_segundosRestantes}s',
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
+        title: Text('Pedido #$numero', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
       ),
-      body: _carregando
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
-          : Column(children: [
-              // MAPA
-              SizedBox(
-                height: 260,
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(initialCenter: LatLng(lojaLat, lojaLng), initialZoom: 13),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
-                    ),
-                    MarkerLayer(markers: _buildMarkers()),
-                  ],
-                ),
+      body: Column(children: [
+        // MAPA
+        Expanded(
+          flex: 3,
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(initialCenter: LatLng(centerLat, centerLng), initialZoom: 14),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                subdomains: const ['a', 'b', 'c', 'd'],
               ),
+              MarkerLayer(markers: _buildMarkers()),
+            ],
+          ),
+        ),
 
-              // PAINEL INFO
+        // CARD INFERIOR
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          decoration: const BoxDecoration(
+            color: Color(0xFF161820),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Handle
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFF2a2d3a), borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 14),
+
+            // Loja
+            _InfoRow(icon: Icons.store, color: const Color(0xFF1A56DB), title: nomeLoja, subtitle: endLoja),
+            const SizedBox(height: 10),
+
+            // Cliente
+            _InfoRow(icon: Icons.location_on, color: const Color(0xFFEF4444), title: 'Endereço de entrega', subtitle: endCliente),
+            const SizedBox(height: 14),
+
+            // Taxa
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22c55e).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF22c55e).withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Text('💰 Taxa de entrega', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                const Spacer(),
+                Text('R\$ ${taxaTotal.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              ]),
+            ),
+            const SizedBox(height: 16),
+
+            // Botões
+            Row(children: [
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // Loja
-                    if (_loja != null) _buildLojaRow(),
-                    const SizedBox(height: 12),
-
-                    // Pedidos
-                    ...List.generate(_pedidos.length, (i) => _buildPedidoRow(i)),
-
-                    // Total
-                    Container(
-                      margin: const EdgeInsets.only(top: 4, bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A56DB).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF1A56DB).withOpacity(0.3)),
-                      ),
-                      child: Row(children: [
-                        const Text('💰 Total da rota', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                        const Spacer(),
-                        Text('R\$ ${_taxaTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                      ]),
-                    ),
-                  ]),
+                child: ElevatedButton(
+                  onPressed: _processando ? null : _rejeitar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFef4444),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('REJEITAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
               ),
-
-              // BOTÕES
-              Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
-                child: Row(children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _processando ? null : _recusar,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2a2d3a),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('RECUSAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: _processando ? null : _aceitar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A56DB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: _processando ? null : _aceitar,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF22c55e),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _processando
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text('ACEITAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                  ),
-                ]),
+                  child: _processando
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('ACEITAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
               ),
             ]),
-    );
-  }
-
-  Widget _buildLojaRow() => Row(children: [
-    Container(
-      width: 38, height: 38,
-      decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(10)),
-      child: const Icon(Icons.store, color: Colors.white, size: 20),
-    ),
-    const SizedBox(width: 10),
-    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(_loja!['nome']?.toString() ?? 'Loja',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-      if (_loja!['endereco'] != null)
-        Text(_loja!['endereco'].toString(),
-            style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-    ])),
-  ]);
-
-  Widget _buildPedidoRow(int i) {
-    final p = _pedidos[i];
-    final numero = p['numero']?.toString() ?? p['id']?.toString().substring(0, 6) ?? '—';
-    final endereco = p['endereco']?.toString() ?? '—';
-    final dist = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final taxa = double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2a2d3a)),
-      ),
-      child: Row(children: [
-        Container(
-          width: 32, height: 32,
-          decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-          child: Center(child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+          ]),
         ),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('#$numero', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(endereco, style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
-        ])),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${dist.toStringAsFixed(1)} km', style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 11)),
-          Text('R\$ ${taxa.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-        ]),
       ]),
     );
   }
 }
 
-class _PinMarker extends StatelessWidget {
-  final IconData icon;
+// Capacete SVG simplificado — mesmo estilo do painel adm
+class _HelmetMarker extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A56DB),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.5),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 8)],
+        ),
+        child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
+      ),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(color: Colors.black.withOpacity(.6), borderRadius: BorderRadius.circular(4)),
+        child: const Text('Você', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+      ),
+    ],
+  );
+}
+
+// Pino GPS — mesmo estilo azul do painel adm
+class _GpsPinMarker extends StatelessWidget {
   final Color color;
-  final String label;
-  const _PinMarker({required this.icon, required this.color, required this.label});
+  final IconData icon;
+  const _GpsPinMarker({required this.color, required this.icon});
 
   @override
-  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: color, shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
+        ),
+        child: Icon(icon, color: Colors.white, size: 18),
+      ),
+      CustomPaint(size: const Size(10, 8), painter: _TrianglePainter(color)),
+    ],
+  );
+}
+
+// Etiqueta vermelha com número — mesmo estilo dos pedidos no painel adm
+class _LabelMarker extends StatelessWidget {
+  final String numero;
+  final Color color;
+  const _LabelMarker({required this.numero, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
+        ),
+        child: Text('#$numero', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+      ),
+      CustomPaint(size: const Size(10, 7), painter: _TrianglePainter(color)),
+    ],
+  );
+}
+
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+  const _TrianglePainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = ui.Paint()..color = color;
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  const _InfoRow({required this.icon, required this.color, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Container(
       width: 36, height: 36,
-      decoration: BoxDecoration(
-        color: color, shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
-      ),
-      child: Icon(icon, color: Colors.white, size: 18),
+      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+      child: Icon(icon, color: color, size: 18),
     ),
-    Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
-      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
-    ),
+    const SizedBox(width: 10),
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+      const SizedBox(height: 2),
+      Text(subtitle, style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+    ])),
   ]);
 }
