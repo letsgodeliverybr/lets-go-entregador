@@ -1,4 +1,3 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
@@ -34,7 +33,6 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final user = response.user;
       if (user != null) {
-        final fcmToken = await FirebaseMessaging.instance.getToken();
         await supabase.from('entregadores').upsert({
           'id': user.id,
           'nome': user.email ?? 'Entregador',
@@ -43,7 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
           'lat': -21.1775,
           'lng': -47.8103,
           'updated_at': DateTime.now().toIso8601String(),
-          if (fcmToken != null) 'fcm_token': fcmToken,
         });
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
