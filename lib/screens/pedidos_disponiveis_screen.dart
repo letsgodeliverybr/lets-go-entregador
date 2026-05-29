@@ -118,7 +118,9 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _tocarNotificacao() async {
-    NotificationService.showNovoPedidoLocal().catchError((_) {});
+    NotificationService.showNovoPedidoLocal().catchError((e) {
+      debugPrint('Notificação falhou: $e');
+    });
     HapticFeedback.heavyImpact();
     try {
       await _audioPlayer.stop();
@@ -131,7 +133,9 @@ class _State extends State<PedidosDisponiveisScreen> {
         ),
       );
       await _audioPlayer.play();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Áudio falhou: $e');
+    }
   }
 
   void _assinarRealtime() {

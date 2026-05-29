@@ -4,6 +4,7 @@ import 'screens/login_screen.dart';
 import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,8 +14,7 @@ void main() async {
     anonKey: 'sb_publishable_8ocBGGO6EM8GYlg-6HBdmQ_LA6VDL9O',
   );
 
-  // Firebase/NotificationService desativados até google-services.json ser configurado
-  // await NotificationService.initialize();
+  await NotificationService.initLocal();
 
   runApp(const MyApp());
 }
