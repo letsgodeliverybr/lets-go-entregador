@@ -24,8 +24,29 @@ class _HomeScreenState extends State<HomeScreen> {
   String _nome = '';
   double _saldoDia = 0;
   int _entregasHoje = 0;
+  double _saldoSemana = 0;
+  List<Map<String, dynamic>> _faixasPagamento = [];
+
+  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
+
+  double _calcTaxaMotoboy(Map<String, dynamic> p) {
+    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
+    if (p['taxa_entrega_motoboy'] != null) {
+      return (double.tryParse(p['taxa_entrega_motoboy'].toString()) ?? 0) + gorjeta;
+    }
+    if (_faixasPagamento.isEmpty) return gorjeta;
+    final temRetorno = p['com_retorno'] == true;
+    final faixa = km <= 0
+        ? _faixasPagamento.first
+        : _faixasPagamento.firstWhere(
+            (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
+            orElse: () => _faixasPagamento.last);
+    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
+    return (double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0) + gorjeta;
+  }
 
   @override
   void initState() {
@@ -37,34 +58,58 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_uid.isEmpty) return;
     setState(() => _loadingStats = true);
     try {
-      final entregador = await _supabase
-          .from('entregadores')
-          .select('nome')
-          .eq('id', _uid)
-          .single();
+      final agora = DateTime.now();
+      final inicioDia = DateTime(agora.year, agora.month, agora.day);
+      final diasDesdeSegunda = agora.weekday - 1;
+      final inicioSemana = DateTime(
+          agora.year, agora.month, agora.day - diasDesdeSegunda);
+      final fimSemana =
+          inicioSemana.add(const Duration(days: 6, hours: 23, minutes: 59));
 
-      final hoje = DateTime.now();
-      final inicioDia =
-          DateTime(hoje.year, hoje.month, hoje.day).toIso8601String();
-      final pedidos = await _supabase
-          .from('pedidos')
-          .select('taxa_entrega')
-          .eq('motoboy_id', _uid)
-          .eq('status', 'finalizado')
-          .gte('finalizado_em', inicioDia);
+      final r = await Future.wait<dynamic>([
+        _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
+        _supabase
+            .from('pedidos')
+            .select('taxa_entrega')
+            .eq('motoboy_id', _uid)
+            .eq('status', 'finalizado')
+            .gte('finalizado_em', inicioDia.toIso8601String()),
+        _supabase
+            .from('pedidos')
+            .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
+            .eq('entregador_id', _uid)
+            .eq('status', 'finalizado')
+            .gte('updated_at', inicioSemana.toIso8601String())
+            .lte('updated_at', fimSemana.toIso8601String()),
+      ]);
 
-      final lista = List<Map<String, dynamic>>.from(pedidos);
-      final total = lista.fold<double>(
+      if (_faixasPagamento.isEmpty) {
+        final faixasData = await _supabase
+            .from('tabelas_preco_faixas')
+            .select('km_ate, valor_sem_retorno, valor_com_retorno')
+            .eq('tabela_id', _tabelaPagamentoId)
+            .order('km_ate');
+        _faixasPagamento = List<Map<String, dynamic>>.from(faixasData);
+      }
+
+      final entregador = r[0] as Map<String, dynamic>;
+      final listaDia = List<Map<String, dynamic>>.from(r[1] as List);
+      final listaSemana = List<Map<String, dynamic>>.from(r[2] as List);
+
+      final totalDia = listaDia.fold<double>(
         0,
         (s, p) =>
             s + (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0),
       );
+      final totalSemana =
+          listaSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
       if (mounted) {
         setState(() {
           _nome = entregador['nome'] ?? '';
-          _saldoDia = total;
-          _entregasHoje = lista.length;
+          _saldoDia = totalDia;
+          _entregasHoje = listaDia.length;
+          _saldoSemana = totalSemana;
           _loadingStats = false;
         });
       }
@@ -497,12 +542,19 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const Text('Saldo disponível',
               style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
-          const SizedBox(height: 8),
-          const Text('R\$ 0,00',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(
+            'R\$ ${_saldoSemana.toStringAsFixed(2)}',
+            style: const TextStyle(
+                color: Color(0xFF10b981),
+                fontSize: 22,
+                fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Seg a Dom\nreseta toda segunda',
+            style: TextStyle(color: Color(0xFF4B5563), fontSize: 10, height: 1.4),
+          ),
           const Spacer(),
           SizedBox(
             width: double.infinity,
@@ -515,8 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-              child:
-                  const Text('Sacar', style: TextStyle(color: Colors.white)),
+              child: const Text('Sacar', style: TextStyle(color: Colors.white)),
             ),
           ),
         ],
