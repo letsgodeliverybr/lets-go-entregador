@@ -11,6 +11,8 @@ import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'login_screen.dart';
 import 'online_status_screen.dart';
+import 'cadastro_aprovacao_screen.dart';
+import 'aguardo_aprovacao_screen.dart';
 import 'rota_disponivel_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/status_utils.dart' as su;
@@ -120,6 +122,27 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     setState(() => _online = value);
     try {
       if (value) {
+        final ent = await _supabase
+            .from('entregadores')
+            .select('aprovado, status_cadastro')
+            .eq('id', user.id)
+            .single();
+        final aprovado = ent['aprovado'] == true;
+        final statusCadastro = ent['status_cadastro']?.toString() ?? 'pendente';
+
+        if (!aprovado) {
+          if (!mounted) return;
+          setState(() => _online = false);
+          if (statusCadastro == 'em_analise') {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AguardoAprovacaoScreen()));
+          } else {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CadastroAprovacaoScreen()));
+          }
+          return;
+        }
+
         await TrackingService.iniciar(user.id);
         final pos = await LocationService.getCurrentPosition();
         if (pos != null && mounted) {

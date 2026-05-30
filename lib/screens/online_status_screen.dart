@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/tracking_service.dart';
 import 'home_screen.dart';
+import 'cadastro_aprovacao_screen.dart';
+import 'aguardo_aprovacao_screen.dart';
 
 class OnlineStatusScreen extends StatefulWidget {
   const OnlineStatusScreen({super.key});
@@ -95,6 +97,26 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
         );
         return;
       } else {
+        final ent = await _supabase
+            .from('entregadores')
+            .select('aprovado, status_cadastro')
+            .eq('id', _uid)
+            .single();
+        final aprovado = ent['aprovado'] == true;
+        final statusCadastro = ent['status_cadastro']?.toString() ?? 'pendente';
+
+        if (!aprovado) {
+          if (!mounted) return;
+          if (statusCadastro == 'em_analise') {
+            Navigator.pushReplacement(context,
+                MaterialPageRoute(builder: (_) => const AguardoAprovacaoScreen()));
+          } else {
+            Navigator.pushReplacement(context,
+                MaterialPageRoute(builder: (_) => const CadastroAprovacaoScreen()));
+          }
+          return;
+        }
+
         await TrackingService.ficarOnline(_uid);
         await TrackingService.iniciar(_uid);
         if (mounted) setState(() => _online = true);
