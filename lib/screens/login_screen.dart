@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
+import 'registro_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -100,7 +101,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     Center(child: TextButton(onPressed: () {}, child: const Text('Esqueci minha senha', style: TextStyle(color: Color(0xFF3B82F6))))),
                     const Divider(color: Color(0xFF2A2D35), height: 32),
-                    Center(child: TextButton(onPressed: () {}, child: const Text('Criar conta', style: TextStyle(color: Color(0xFF3B82F6))))),
+                    Center(child: TextButton(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistroScreen())),
+                      child: const Text('Criar conta', style: TextStyle(color: Color(0xFF3B82F6))),
+                    )),
                     const SizedBox(height: 8),
                     const Center(child: Text('1.0.0 (1)', style: TextStyle(color: Color(0xFF374151), fontSize: 12))),
                   ],
