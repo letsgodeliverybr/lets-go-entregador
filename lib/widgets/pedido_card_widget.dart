@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../utils/status_utils.dart';
 
 class PedidoCardWidget extends StatelessWidget {
   final Map<String, dynamic> pedido;
@@ -52,15 +54,11 @@ class PedidoCardWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
-              // Linha 1: ícone loja + nome + número
+              // Linha 1: ícone loja + nome + número + badge status
               Row(children: [
-                Container(
+                SizedBox(
                   width: 42, height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A56DB),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.store, color: Colors.white, size: 22),
+                  child: SvgPicture.string(svgPinLoja, fit: BoxFit.contain),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -69,8 +67,19 @@ class PedidoCardWidget extends StatelessWidget {
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
                 const SizedBox(width: 8),
-                Text('#$numero',
-                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                if (statusLabel != null && statusCor != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusCor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(statusLabel!,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  )
+                else
+                  Text('#$numero',
+                      style: const TextStyle(color: Colors.white54, fontSize: 13)),
               ]),
               const SizedBox(height: 10),
 

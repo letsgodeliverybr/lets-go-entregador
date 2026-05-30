@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../widgets/pedido_card_widget.dart';
+import '../utils/status_utils.dart' as su;
 import 'entrega_screen.dart';
 
 class PedidosAceitosScreen extends StatefulWidget {
@@ -91,7 +92,7 @@ class _State extends State<PedidosAceitosScreen> {
   }
 
   // Borda sempre azul independente do status
-  Color _cor(String s) => const Color(0xFF1A56DB);
+  Color _cor(String s) => su.statusColor(s);
 
   String _label(String s) {
     switch (s) {

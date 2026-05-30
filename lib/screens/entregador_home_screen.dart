@@ -12,6 +12,8 @@ import 'drawer_screen.dart';
 import 'login_screen.dart';
 import 'online_status_screen.dart';
 import 'rota_disponivel_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../utils/status_utils.dart' as su;
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -303,15 +305,15 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 44, height: 44,
-                          decoration: BoxDecoration(
-                            color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 8)],
+                        SizedBox(
+                          width: 48, height: 48,
+                          child: SvgPicture.string(
+                            su.svgHelmet(
+                              _online ? '#10B981' : '#EF4444',
+                              _online ? '#065f46' : '#991b1b',
+                            ),
+                            fit: BoxFit.contain,
                           ),
-                          child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
