@@ -21,6 +21,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   final _audioPlayer = AudioPlayer();
   List<Map<String, dynamic>> _pedidos = [];
   bool _carregando = true;
+  bool _disponivel = true;
   Timer? _timer;
   RealtimeChannel? _channel;
   RealtimeChannel? _channelRota;
@@ -34,6 +35,32 @@ class _State extends State<PedidosDisponiveisScreen> {
   void initState() {
     super.initState();
     _obterPosicao();
+    _verificarEIniciar();
+  }
+
+  Future<void> _verificarEIniciar() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _carregando = false);
+      return;
+    }
+    try {
+      final e = await _supabase
+          .from('entregadores')
+          .select('disponivel')
+          .eq('id', user.id)
+          .single();
+      final online = e['disponivel'] == true;
+      if (!mounted) return;
+      setState(() {
+        _disponivel = online;
+        if (!online) _carregando = false;
+      });
+      if (!online) return;
+    } catch (_) {
+      if (mounted) setState(() { _disponivel = false; _carregando = false; });
+      return;
+    }
     _buscar();
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
     _assinarRealtime();
@@ -69,6 +96,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _buscar() async {
+    if (!_disponivel) return;
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
@@ -297,7 +325,9 @@ class _State extends State<PedidosDisponiveisScreen> {
       body: _carregando
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
-          : Column(
+          : !_disponivel
+              ? _buildOffline()
+              : Column(
               children: [
                 if (_rotaAtual != null) _buildCardRota(_rotaAtual!),
                 Expanded(
@@ -492,6 +522,30 @@ class _State extends State<PedidosDisponiveisScreen> {
           ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOffline() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.wifi_off_rounded, color: Colors.grey.shade700, size: 72),
+          const SizedBox(height: 20),
+          const Text(
+            'Fique online para ver pedidos disponíveis',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Ative o modo online na tela inicial para começar a receber pedidos.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF64748b), fontSize: 13, height: 1.5),
+          ),
+        ]),
       ),
     );
   }
