@@ -41,9 +41,9 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Gabriel Eliziario', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text('Gabriel Eliziario', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                         SizedBox(height: 2),
-                        Text('ID: #00482', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                        Text('ID: #00482', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12, fontWeight: FontWeight.w400)),
                       ],
                     ),
                   ),
@@ -61,8 +61,8 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     () => setState(() => _carteiraExpanded = !_carteiraExpanded),
                     [], // subitens customizados abaixo
                     customItems: [
-                      _buildSubItem('📋 Extrato', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const ExtratoScreen())); }),
-                      _buildSubItem('🏦 Histórico de Saques', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoricoSaquesScreen())); }),
+                      _buildSubItem('Extrato', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const ExtratoScreen())); }),
+                      _buildSubItem('Histórico de Saques', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoricoSaquesScreen())); }),
                     ],
                   ),
                   _buildExpandable(Icons.manage_accounts_outlined, 'CONTA', _contaExpanded,
@@ -70,7 +70,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     ['Minha conta', 'Ranking', 'Notificações']),
                   _buildExpandable(Icons.auto_awesome_outlined, 'OPORTUNIDADES', _oportunidadesExpanded,
                     () => setState(() => _oportunidadesExpanded = !_oportunidadesExpanded),
-                    ['🎉 Promoções de Feriado']),
+                    ['Promoções de Feriado']),
                   _buildExpandable(Icons.info_outline, 'SOBRE O APP', _sobreExpanded,
                     () => setState(() => _sobreExpanded = !_sobreExpanded),
                     ['Termos de uso', 'Termos de privacidade', 'Log']),
@@ -95,10 +95,22 @@ class _DrawerScreenState extends State<DrawerScreen> {
     );
   }
 
+  static const _styleItem = TextStyle(
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+  );
+
+  static const _styleSubItem = TextStyle(
+    color: Color(0xFFCCCCCC),
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+  );
+
   Widget _buildItem(IconData icon, String label, {Color cor = const Color(0xFF1A56DB), Widget? trailing, VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: cor),
-      title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+      title: Text(label, style: cor == Colors.redAccent ? _styleItem.copyWith(color: Colors.redAccent) : _styleItem),
       trailing: trailing,
       onTap: onTap ?? () {},
     );
@@ -108,7 +120,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
     return Padding(
       padding: const EdgeInsets.only(left: 56),
       child: ListTile(
-        title: Text(label, style: const TextStyle(color: Colors.white70)),
+        title: Text(label, style: _styleSubItem),
         onTap: onTap,
       ),
     );
@@ -119,7 +131,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
       children: [
         ListTile(
           leading: Icon(icon, color: const Color(0xFF1A56DB)),
-          title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          title: Text(label, style: _styleItem),
           trailing: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.white54),
           onTap: onTap,
         ),
@@ -128,9 +140,9 @@ class _DrawerScreenState extends State<DrawerScreen> {
           ...items.map((item) => Padding(
             padding: const EdgeInsets.only(left: 56),
             child: ListTile(
-              title: Text(item, style: const TextStyle(color: Colors.white70)),
+              title: Text(item, style: _styleSubItem),
               onTap: () {
-                if (item == 'Vagas de Motoboy Fixo' || item == '🎉 Promoções de Feriado') {
+                if (item == 'Vagas de Motoboy Fixo' || item == 'Promoções de Feriado') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const VagasScreen()));
                 }
               },
