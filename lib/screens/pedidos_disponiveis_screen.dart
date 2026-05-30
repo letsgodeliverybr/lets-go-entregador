@@ -30,6 +30,32 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
+  List<Map<String, dynamic>> _faixasPagamento = [];
+
+  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
+
+  double _calcTaxaMotoboy(Map<String, dynamic> pedido) {
+    final km = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
+    final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final temRetorno = pedido['com_retorno'] == true || pedido['retorno'] == true;
+
+    double base = 0;
+    if (km > 0 && _faixasPagamento.isNotEmpty) {
+      Map<String, dynamic>? faixa;
+      for (final f in _faixasPagamento) {
+        final ate = double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0;
+        if (km <= ate) { faixa = f; break; }
+      }
+      faixa ??= _faixasPagamento.last;
+      final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
+      base = double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0;
+    } else {
+      base = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
+    }
+
+    if (_precoDinamico > 0) base += 1.60;
+    return base + gorjeta;
+  }
 
   @override
   void initState() {
@@ -101,7 +127,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      final results = await Future.wait([
+      final futures = <Future>[
         _supabase
             .from('pedidos')
             .select('*, lojas(nome, latitude, longitude)')
@@ -114,12 +140,23 @@ class _State extends State<PedidosDisponiveisScreen> {
             .select('valor')
             .eq('chave', 'preco_dinamico_entregador')
             .maybeSingle(),
-      ]);
+        if (_faixasPagamento.isEmpty)
+          _supabase
+              .from('tabelas_preco_faixas')
+              .select('km_ate, valor_sem_retorno, valor_com_retorno')
+              .eq('tabela_id', _tabelaPagamentoId)
+              .order('km_ate'),
+      ];
+
+      final results = await Future.wait(futures);
 
       final lista = List<Map<String, dynamic>>.from(results[0] as List);
       final precoDinamico = double.tryParse(
               (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
+      if (results.length > 2) {
+        _faixasPagamento = List<Map<String, dynamic>>.from(results[2] as List);
+      }
 
       if (lista.isNotEmpty) {
         _tocarNotificacao();
@@ -250,6 +287,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
+      final taxaMotoboy = _calcTaxaMotoboy(pedido);
       final result = await _supabase
           .from('pedidos')
           .update({
@@ -258,6 +296,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
             'entregador_id': user.id,
+            'taxa_entrega_motoboy': taxaMotoboy,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('status', 'pronto')
@@ -395,9 +434,9 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Widget _buildCard(Map<String, dynamic> pedido) {
-    final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaFinal = taxa + gorjeta + _precoDinamico;
+    final taxaFinal = _calcTaxaMotoboy(pedido);
+    final taxaBase = taxaFinal - gorjeta - (_precoDinamico > 0 ? 1.60 : 0.0);
     final temBonus = gorjeta > 0 || _precoDinamico > 0;
 
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
@@ -504,7 +543,7 @@ class _State extends State<PedidosDisponiveisScreen> {
                   style: const TextStyle(color: Colors.white70, fontSize: 13)),
               const Spacer(),
               if (temBonus) ...[
-                Text('R\$${taxa.toStringAsFixed(2)}',
+                Text('R\$${taxaBase.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: Colors.red,
                       fontSize: 13,
