@@ -52,9 +52,6 @@ class _RegistroScreenState extends State<RegistroScreen> {
         'status': 'ativo',
         'aprovado': false,
         'status_cadastro': 'pendente',
-        'disponivel': false,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
       });
       if (!mounted) return;
       Navigator.pushReplacement(
