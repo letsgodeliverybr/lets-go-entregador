@@ -184,9 +184,11 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
   }
 
   Widget _buildItem(Map<String, dynamic> p) {
-    final data = p['updated_at'] != null ? DateTime.tryParse(p['updated_at'].toString()) : null;
+    final data = p['updated_at'] != null
+        ? DateTime.tryParse(p['updated_at'].toString())?.toLocal()
+        : null;
     final dataStr = data != null
-        ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')} ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
+        ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year} às ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
         : '—';
     final nomeLoja = (p['lojas'] as Map?)?['nome'] as String? ?? '—';
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
@@ -203,10 +205,14 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('#${p['numero'] ?? (p['id'] as String).substring(0, 6)}',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 3),
+          Text(dataStr,
+              style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           const SizedBox(height: 2),
           Text(nomeLoja, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          Text('$dataStr  •  ${km.toStringAsFixed(1)} km',
-              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+          if (km > 0)
+            Text('${km.toStringAsFixed(1)} km',
+                style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ])),
         Text('R\$ ${_valor(p).toStringAsFixed(2)}',
             style: const TextStyle(color: Color(0xFF10b981), fontWeight: FontWeight.w700, fontSize: 16)),

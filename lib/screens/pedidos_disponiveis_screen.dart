@@ -161,7 +161,10 @@ class _State extends State<PedidosDisponiveisScreen> {
         _faixasPagamento = List<Map<String, dynamic>>.from(results[2] as List);
       }
 
-      if (lista.isNotEmpty) {
+      // Toca som apenas para pedidos que ainda não estavam na lista
+      final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
+      final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
+      if (novos.isNotEmpty) {
         _tocarNotificacao();
       }
 
@@ -220,30 +223,49 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   void _assinarRealtime() {
-    _channel = _supabase.channel('pedidos-disp-realtime').onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'pedidos',
-      callback: (payload) {
-        final status = payload.newRecord['status']?.toString() ?? '';
-        if (status == 'pronto') {
-          _tocarNotificacao();
-          _buscar();
-        }
-      },
-    ).onPostgresChanges(
-      event: PostgresChangeEvent.update,
-      schema: 'public',
-      table: 'pedidos',
-      callback: (payload) {
-        final novo = payload.newRecord['status']?.toString() ?? '';
-        final antigo = payload.oldRecord['status']?.toString() ?? '';
-        if (novo == 'pronto' && antigo != 'pronto') {
-          _tocarNotificacao();
-        }
-        _buscar();
-      },
-    ).subscribe();
+    _channel?.unsubscribe();
+    _channel = _supabase
+        .channel('pedidos-disp-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'pedidos',
+          callback: (payload) {
+            final novo = payload.newRecord;
+            final status = novo['status']?.toString() ?? '';
+            if (status == 'pronto') {
+              // Novo pedido disponível → busca completa para ter dados de lojas
+              _buscar();
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'pedidos',
+          callback: (payload) {
+            final novo = payload.newRecord;
+            final novoStatus = novo['status']?.toString() ?? '';
+            final id = novo['id']?.toString() ?? '';
+            final motoboyId = novo['motoboy_id']?.toString();
+            final uid = _supabase.auth.currentUser?.id;
+
+            if (novoStatus == 'pronto' &&
+                (motoboyId == null || motoboyId.isEmpty)) {
+              // Pedido continua/voltou a estar disponível
+              _buscar();
+            } else if (novoStatus != 'pronto' ||
+                (motoboyId != null &&
+                    motoboyId.isNotEmpty &&
+                    motoboyId != uid)) {
+              // Aceito por outro motoboy ou mudou de status → remove imediatamente
+              if (mounted && id.isNotEmpty) {
+                setState(() => _pedidos.removeWhere((p) => p['id'] == id));
+              }
+            }
+          },
+        )
+        .subscribe();
   }
 
   void _assinarRealtimeRota() {
