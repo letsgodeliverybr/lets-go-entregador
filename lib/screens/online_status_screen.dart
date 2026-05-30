@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/tracking_service.dart';
+import 'home_screen.dart';
 
 class OnlineStatusScreen extends StatefulWidget {
   const OnlineStatusScreen({super.key});
@@ -86,7 +87,13 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
     try {
       if (_online) {
         await TrackingService.ficarOffline(_uid);
-        if (mounted) setState(() => _online = false);
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+        return;
       } else {
         await TrackingService.ficarOnline(_uid);
         await TrackingService.iniciar(_uid);
