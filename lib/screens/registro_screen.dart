@@ -26,56 +26,76 @@ class _RegistroScreenState extends State<RegistroScreen> {
     super.dispose();
   }
 
+  void _mostrarErro(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: const Color(0xFFef4444),
+      duration: const Duration(seconds: 6),
+    ));
+  }
+
   Future<void> _criarConta() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final email = _emailCtrl.text.trim();
+    debugPrint('[REGISTRO] iniciando criação de conta email=$email');
+
     setState(() => _carregando = true);
     try {
       final supabase = Supabase.instance.client;
+
+      // ── 1. signUp ──────────────────────────────────────────
+      debugPrint('[REGISTRO] chamando supabase.auth.signUp...');
       final response = await supabase.auth.signUp(
-        email: _emailCtrl.text.trim(),
+        email: email,
         password: _senhaCtrl.text,
       );
+      debugPrint('[REGISTRO] signUp response: user=${response.user?.id} session=${response.session != null}');
+
       final user = response.user;
       if (user == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Não foi possível criar a conta. Tente novamente.'),
-              backgroundColor: Color(0xFFef4444),
-            ),
-          );
-        }
+        debugPrint('[REGISTRO] ❌ user == null após signUp');
+        _mostrarErro('Não foi possível criar a conta. Verifique o e-mail e tente novamente.');
         return;
       }
+      debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
+
+      // ── 2. INSERT entregadores ─────────────────────────────
+      debugPrint('[REGISTRO] inserindo row em entregadores id=${user.id}...');
       await supabase.from('entregadores').upsert({
         'id': user.id,
         'status': 'ativo',
         'aprovado': false,
         'status_cadastro': 'pendente',
       });
+      debugPrint('[REGISTRO] ✅ entregadores row inserida');
+
+      // ── 3. Navegar para cadastro ───────────────────────────
+      debugPrint('[REGISTRO] navegando para CadastroAprovacaoScreen...');
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CadastroAprovacaoScreen()),
       );
+      debugPrint('[REGISTRO] ✅ navegação concluída');
+
     } on AuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro: ${e.message}'),
-            backgroundColor: const Color(0xFFef4444),
-          ),
-        );
+      debugPrint('[REGISTRO] ❌ AuthException: ${e.message} (statusCode=${e.statusCode})');
+      String msg = e.message;
+      if (msg.contains('already registered') || msg.contains('already been registered')) {
+        msg = 'Este e-mail já está cadastrado. Faça login.';
+      } else if (msg.contains('invalid') && msg.contains('email')) {
+        msg = 'E-mail inválido.';
+      } else if (msg.contains('Password')) {
+        msg = 'Senha fraca. Use pelo menos 6 caracteres.';
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro: ${e.toString()}'),
-            backgroundColor: const Color(0xFFef4444),
-          ),
-        );
-      }
+      _mostrarErro(msg);
+    } catch (e, st) {
+      debugPrint('[REGISTRO] ❌ Erro inesperado: $e');
+      debugPrint('[REGISTRO] ❌ tipo: ${e.runtimeType}');
+      debugPrint('[REGISTRO] ❌ stacktrace: $st');
+      _mostrarErro('Erro inesperado: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
