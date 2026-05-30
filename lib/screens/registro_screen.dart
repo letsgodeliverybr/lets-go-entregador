@@ -51,14 +51,23 @@ class _RegistroScreenState extends State<RegistroScreen> {
         email: email,
         password: _senhaCtrl.text,
       );
-      debugPrint('[REGISTRO] signUp response: user=${response.user?.id} session=${response.session != null}');
+      debugPrint('[REGISTRO] signUp response: user=${response.user?.id} identities=${response.user?.identities?.length} session=${response.session != null}');
 
       final user = response.user;
       if (user == null) {
         debugPrint('[REGISTRO] ❌ user == null após signUp');
-        _mostrarErro('Não foi possível criar a conta. Verifique o e-mail e tente novamente.');
+        _mostrarErro('Não foi possível criar a conta. Tente novamente.');
         return;
       }
+
+      // Quando confirmação de email está OFF e o email já existe,
+      // Supabase retorna o usuário mas com identities vazio.
+      if (user.identities != null && user.identities!.isEmpty) {
+        debugPrint('[REGISTRO] ❌ identities vazio → email já cadastrado');
+        _mostrarErro('E-mail já cadastrado. Faça login.');
+        return;
+      }
+
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
       // ── 2. INSERT entregadores ─────────────────────────────
@@ -81,21 +90,22 @@ class _RegistroScreenState extends State<RegistroScreen> {
       debugPrint('[REGISTRO] ✅ navegação concluída');
 
     } on AuthException catch (e) {
-      debugPrint('[REGISTRO] ❌ AuthException: ${e.message} (statusCode=${e.statusCode})');
-      String msg = e.message;
-      if (msg.contains('already registered') || msg.contains('already been registered')) {
-        msg = 'Este e-mail já está cadastrado. Faça login.';
+      debugPrint('[REGISTRO] ❌ AuthException: "${e.message}" statusCode=${e.statusCode}');
+      final msg = e.message.toLowerCase();
+      if (msg.contains('already registered') || msg.contains('already been registered') || msg.contains('email address is already')) {
+        _mostrarErro('E-mail já cadastrado. Faça login.');
       } else if (msg.contains('invalid') && msg.contains('email')) {
-        msg = 'E-mail inválido.';
-      } else if (msg.contains('Password')) {
-        msg = 'Senha fraca. Use pelo menos 6 caracteres.';
+        _mostrarErro('E-mail inválido.');
+      } else if (msg.contains('password') || msg.contains('senha')) {
+        _mostrarErro('Senha fraca. Use pelo menos 6 caracteres.');
+      } else {
+        _mostrarErro('Erro ao criar conta: ${e.message}');
       }
-      _mostrarErro(msg);
     } catch (e, st) {
       debugPrint('[REGISTRO] ❌ Erro inesperado: $e');
       debugPrint('[REGISTRO] ❌ tipo: ${e.runtimeType}');
       debugPrint('[REGISTRO] ❌ stacktrace: $st');
-      _mostrarErro('Erro inesperado: ${e.toString()}');
+      _mostrarErro('Erro inesperado. Tente novamente.');
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
