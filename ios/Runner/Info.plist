@@ -22,6 +22,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Precisamos da câmera para tirar sua foto de identificação para aprovação.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Precisamos acessar sua galeria para selecionar sua foto de identificação.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

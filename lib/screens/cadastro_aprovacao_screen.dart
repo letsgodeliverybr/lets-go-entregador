@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'aguardo_aprovacao_screen.dart';
 
@@ -26,6 +28,10 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _logradouroCtrl = TextEditingController();
   final _numeroEndCtrl = TextEditingController();
   final _complementoEndCtrl = TextEditingController();
+
+  // Foto / selfie
+  XFile? _foto;
+  final _picker = ImagePicker();
 
   // Dados do Veículo
   String _modalVeiculo = 'moto';
@@ -92,6 +98,16 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     } catch (_) {}
   }
 
+  Future<void> _selecionarFoto(ImageSource source) async {
+    final picked = await _picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1024,
+      preferredCameraDevice: CameraDevice.front,
+    );
+    if (picked != null) setState(() => _foto = picked);
+  }
+
   Future<void> _selecionarData() async {
     final now = DateTime.now();
     DateTime initial = now.subtract(const Duration(days: 365 * 25));
@@ -128,6 +144,21 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     if (_uid.isEmpty) return;
     setState(() => _salvando = true);
     try {
+      // Upload da foto, se selecionada
+      String? fotoUrl;
+      if (_foto != null) {
+        final bytes = await File(_foto!.path).readAsBytes();
+        final path = '$_uid/selfie.jpg';
+        await _supabase.storage
+            .from('fotos-cadastro')
+            .uploadBinary(path, bytes,
+                fileOptions: const FileOptions(
+                    contentType: 'image/jpeg', upsert: true));
+        fotoUrl = _supabase.storage
+            .from('fotos-cadastro')
+            .getPublicUrl(path);
+      }
+
       await _supabase.from('entregadores').update({
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
@@ -145,6 +176,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'cor_veiculo': _corCtrl.text.trim(),
         'cnh': _cnhCtrl.text.trim(),
         'cnpj': _cnpjCtrl.text.trim(),
+        if (fotoUrl != null) 'foto_url': fotoUrl,
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _uid);
@@ -191,6 +223,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _secao('👤 Dados Pessoais'),
+              _fotoField(),
               _campo('Nome completo', _nomeCtrl, obrigatorio: true),
               _campo('Telefone', _telefoneCtrl,
                   tipo: TextInputType.phone, hint: '(16) 99999-9999'),
@@ -265,6 +298,155 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _fotoField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Foto / Selfie',
+            style: TextStyle(
+                color: Color(0xFF64748b),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: .5)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => _mostrarOpcoesFoto(),
+          child: Container(
+            width: double.infinity,
+            height: 180,
+            decoration: BoxDecoration(
+              color: const Color(0xFF161820),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _foto != null
+                    ? const Color(0xFF1A56DB)
+                    : const Color(0xFF2A2D35),
+                width: _foto != null ? 1.5 : 1,
+              ),
+            ),
+            child: _foto != null
+                ? Stack(children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: Image.file(
+                        File(_foto!.path),
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _foto = null),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(.6),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close,
+                              color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ),
+                  ])
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.add_a_photo_outlined,
+                          color: Color(0xFF475569), size: 36),
+                      const SizedBox(height: 10),
+                      const Text('Toque para adicionar sua foto',
+                          style: TextStyle(
+                              color: Color(0xFF64748b),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 14),
+                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        _btnFoto(Icons.camera_alt_outlined, 'Câmera',
+                            () => _selecionarFoto(ImageSource.camera)),
+                        const SizedBox(width: 10),
+                        _btnFoto(Icons.photo_library_outlined, 'Galeria',
+                            () => _selecionarFoto(ImageSource.gallery)),
+                      ]),
+                    ],
+                  ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _btnFoto(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A56DB).withOpacity(.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: const Color(0xFF1A56DB).withOpacity(.3)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: const Color(0xFF60a5fa), size: 16),
+          const SizedBox(width: 6),
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xFF60a5fa),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  void _mostrarOpcoesFoto() {
+    if (_foto != null) return; // já tem foto, toca direto no X para remover
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E2130),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: const Color(0xFF3A3D4A),
+                  borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined,
+                color: Color(0xFF60a5fa)),
+            title: const Text('Tirar selfie',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            onTap: () {
+              Navigator.pop(context);
+              _selecionarFoto(ImageSource.camera);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined,
+                color: Color(0xFF60a5fa)),
+            title: const Text('Escolher da galeria',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            onTap: () {
+              Navigator.pop(context);
+              _selecionarFoto(ImageSource.gallery);
+            },
+          ),
+          const SizedBox(height: 8),
+        ]),
       ),
     );
   }
