@@ -9,6 +9,7 @@ import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 import 'online_status_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
@@ -152,6 +153,13 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         }
       } else {
         await TrackingService.ficarOffline(user.id);
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+        return;
       }
     } on Exception catch (e) {
       if (!mounted) return;
