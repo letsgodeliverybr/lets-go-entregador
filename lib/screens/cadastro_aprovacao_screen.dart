@@ -35,13 +35,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _cnhCtrl = TextEditingController();
   final _cnpjCtrl = TextEditingController();
 
-  // Dados de Pagamento
-  String _tipoPagamento = 'por_tabela';
-  final _bancoCtrl = TextEditingController();
-  String _tipoChavePix = 'cpf';
-  final _chavePixCtrl = TextEditingController();
-  bool _maquinaCartao = false;
-
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
   @override
@@ -66,8 +59,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     _corCtrl.dispose();
     _cnhCtrl.dispose();
     _cnpjCtrl.dispose();
-    _bancoCtrl.dispose();
-    _chavePixCtrl.dispose();
     super.dispose();
   }
 
@@ -97,11 +88,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         _corCtrl.text = e['cor_veiculo'] ?? '';
         _cnhCtrl.text = e['cnh'] ?? '';
         _cnpjCtrl.text = e['cnpj'] ?? '';
-        _tipoPagamento = e['tipo_pagamento'] ?? 'por_tabela';
-        _bancoCtrl.text = e['banco'] ?? '';
-        _tipoChavePix = e['tipo_chave_pix'] ?? 'cpf';
-        _chavePixCtrl.text = e['chave_pix'] ?? '';
-        _maquinaCartao = e['maquina_cartao'] == true;
       });
     } catch (_) {}
   }
@@ -159,11 +145,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'cor_veiculo': _corCtrl.text.trim(),
         'cnh': _cnhCtrl.text.trim(),
         'cnpj': _cnpjCtrl.text.trim(),
-        'tipo_pagamento': _tipoPagamento,
-        'banco': _bancoCtrl.text.trim(),
-        'tipo_chave_pix': _tipoChavePix,
-        'chave_pix': _chavePixCtrl.text.trim(),
-        'maquina_cartao': _maquinaCartao,
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _uid);
@@ -250,33 +231,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _campo('Cor', _corCtrl, hint: 'Preta'),
               _campo('CNH', _cnhCtrl),
               _campo('CNPJ', _cnpjCtrl, hint: '00.000.000/0000-00'),
-
-              _secao('💰 Dados de Pagamento'),
-              _dropdown(
-                label: 'Tipo de pagamento',
-                value: _tipoPagamento,
-                itens: const {
-                  'por_tabela': 'Por Tabela',
-                  'percentual': 'Percentual',
-                  'fixo': 'Fixo',
-                },
-                onChanged: (v) => setState(() => _tipoPagamento = v!),
-              ),
-              _campo('Banco', _bancoCtrl, hint: 'Nubank, Bradesco...'),
-              _dropdown(
-                label: 'Tipo de chave PIX',
-                value: _tipoChavePix,
-                itens: const {
-                  'cpf': 'CPF',
-                  'cnpj': 'CNPJ',
-                  'email': 'E-mail',
-                  'telefone': 'Telefone',
-                  'aleatoria': 'Aleatória',
-                },
-                onChanged: (v) => setState(() => _tipoChavePix = v!),
-              ),
-              _campo('Chave PIX', _chavePixCtrl),
-              _checkboxMaquina(),
 
               const SizedBox(height: 32),
             ],
@@ -400,8 +354,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           onTap: _selecionarData,
           child: Container(
             width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
               color: const Color(0xFF161820),
               borderRadius: BorderRadius.circular(10),
@@ -475,44 +428,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           onChanged: onChanged,
         ),
       ]),
-    );
-  }
-
-  Widget _checkboxMaquina() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () => setState(() => _maquinaCartao = !_maquinaCartao),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161820),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _maquinaCartao
-                  ? const Color(0xFF1A56DB)
-                  : const Color(0xFF2A2D35),
-            ),
-          ),
-          child: Row(children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: Checkbox(
-                value: _maquinaCartao,
-                onChanged: (v) => setState(() => _maquinaCartao = v!),
-                activeColor: const Color(0xFF1A56DB),
-                side: const BorderSide(color: Color(0xFF475569)),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text('Possuo máquina de cartão',
-                style: TextStyle(color: Colors.white, fontSize: 14)),
-          ]),
-        ),
-      ),
     );
   }
 }
