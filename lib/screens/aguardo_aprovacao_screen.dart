@@ -83,20 +83,20 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0F14),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A1A),
         elevation: 0,
         automaticallyImplyLeading: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFF2A2D35)),
+          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -128,7 +128,7 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
                 'Documentos em análise',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Color(0xFF1A1A1A),
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   letterSpacing: .3,
@@ -141,7 +141,7 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
                 'Seus documentos estão sendo analisados. Procure um líder responsável na sua região para agilizar sua aprovação.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF64748b),
+                  color: Color(0xFF666666),
                   fontSize: 15,
                   height: 1.6,
                 ),

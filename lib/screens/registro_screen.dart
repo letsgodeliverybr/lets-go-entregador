@@ -104,17 +104,17 @@ class _RegistroScreenState extends State<RegistroScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0F14),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A1A),
         elevation: 0,
         title: const Text('Criar conta',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFF2A2D35)),
+          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
         ),
       ),
       body: SingleChildScrollView(
@@ -127,12 +127,12 @@ class _RegistroScreenState extends State<RegistroScreen> {
               const SizedBox(height: 16),
               const Text('Bem-vindo(a)!',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF1A1A1A),
                       fontSize: 22,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               const Text('Crie sua conta para começar a entregar',
-                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 14)),
+                  style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
               const SizedBox(height: 32),
               _label('E-mail'),
               const SizedBox(height: 8),
@@ -210,8 +210,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   Widget _label(String texto) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(texto,
-            style:
-                const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+            style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
       );
 
   Widget _campo({
@@ -226,25 +225,25 @@ class _RegistroScreenState extends State<RegistroScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: teclado,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: Color(0xFF1A1A1A)),
         validator: validar,
         decoration: InputDecoration(
-          prefixIcon: Icon(icone, color: const Color(0xFF4B5563), size: 20),
+          prefixIcon: Icon(icone, color: const Color(0xFF9E9E9E), size: 20),
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF4B5563)),
+          hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
           filled: true,
-          fillColor: const Color(0xFF161820),
+          fillColor: Colors.white,
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
           enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
           focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF1A56DB))),
           errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFef4444))),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -265,31 +264,31 @@ class _RegistroScreenState extends State<RegistroScreen> {
       child: TextFormField(
         controller: controller,
         obscureText: !visivel,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: Color(0xFF1A1A1A)),
         validator: validar,
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.lock_outline,
-              color: Color(0xFF4B5563), size: 20),
+              color: Color(0xFF9E9E9E), size: 20),
           suffixIcon: IconButton(
             icon: Icon(visivel ? Icons.visibility : Icons.visibility_off,
-                color: const Color(0xFF4B5563), size: 20),
+                color: const Color(0xFF9E9E9E), size: 20),
             onPressed: onToggle,
           ),
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF4B5563)),
+          hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
           filled: true,
-          fillColor: const Color(0xFF161820),
+          fillColor: Colors.white,
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
           enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35))),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
           focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF1A56DB))),
           errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFef4444))),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

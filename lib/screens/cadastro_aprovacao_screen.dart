@@ -263,17 +263,17 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0F14),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A1A),
         centerTitle: true,
         elevation: 0,
         title: const Text('Cadastro para Aprovação',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFF2A2D35)),
+          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
         ),
       ),
       body: Form(
@@ -373,7 +373,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Foto / Selfie',
             style: TextStyle(
-                color: Color(0xFF64748b),
+                color: Color(0xFF666666),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -384,14 +384,15 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             width: double.infinity,
             height: 180,
             decoration: BoxDecoration(
-              color: const Color(0xFF161820),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _foto != null
                     ? const Color(0xFF1A56DB)
-                    : const Color(0xFF2A2D35),
+                    : const Color(0xFFE0E0E0),
                 width: _foto != null ? 1.5 : 1,
               ),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
             ),
             child: _foto != null
                 ? Stack(children: [
@@ -426,11 +427,11 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.add_a_photo_outlined,
-                          color: Color(0xFF475569), size: 36),
+                          color: Color(0xFF9E9E9E), size: 36),
                       const SizedBox(height: 10),
                       const Text('Toque para adicionar sua foto',
                           style: TextStyle(
-                              color: Color(0xFF64748b),
+                              color: Color(0xFF666666),
                               fontSize: 13,
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 14),
@@ -545,7 +546,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF64748b),
+                color: Color(0xFF666666),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -553,28 +554,28 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         TextFormField(
           controller: ctrl,
           keyboardType: tipo,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 14),
+            hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
             filled: true,
-            fillColor: const Color(0xFF161820),
+            fillColor: Colors.white,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35)),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35)),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF1A56DB), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFFef4444)),
             ),
           ),
@@ -592,7 +593,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Data de nascimento',
             style: TextStyle(
-                color: Color(0xFF64748b),
+                color: Color(0xFF666666),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -603,9 +604,9 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: const Color(0xFF161820),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF2A2D35)),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0E0E0)),
             ),
             child: Row(children: [
               Expanded(
@@ -613,13 +614,13 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                   _dataNascimento ?? 'Selecionar data',
                   style: TextStyle(
                       color: _dataNascimento != null
-                          ? Colors.white
-                          : const Color(0xFF475569),
+                          ? const Color(0xFF1A1A1A)
+                          : const Color(0xFF9E9E9E),
                       fontSize: 14),
                 ),
               ),
               const Icon(Icons.calendar_today,
-                  color: Color(0xFF475569), size: 18),
+                  color: Color(0xFF9E9E9E), size: 18),
             ]),
           ),
         ),
@@ -638,30 +639,30 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF64748b),
+                color: Color(0xFF666666),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
           value: itens.containsKey(value) ? value : itens.keys.first,
-          dropdownColor: const Color(0xFF1E2130),
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 14),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFF161820),
+            fillColor: Colors.white,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35)),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF2A2D35)),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide:
                   const BorderSide(color: Color(0xFF1A56DB), width: 1.5),
             ),

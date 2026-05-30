@@ -67,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Column(
         children: [
           _buildHeader(),
@@ -80,9 +80,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    const Text('Bem vindo(a)!', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text('Bem vindo(a)!', style: TextStyle(color: Color(0xFF1A1A1A), fontSize: 22, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    const Text('Insira seu e-mail e senha para continuar', style: TextStyle(color: Color(0xFF6B7280), fontSize: 14)),
+                    const Text('Insira seu e-mail e senha para continuar', style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
                     const SizedBox(height: 28),
                     _buildLabel('E-mail'),
                     const SizedBox(height: 8),
@@ -148,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLabel(String texto) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
-    child: Text(texto, style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+    child: Text(texto, style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
   );
 
   Widget _buildCampo({required TextEditingController controller, required String hint, required IconData icone, TextInputType teclado = TextInputType.text, String? Function(String?)? validar}) {
@@ -156,14 +156,14 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller, keyboardType: teclado,
-        style: const TextStyle(color: Colors.white), validator: validar,
+        style: const TextStyle(color: Color(0xFF1A1A1A)), validator: validar,
         decoration: InputDecoration(
-          prefixIcon: Icon(icone, color: const Color(0xFF4B5563), size: 20),
-          hintText: hint, hintStyle: const TextStyle(color: Color(0xFF4B5563)),
-          filled: true, fillColor: const Color(0xFF161820),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
+          prefixIcon: Icon(icone, color: const Color(0xFF9E9E9E), size: 20),
+          hintText: hint, hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+          filled: true, fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
@@ -175,23 +175,23 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: const EdgeInsets.only(bottom: 0),
       child: TextFormField(
         controller: _senhaController, obscureText: !_senhaVisivel,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: Color(0xFF1A1A1A)),
         validator: (v) {
           if (v == null || v.isEmpty) return 'Informe a senha';
           if (v.length < 6) return 'Senha muito curta';
           return null;
         },
         decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4B5563), size: 20),
+          prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF9E9E9E), size: 20),
           suffixIcon: IconButton(
-            icon: Icon(_senhaVisivel ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF4B5563), size: 20),
+            icon: Icon(_senhaVisivel ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF9E9E9E), size: 20),
             onPressed: () => setState(() => _senhaVisivel = !_senhaVisivel),
           ),
-          hintText: 'Senha cadastrada', hintStyle: const TextStyle(color: Color(0xFF4B5563)),
-          filled: true, fillColor: const Color(0xFF161820),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF2A2D35))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
+          hintText: 'Senha cadastrada', hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+          filled: true, fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1A56DB))),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
