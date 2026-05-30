@@ -118,21 +118,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFF0D0F14),
       drawer: const DrawerScreen(),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0D0F14),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.menu, color: Color(0xFF1A1A1A)),
+          icon: const Icon(Icons.menu, color: Colors.white),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: const Text('Bem vindo!',
-            style: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.bold)),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
-              icon: const Icon(Icons.notifications_outlined,
-                  color: Color(0xFF1A1A1A)),
+              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
               onPressed: () {}),
         ],
       ),
@@ -170,12 +169,12 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 _nome.isNotEmpty ? 'Olá, ${_nome.split(' ').first}' : 'Olá!',
                 style: const TextStyle(
-                    color: Color(0xFF1A1A1A),
+                    color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold),
               ),
               const Text('Lets Go Delivery',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 13)),
+                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
             ],
           ),
         ),
@@ -190,16 +189,15 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF1E2130),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, 2))],
+          border: Border.all(color: const Color(0xFF2A2D35)),
         ),
         child: Row(
           children: [
             const Text('OFFLINE',
                 style: TextStyle(
-                    color: Color(0xFF666666),
+                    color: Colors.white60,
                     fontSize: 12,
                     fontWeight: FontWeight.bold)),
             const SizedBox(width: 6),
@@ -227,10 +225,9 @@ class _HomeScreenState extends State<HomeScreen> {
         width: double.infinity,
         height: 200,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF161820),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+          border: Border.all(color: const Color(0xFF2A2D35)),
         ),
         child: const Center(
             child: CircularProgressIndicator(color: Color(0xFF1A56DB))),
@@ -247,17 +244,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(
         children: [
           Container(
             height: 120,
             decoration: const BoxDecoration(
-              color: Color(0xFFF5F5F5),
+              color: Color(0xFF1E2130),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: const Center(
@@ -269,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(children: [
               const Text('Bom trabalho hoje!',
                   style: TextStyle(
-                      color: Color(0xFF1A1A1A),
+                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center),
@@ -298,9 +294,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF1E2130),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE0E0E0)),
+                    border: Border.all(color: const Color(0xFF2A2D35)),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     const Text('Voltar online',
@@ -336,13 +332,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: const Color(0xFF1E2130),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
-            style: const TextStyle(color: Color(0xFF666666), fontSize: 11)),
+            style: const TextStyle(color: Color(0xFF64748b), fontSize: 11)),
         const SizedBox(height: 4),
         Text(value,
             style: TextStyle(
@@ -357,23 +353,22 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(
         children: [
           Container(
             height: 160,
             decoration: const BoxDecoration(
-              color: Color(0xFFF5F5F5),
+              color: Color(0xFF1E2130),
               borderRadius:
                   BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: const Center(
               child: Icon(Icons.inventory_2_outlined,
-                  size: 72, color: Color(0xFFBDBDBD)),
+                  size: 72, color: Colors.white24),
             ),
           ),
           Padding(
@@ -381,13 +376,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(children: [
               const Text('Você ainda não faturou hoje',
                   style: TextStyle(
-                      color: Color(0xFF1A1A1A),
+                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center),
               const SizedBox(height: 6),
               const Text('Fique online para receber pedidos!',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 14),
+                  style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
                   textAlign: TextAlign.center),
               const SizedBox(height: 16),
               GestureDetector(
@@ -396,16 +391,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 20, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF1E2130),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE0E0E0)),
+                    border: Border.all(color: const Color(0xFF2A2D35)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text('OFFLINE',
                           style: TextStyle(
-                              color: Color(0xFF666666),
+                              color: Colors.white60,
                               fontWeight: FontWeight.bold)),
                       const SizedBox(width: 8),
                       _carregando
@@ -452,20 +447,19 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 260,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Demanda na sua região',
-              style: TextStyle(color: Color(0xFF666666), fontSize: 13)),
+              style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
           const SizedBox(height: 8),
           const Text(
               'No Mapa de Calor você pode ver as áreas da região em que há mais pedidos pra você',
-              style: TextStyle(color: Color(0xFF1A1A1A), fontSize: 14)),
+              style: TextStyle(color: Colors.white, fontSize: 14)),
           const Spacer(),
           SizedBox(
             width: double.infinity,
@@ -494,20 +488,19 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 200,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Saldo disponível',
-              style: TextStyle(color: Color(0xFF666666), fontSize: 13)),
+              style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
           const SizedBox(height: 8),
           const Text('R\$ 0,00',
               style: TextStyle(
-                  color: Color(0xFF1A1A1A),
+                  color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold)),
           const Spacer(),

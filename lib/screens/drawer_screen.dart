@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'pedidos_disponiveis_screen.dart';
 import 'vagas_screen.dart';
 import 'login_screen.dart';
-import 'carteira_screen.dart';
-import 'pedidos_aceitos_screen.dart';
+import 'extrato_screen.dart';
+import 'historico_saques_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -13,10 +12,10 @@ class DrawerScreen extends StatefulWidget {
 }
 
 class _DrawerScreenState extends State<DrawerScreen> {
-  bool _online = false;
   bool _contaExpanded = false;
   bool _sobreExpanded = false;
   bool _oportunidadesExpanded = false;
+  bool _carteiraExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -30,47 +29,22 @@ class _DrawerScreenState extends State<DrawerScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               color: const Color(0xFF161820),
-              child: Row(
+              child: const Row(
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: const Color(0xFF1A56DB),
+                    backgroundColor: Color(0xFF1A56DB),
                     child: Icon(Icons.person, color: Colors.white, size: 32),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text('Gabriel Eliziario', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                         SizedBox(height: 2),
                         Text('ID: #00482', style: TextStyle(color: Colors.white54, fontSize: 13)),
                       ],
-                    ),
-                  ),
-                  // TOGGLE ONLINE
-                  GestureDetector(
-                    onTap: () => setState(() => _online = !_online),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E2130),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF2A2D35)),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(_online ? 'ONLINE' : 'OFFLINE',
-                            style: TextStyle(color: _online ? const Color(0xFF1A56DB) : Colors.white60, fontSize: 11, fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 6),
-                          Switch(
-                            value: _online,
-                            onChanged: (v) => setState(() => _online = v),
-                            activeColor: const Color(0xFF1A56DB),
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
@@ -82,9 +56,15 @@ class _DrawerScreenState extends State<DrawerScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   _buildItem(Icons.inventory_2_outlined, 'ENTREGAS', onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/pedidos'); }),
-                  _buildItem(Icons.account_balance_wallet_outlined, 'CARTEIRA',
-                    trailing: const Icon(Icons.chevron_right, color: Color(0xFF1A56DB)),
-                    onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const CarteiraScreen())); }),
+                  _buildExpandable(
+                    Icons.account_balance_wallet_outlined, 'CARTEIRA', _carteiraExpanded,
+                    () => setState(() => _carteiraExpanded = !_carteiraExpanded),
+                    [], // subitens customizados abaixo
+                    customItems: [
+                      _buildSubItem('📋 Extrato', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const ExtratoScreen())); }),
+                      _buildSubItem('🏦 Histórico de Saques', () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoricoSaquesScreen())); }),
+                    ],
+                  ),
                   _buildExpandable(Icons.manage_accounts_outlined, 'CONTA', _contaExpanded,
                     () => setState(() => _contaExpanded = !_contaExpanded),
                     ['Minha conta', 'Ranking', 'Notificações']),
@@ -124,7 +104,17 @@ class _DrawerScreenState extends State<DrawerScreen> {
     );
   }
 
-  Widget _buildExpandable(IconData icon, String label, bool expanded, VoidCallback onTap, List<String> items) {
+  Widget _buildSubItem(String label, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 56),
+      child: ListTile(
+        title: Text(label, style: const TextStyle(color: Colors.white70)),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildExpandable(IconData icon, String label, bool expanded, VoidCallback onTap, List<String> items, {List<Widget> customItems = const []}) {
     return Column(
       children: [
         ListTile(
@@ -133,7 +123,8 @@ class _DrawerScreenState extends State<DrawerScreen> {
           trailing: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.white54),
           onTap: onTap,
         ),
-        if (expanded)
+        if (expanded) ...[
+          ...customItems,
           ...items.map((item) => Padding(
             padding: const EdgeInsets.only(left: 56),
             child: ListTile(
@@ -145,6 +136,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
               },
             ),
           )),
+        ],
       ],
     );
   }

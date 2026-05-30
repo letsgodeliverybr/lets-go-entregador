@@ -40,13 +40,16 @@ class _State extends State<PedidosDisponiveisScreen> {
     final temRetorno = pedido['com_retorno'] == true || pedido['retorno'] == true;
 
     double base = 0;
-    if (km > 0 && _faixasPagamento.isNotEmpty) {
-      Map<String, dynamic>? faixa;
-      for (final f in _faixasPagamento) {
-        final ate = double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0;
-        if (km <= ate) { faixa = f; break; }
+    if (_faixasPagamento.isNotEmpty) {
+      Map<String, dynamic> faixa;
+      if (km <= 0) {
+        faixa = _faixasPagamento.first; // km=0 → primeira faixa (km_ate=2, valor=7.50)
+      } else {
+        faixa = _faixasPagamento.firstWhere(
+          (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
+          orElse: () => _faixasPagamento.last,
+        );
       }
-      faixa ??= _faixasPagamento.last;
       final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
       base = double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0;
     } else {
@@ -138,7 +141,7 @@ class _State extends State<PedidosDisponiveisScreen> {
         _supabase
             .from('configuracoes')
             .select('valor')
-            .eq('chave', 'preco_dinamico_entregador')
+            .eq('chave', 'preco_dinamico_motoboy')
             .maybeSingle(),
         if (_faixasPagamento.isEmpty)
           _supabase

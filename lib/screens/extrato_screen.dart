@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../widgets/app_bottom_nav_bar.dart';
 
 class ExtratoScreen extends StatefulWidget {
   const ExtratoScreen({super.key});
@@ -10,362 +9,207 @@ class ExtratoScreen extends StatefulWidget {
 
 class _ExtratoScreenState extends State<ExtratoScreen> {
   final _supabase = Supabase.instance.client;
+  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
 
-  DateTimeRange? _periodo;
   List<Map<String, dynamic>> _pedidos = [];
-  bool _carregando = false;
-  bool _buscou = false;
+  List<Map<String, dynamic>> _faixas = [];
+  bool _carregando = true;
+  String _filtro = 'mes';
 
-  double get _totalGanho {
-    double total = 0;
-    for (final p in _pedidos) {
-      final taxa =
-          double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
-      total += taxa;
-    }
-    return total;
+  @override
+  void initState() {
+    super.initState();
+    _carregar();
   }
 
-  // ── seleciona período com DateRangePicker ────────────────────────────────
-  Future<void> _selecionarPeriodo() async {
-    final hoje = DateTime.now();
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2024, 1, 1),
-      lastDate: hoje,
-      initialDateRange: _periodo ??
-          DateTimeRange(
-            start: DateTime(hoje.year, hoje.month, 1),
-            end: hoje,
-          ),
-      locale: const Locale('pt', 'BR'),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF1A56DB),
-              onPrimary: Colors.white,
-              surface: Color(0xFF161820),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF0D0F14),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (range != null) {
-      setState(() => _periodo = range);
-      await _buscar();
+  DateTime get _inicio {
+    final now = DateTime.now();
+    switch (_filtro) {
+      case 'hoje':
+        return DateTime(now.year, now.month, now.day);
+      case 'semana':
+        return now.subtract(const Duration(days: 7));
+      default:
+        return DateTime(now.year, now.month, 1);
     }
   }
 
-  // ── busca pedidos finalizados no período ─────────────────────────────────
-  Future<void> _buscar() async {
-    if (_periodo == null) return;
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-
-    setState(() {
-      _carregando = true;
-      _buscou = true;
-    });
-
+  Future<void> _carregar() async {
+    setState(() => _carregando = true);
     try {
-      // Inclui o dia final inteiro (até 23:59:59)
-      final fimDia = DateTime(
-        _periodo!.end.year,
-        _periodo!.end.month,
-        _periodo!.end.day,
-        23,
-        59,
-        59,
-      );
+      final uid = _supabase.auth.currentUser?.id;
+      if (uid == null) return;
 
-      final data = await _supabase
-          .from('pedidos')
-          .select('id, numero, valor, taxa_entrega, created_at, updated_at, endereco, descricao')
-          .eq('motoboy_id', user.id)
-          .eq('status', 'finalizado')
-          .gte('updated_at', _periodo!.start.toIso8601String())
-          .lte('updated_at', fimDia.toIso8601String())
-          .order('updated_at', ascending: false);
+      final futures = <Future>[
+        _supabase
+            .from('pedidos')
+            .select('id, numero, updated_at, distancia_km, taxa_entrega_motoboy, taxa_entrega, gorjeta, com_retorno, lojas(nome)')
+            .eq('entregador_id', uid)
+            .eq('status', 'finalizado')
+            .gte('updated_at', _inicio.toIso8601String())
+            .order('updated_at', ascending: false),
+        if (_faixas.isEmpty)
+          _supabase
+              .from('tabelas_preco_faixas')
+              .select('km_ate, valor_sem_retorno, valor_com_retorno')
+              .eq('tabela_id', _tabelaPagamentoId)
+              .order('km_ate'),
+      ];
 
-      if (mounted) {
-        setState(() {
-          _pedidos = List<Map<String, dynamic>>.from(data);
-          _carregando = false;
-        });
+      final results = await Future.wait(futures);
+      final lista = List<Map<String, dynamic>>.from(results[0] as List);
+      if (results.length > 1) {
+        _faixas = List<Map<String, dynamic>>.from(results[1] as List);
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _carregando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
 
-  // ── formatação ────────────────────────────────────────────────────────────
-  String _formatarData(String? iso) {
-    if (iso == null) return '—';
-    try {
-      final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}  '
-          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      if (mounted) setState(() { _pedidos = lista; _carregando = false; });
     } catch (_) {
-      return iso;
+      if (mounted) setState(() => _carregando = false);
     }
   }
 
-  String _formatarPeriodo() {
-    if (_periodo == null) return 'Selecionar período';
-    final s = _periodo!.start;
-    final e = _periodo!.end;
-    return '${s.day.toString().padLeft(2, '0')}/${s.month.toString().padLeft(2, '0')}/${s.year}'
-        '  →  '
-        '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}/${e.year}';
+  double _valor(Map<String, dynamic> p) {
+    if (p['taxa_entrega_motoboy'] != null) {
+      return double.tryParse(p['taxa_entrega_motoboy'].toString()) ?? 0;
+    }
+    if (_faixas.isEmpty) {
+      return double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
+    }
+    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+    final temRetorno = p['com_retorno'] == true;
+    final faixa = km <= 0
+        ? _faixas.first
+        : _faixas.firstWhere(
+            (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
+            orElse: () => _faixas.last);
+    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
+    double base = double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0;
+    base += double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
+    return base;
   }
 
-  // ── UI ────────────────────────────────────────────────────────────────────
+  double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 3),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0F14),
+        foregroundColor: Colors.white,
+        title: const Text('Extrato', style: TextStyle(fontWeight: FontWeight.w700)),
+        centerTitle: true,
         elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Extrato',
-          style: TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: const Color(0xFF2A2D35)),
         ),
       ),
       body: Column(
         children: [
-          // ── Seletor de período ──────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: GestureDetector(
-              onTap: _selecionarPeriodo,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161820),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF1A56DB)),
-                ),
-                child: Row(children: [
-                  const Icon(Icons.calendar_month,
-                      color: Color(0xFF1A56DB), size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _formatarPeriodo(),
-                      style: TextStyle(
-                        color: _periodo == null
-                            ? Colors.white54
-                            : Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const Icon(Icons.arrow_drop_down,
-                      color: Color(0xFF1A56DB), size: 24),
-                ]),
-              ),
-            ),
-          ),
-
-          // ── Card de total ───────────────────────────────────────────────
-          if (_buscou && !_carregando)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1A56DB), Color(0xFF0f3fa0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Total ganho no período',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'R\$ ${_totalGanho.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('Entregas',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_pedidos.length}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          const SizedBox(height: 8),
-
-          // ── Lista de pedidos ────────────────────────────────────────────
+          _buildFiltros(),
+          _buildTotal(),
           Expanded(
             child: _carregando
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF1A56DB)))
-                : !_buscou
-                    ? _buildPlaceholder()
-                    : _pedidos.isEmpty
-                        ? _buildVazio()
-                        : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                            itemCount: _pedidos.length,
-                            itemBuilder: (_, i) =>
-                                _buildItemExtrato(_pedidos[i]),
-                          ),
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
+                : _pedidos.isEmpty
+                    ? const Center(child: Text('Nenhuma entrega no período',
+                          style: TextStyle(color: Colors.white54)))
+                    : RefreshIndicator(
+                        onRefresh: _carregar,
+                        color: const Color(0xFF1A56DB),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _pedidos.length,
+                          itemBuilder: (_, i) => _buildItem(_pedidos[i]),
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildItemExtrato(Map<String, dynamic> p) {
-    final taxa =
-        double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final numero = p['numero']?.toString() ??
-        p['id'].toString().substring(0, 8).toUpperCase();
-    final endereco = p['endereco']?.toString() ?? '—';
-    final data = _formatarData(p['updated_at']?.toString());
+  Widget _buildFiltros() {
+    final labels = {'hoje': 'Hoje', 'semana': 'Semana', 'mes': 'Mês'};
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: ['hoje', 'semana', 'mes'].map((f) {
+          final ativo = _filtro == f;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () { setState(() => _filtro = f); _carregar(); },
+              child: Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: ativo ? const Color(0xFF1A56DB) : const Color(0xFF161820),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ativo ? const Color(0xFF1A56DB) : const Color(0xFF2A2D35)),
+                ),
+                child: Text(labels[f]!, textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: ativo ? Colors.white : Colors.white54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
 
+  Widget _buildTotal() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
-      child: Row(
-        children: [
-          // Ícone
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.check_circle_outline,
-                color: Colors.greenAccent, size: 20),
-          ),
-          const SizedBox(width: 12),
-
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Pedido #$numero',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14)),
-                const SizedBox(height: 3),
-                Text(endereco,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 3),
-                Text(data,
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11)),
-              ],
-            ),
-          ),
-
-          // Valor
-          Text(
-            'R\$ ${taxa.toStringAsFixed(2)}',
-            style: const TextStyle(
-                color: Colors.greenAccent,
-                fontWeight: FontWeight.bold,
-                fontSize: 15),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder() {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.calendar_today_outlined,
-            color: Colors.white24, size: 64),
-        const SizedBox(height: 16),
-        const Text('Selecione um período',
-            style: TextStyle(color: Colors.white54, fontSize: 16)),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: _selecionarPeriodo,
-          icon: const Icon(Icons.date_range, color: Color(0xFF1A56DB)),
-          label: const Text('Escolher datas',
-              style: TextStyle(color: Color(0xFF1A56DB))),
-        ),
+      child: Row(children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Total do período', style: TextStyle(color: Colors.white54, fontSize: 13)),
+          Text('${_pedidos.length} entrega${_pedidos.length != 1 ? 's' : ''}',
+              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        ]),
+        const Spacer(),
+        Text('R\$ ${_total.toStringAsFixed(2)}',
+            style: const TextStyle(color: Color(0xFF10b981), fontSize: 22, fontWeight: FontWeight.w800)),
       ]),
     );
   }
 
-  Widget _buildVazio() {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.inbox_outlined, color: Colors.white24, size: 64),
-        const SizedBox(height: 16),
-        const Text('Nenhuma entrega finalizada',
-            style: TextStyle(color: Colors.white54, fontSize: 16)),
-        const SizedBox(height: 4),
-        const Text('neste período',
-            style: TextStyle(color: Colors.white38, fontSize: 13)),
-        const SizedBox(height: 16),
-        TextButton.icon(
-          onPressed: _selecionarPeriodo,
-          icon: const Icon(Icons.calendar_month, color: Color(0xFF1A56DB)),
-          label: const Text('Alterar período',
-              style: TextStyle(color: Color(0xFF1A56DB))),
-        ),
+  Widget _buildItem(Map<String, dynamic> p) {
+    final data = p['updated_at'] != null ? DateTime.tryParse(p['updated_at'].toString()) : null;
+    final dataStr = data != null
+        ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')} ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
+        : '—';
+    final nomeLoja = (p['lojas'] as Map?)?['nome'] as String? ?? '—';
+    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161820),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2A2D35)),
+      ),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('#${p['numero'] ?? (p['id'] as String).substring(0, 6)}',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 2),
+          Text(nomeLoja, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          Text('$dataStr  •  ${km.toStringAsFixed(1)} km',
+              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        ])),
+        Text('R\$ ${_valor(p).toStringAsFixed(2)}',
+            style: const TextStyle(color: Color(0xFF10b981), fontWeight: FontWeight.w700, fontSize: 16)),
       ]),
     );
   }
