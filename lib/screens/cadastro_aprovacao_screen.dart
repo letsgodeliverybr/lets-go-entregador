@@ -144,21 +144,27 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     if (_uid.isEmpty) return;
     setState(() => _salvando = true);
     try {
-      // Upload da foto, se selecionada
+      // Upload de foto — não-bloqueante: falha é logada mas não aborta o envio
       String? fotoUrl;
       if (_foto != null) {
-        final bytes = await File(_foto!.path).readAsBytes();
-        final path = '$_uid/selfie.jpg';
-        await _supabase.storage
-            .from('fotos-cadastro')
-            .uploadBinary(path, bytes,
-                fileOptions: const FileOptions(
-                    contentType: 'image/jpeg', upsert: true));
-        fotoUrl = _supabase.storage
-            .from('fotos-cadastro')
-            .getPublicUrl(path);
+        try {
+          final bytes = await File(_foto!.path).readAsBytes();
+          final path = '$_uid/selfie.jpg';
+          await _supabase.storage
+              .from('fotos-cadastro')
+              .uploadBinary(path, bytes,
+                  fileOptions: const FileOptions(
+                      contentType: 'image/jpeg', upsert: true));
+          fotoUrl = _supabase.storage
+              .from('fotos-cadastro')
+              .getPublicUrl(path);
+          debugPrint('[CadastroAprovacao] foto enviada: $fotoUrl');
+        } catch (uploadErr) {
+          debugPrint('[CadastroAprovacao] AVISO upload foto falhou (não bloqueia): $uploadErr');
+        }
       }
 
+      debugPrint('[CadastroAprovacao] enviando PATCH para entregadores id=$_uid');
       await _supabase.from('entregadores').update({
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
@@ -180,18 +186,21 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _uid);
+      debugPrint('[CadastroAprovacao] PATCH ok → navigando para AguardoAprovacaoScreen');
 
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const AguardoAprovacaoScreen()),
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[CadastroAprovacao] ERRO no envio: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erro ao enviar: $e'),
           backgroundColor: const Color(0xFFef4444),
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
