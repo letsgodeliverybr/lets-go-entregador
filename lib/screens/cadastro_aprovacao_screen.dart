@@ -46,6 +46,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[DEBUG] *** CadastroAprovacaoScreen ABRIU *** uid=$_uid');
     _preencherDados();
   }
 
@@ -140,8 +141,47 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   }
 
   Future<void> _enviar() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_uid.isEmpty) return;
+    debugPrint('[DEBUG] _enviar() chamado');
+
+    final formValido = _formKey.currentState!.validate();
+    debugPrint('[DEBUG] form válido: $formValido');
+    if (!formValido) return;
+
+    // DEBUG 1: usuário logado
+    final user = _supabase.auth.currentUser;
+    debugPrint('[DEBUG] currentUser: id=${user?.id} email=${user?.email} isNull=${user == null}');
+    debugPrint('[DEBUG] _uid getter: "$_uid"');
+
+    if (_uid.isEmpty) {
+      debugPrint('[DEBUG] _uid vazio → abortando envio');
+      return;
+    }
+    // Verificar CPF duplicado antes de salvar
+    final cpfDigitado = _cpfCtrl.text.trim();
+    if (cpfDigitado.isNotEmpty) {
+      try {
+        final duplicado = await _supabase
+            .from('entregadores')
+            .select('id')
+            .eq('cpf', cpfDigitado)
+            .neq('id', _uid)
+            .limit(1);
+        if (duplicado.isNotEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('CPF já cadastrado por outro entregador'),
+              backgroundColor: Color(0xFFef4444),
+              duration: Duration(seconds: 5),
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('[DEBUG] Erro ao verificar CPF duplicado: $e');
+      }
+    }
+
     setState(() => _salvando = true);
     try {
       // Upload de foto — não-bloqueante: falha é logada mas não aborta o envio
@@ -158,14 +198,16 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           fotoUrl = _supabase.storage
               .from('fotos-cadastro')
               .getPublicUrl(path);
-          debugPrint('[CadastroAprovacao] foto enviada: $fotoUrl');
+          debugPrint('[DEBUG] foto enviada: $fotoUrl');
         } catch (uploadErr) {
-          debugPrint('[CadastroAprovacao] AVISO upload foto falhou (não bloqueia): $uploadErr');
+          debugPrint('[DEBUG] AVISO upload foto falhou (não bloqueia): $uploadErr');
         }
+      } else {
+        debugPrint('[DEBUG] nenhuma foto selecionada');
       }
 
-      debugPrint('[CadastroAprovacao] enviando PATCH para entregadores id=$_uid');
-      await _supabase.from('entregadores').update({
+      // DEBUG 2: payload do PATCH
+      final payload = {
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
         'cpf': _cpfCtrl.text.trim(),
@@ -185,16 +227,26 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         if (fotoUrl != null) 'foto_url': fotoUrl,
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', _uid);
-      debugPrint('[CadastroAprovacao] PATCH ok → navigando para AguardoAprovacaoScreen');
+      };
+      debugPrint('[DEBUG] PATCH entregadores WHERE id=$_uid');
+      debugPrint('[DEBUG] payload: $payload');
+
+      await _supabase.from('entregadores').update(payload).eq('id', _uid);
+
+      debugPrint('[DEBUG] PATCH concluído com sucesso');
+      debugPrint('[DEBUG] navegando para AguardoAprovacaoScreen');
 
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const AguardoAprovacaoScreen()),
       );
+      debugPrint('[DEBUG] Navigator.pushReplacement chamado');
     } catch (e, st) {
-      debugPrint('[CadastroAprovacao] ERRO no envio: $e\n$st');
+      // DEBUG 3: erro detalhado do PATCH
+      debugPrint('[DEBUG] ❌ ERRO no PATCH: $e');
+      debugPrint('[DEBUG] ❌ tipo do erro: ${e.runtimeType}');
+      debugPrint('[DEBUG] ❌ stacktrace: $st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -286,7 +338,11 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             width: double.infinity,
             height: 54,
             child: ElevatedButton(
-              onPressed: _salvando ? null : _enviar,
+              onPressed: () {
+                debugPrint('[DEBUG] *** BOTÃO PRESSIONADO *** _salvando=$_salvando');
+                if (_salvando) return;
+                _enviar();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A56DB),
                 foregroundColor: Colors.white,
