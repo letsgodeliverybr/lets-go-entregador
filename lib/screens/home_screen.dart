@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'vagas_screen.dart';
-import 'pedidos_aceitos_screen.dart';
 import 'carteira_screen.dart';
-import 'pedidos_disponiveis_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
 import 'entregador_home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
 import '../services/tracking_service.dart';
+import '../widgets/app_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -153,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomBar(),
+      bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
     );
   }
 
@@ -530,39 +528,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomBar() {
-    return Container(
-      height: 64,
-      color: const Color(0xFF161820),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          IconButton(
-              icon: const Icon(Icons.home, color: Color(0xFF1A56DB)),
-              onPressed: () => Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  (r) => false)),
-          IconButton(
-              icon: const Icon(Icons.inventory_2_outlined,
-                  color: Color(0xFF1A56DB)),
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PedidosDisponiveisScreen()))),
-          IconButton(
-              icon: const Icon(Icons.check_circle_outline,
-                  color: Colors.white54),
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const PedidosAceitosScreen()))),
-          IconButton(
-              icon: const Icon(Icons.work_outline, color: Colors.white54),
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const VagasScreen()))),
-        ],
-      ),
-    );
-  }
 }
