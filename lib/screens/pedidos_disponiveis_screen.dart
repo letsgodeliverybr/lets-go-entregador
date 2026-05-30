@@ -119,7 +119,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       await _audioPlayer.setAudioSource(
         ConcatenatingAudioSource(
           children: List.generate(
-            10,
+            2,
             (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
           ),
         ),
@@ -140,7 +140,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       await _audioPlayer.setAudioSource(
         ConcatenatingAudioSource(
           children: List.generate(
-            10,
+            2,
             (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
           ),
         ),
