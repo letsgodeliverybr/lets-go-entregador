@@ -92,7 +92,9 @@ class _State extends State<AceitarPedidoScreen> {
     final endereco = widget.pedido['endereco'] ?? '—';
     final km = double.tryParse(widget.pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = widget.pedido['com_retorno'] == true;
+    final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
+    final taxaTotal = taxaMotoboy + gorjeta;
     final clienteLatLng = _latLngCliente;
 
     // Marcadores no mapa
@@ -220,8 +222,17 @@ class _State extends State<AceitarPedidoScreen> {
                         ]),
                         const SizedBox(height: 12),
                         const Text('SUA TAXA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
-                        Text('R\$ ${taxaMotoboy.toStringAsFixed(2)}',
+                        Text('R\$ ${taxaTotal.toStringAsFixed(2)}',
                             style: const TextStyle(color: Color(0xFF10b981), fontSize: 20, fontWeight: FontWeight.bold)),
+                        if (gorjeta > 0) ...[
+                          const SizedBox(height: 6),
+                          Row(children: [
+                            const Text('🎁', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 6),
+                            Text('+ R\$ ${gorjeta.toStringAsFixed(2)}',
+                                style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 14, fontWeight: FontWeight.w600)),
+                          ]),
+                        ],
                       ],
                     ),
                   ),
