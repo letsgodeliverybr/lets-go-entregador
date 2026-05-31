@@ -58,6 +58,18 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     });
     _iniciarLocalizacaoPassiva();
     _assinarRealtimeRota();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _centrarMapaNoMotoboy());
+  }
+
+  Future<void> _centrarMapaNoMotoboy() async {
+    try {
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null && mounted) {
+        final ll = LatLng(pos.latitude, pos.longitude);
+        setState(() => _posicaoAtual = ll);
+        try { _mapController.move(ll, 15); } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   Future<void> _carregarEntregador() async {
@@ -341,7 +353,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                     width: 64, height: 90,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
                           width: 48, height: 48,
@@ -391,19 +402,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(children: [
-                  Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(8)),
-                    child: const Center(child: Text('🛵', style: TextStyle(fontSize: 16))),
-                  ),
-                  const SizedBox(width: 8),
-                  const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Lets Go', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
-                    Text('DELIVERY', style: TextStyle(color: Color(0xFFf97316), fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.w600)),
-                  ]),
-                  const Spacer(),
-                  _buildToggleCompacto(),
-                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => _scaffoldKey.currentState?.openDrawer(),
                     child: Container(
@@ -412,6 +410,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       child: const Icon(Icons.menu, color: Colors.white, size: 20),
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Text(nome,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  _buildToggleCompacto(),
                 ]),
               ),
             ),
@@ -464,48 +467,50 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
               child: _buildCardRota(),
             ),
 
-          // BOTÕES DIREITA: CHAT + CENTRALIZAR
+          // BOTÃO CHAT - canto inferior esquerdo
           Positioned(
-            bottom: 160, right: 16,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              GestureDetector(
-                onTap: _abrirChat,
-                child: Stack(children: [
-                  Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF22c55e),
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                    ),
-                    child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
-                  ),
-                  Positioned(
-                    top: 0, right: 0,
-                    child: Container(
-                      width: 16, height: 16,
-                      decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-                      child: const Center(child: Text('1',
-                          style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
-                    ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () { if (_posicaoAtual != null) _mapController.move(_posicaoAtual!, 15); },
-                child: Container(
+            bottom: 160, left: 16,
+            child: GestureDetector(
+              onTap: _abrirChat,
+              child: Stack(children: [
+                Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF161820),
+                    color: const Color(0xFF22c55e),
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF2a2d3a)),
                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
                   ),
-                  child: const Icon(Icons.my_location, color: Colors.white, size: 20),
+                  child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
                 ),
+                Positioned(
+                  top: 0, right: 0,
+                  child: Container(
+                    width: 16, height: 16,
+                    decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
+                    child: const Center(child: Text('1',
+                        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+
+          // BOTÃO GPS - canto inferior direito
+          Positioned(
+            bottom: 160, right: 16,
+            child: GestureDetector(
+              onTap: () { if (_posicaoAtual != null) _mapController.move(_posicaoAtual!, 15); },
+              child: Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161820),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF2a2d3a)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
+                ),
+                child: const Icon(Icons.my_location, color: Colors.white, size: 20),
               ),
-            ]),
+            ),
           ),
         ],
       ),
