@@ -70,10 +70,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
         _supabase
             .from('pedidos')
-            .select('taxa_entrega')
-            .eq('motoboy_id', _uid)
+            .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
+            .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
-            .gte('finalizado_em', inicioDia.toIso8601String()),
+            .gte('updated_at', inicioDia.toIso8601String()),
         _supabase
             .from('pedidos')
             .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
@@ -81,28 +81,26 @@ class _HomeScreenState extends State<HomeScreen> {
             .eq('status', 'finalizado')
             .gte('updated_at', inicioSemana.toIso8601String())
             .lte('updated_at', fimSemana.toIso8601String()),
-      ]);
-
-      if (_faixasPagamento.isEmpty) {
-        final faixasData = await _supabase
+        _supabase
             .from('tabelas_preco_faixas')
             .select('km_ate, valor_sem_retorno, valor_com_retorno')
             .eq('tabela_id', _tabelaPagamentoId)
-            .order('km_ate');
-        _faixasPagamento = List<Map<String, dynamic>>.from(faixasData);
-      }
+            .order('km_ate'),
+      ]);
+
+      _faixasPagamento =
+          List<Map<String, dynamic>>.from(r[3] as List);
 
       final entregador = r[0] as Map<String, dynamic>;
       final listaDia = List<Map<String, dynamic>>.from(r[1] as List);
       final listaSemana = List<Map<String, dynamic>>.from(r[2] as List);
 
-      final totalDia = listaDia.fold<double>(
-        0,
-        (s, p) =>
-            s + (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0),
-      );
+      final totalDia =
+          listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
       final totalSemana =
           listaSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+
+      debugPrint('HomeScreen: uid=$_uid hoje=${listaDia.length} semana=${listaSemana.length} saldoDia=$totalDia saldoSemana=$totalSemana');
 
       if (mounted) {
         setState(() {
@@ -113,7 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _loadingStats = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('HomeScreen _carregarDados error: $e');
       if (mounted) setState(() => _loadingStats = false);
     }
   }

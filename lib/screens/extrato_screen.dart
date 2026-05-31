@@ -38,7 +38,11 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     setState(() => _carregando = true);
     try {
       final uid = _supabase.auth.currentUser?.id;
-      if (uid == null) return;
+      debugPrint('ExtratoScreen: uid=$uid filtro=$_filtro inicio=${_inicio.toIso8601String()}');
+      if (uid == null) {
+        if (mounted) setState(() => _carregando = false);
+        return;
+      }
 
       final futures = <Future>[
         _supabase
@@ -58,12 +62,15 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
       final results = await Future.wait(futures);
       final lista = List<Map<String, dynamic>>.from(results[0] as List);
+      debugPrint('ExtratoScreen: ${lista.length} pedidos retornados');
       if (results.length > 1) {
         _faixas = List<Map<String, dynamic>>.from(results[1] as List);
+        debugPrint('ExtratoScreen: ${_faixas.length} faixas carregadas');
       }
 
       if (mounted) setState(() { _pedidos = lista; _carregando = false; });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ExtratoScreen error: $e');
       if (mounted) setState(() => _carregando = false);
     }
   }
