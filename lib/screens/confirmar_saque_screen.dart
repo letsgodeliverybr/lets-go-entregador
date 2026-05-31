@@ -65,7 +65,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             .order('km_ate'),
         _supabase
             .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
+            .select('distancia_km, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioSemana.toIso8601String())
@@ -95,20 +95,14 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
   double _calcTaxa(Map<String, dynamic> p) {
     final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (p['taxa_entrega_motoboy'] != null) {
-      return (double.tryParse(p['taxa_entrega_motoboy'].toString()) ?? 0) +
-          gorjeta;
-    }
     if (_faixas.isEmpty) return gorjeta;
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final temRetorno = p['com_retorno'] == true;
     final faixa = km <= 0
         ? _faixas.first
         : _faixas.firstWhere(
             (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
             orElse: () => _faixas.last);
-    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
-    return (double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0) + gorjeta;
+    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
   }
 
   Future<void> _solicitarSaque() async {

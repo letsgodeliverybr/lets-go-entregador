@@ -34,18 +34,13 @@ class _HomeScreenState extends State<HomeScreen> {
   double _calcTaxaMotoboy(Map<String, dynamic> p) {
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
     final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (p['taxa_entrega_motoboy'] != null) {
-      return (double.tryParse(p['taxa_entrega_motoboy'].toString()) ?? 0) + gorjeta;
-    }
     if (_faixasPagamento.isEmpty) return gorjeta;
-    final temRetorno = p['com_retorno'] == true;
     final faixa = km <= 0
         ? _faixasPagamento.first
         : _faixasPagamento.firstWhere(
             (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
             orElse: () => _faixasPagamento.last);
-    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
-    return (double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0) + gorjeta;
+    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
   }
 
   @override
@@ -70,13 +65,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
         _supabase
             .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
+            .select('distancia_km, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioDia.toIso8601String()),
         _supabase
             .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta, taxa_entrega_motoboy')
+            .select('distancia_km, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioSemana.toIso8601String())

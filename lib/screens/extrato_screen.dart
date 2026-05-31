@@ -47,7 +47,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
       final futures = <Future>[
         _supabase
             .from('pedidos')
-            .select('id, numero, updated_at, distancia_km, taxa_entrega_motoboy, taxa_entrega, gorjeta, com_retorno, lojas(nome)')
+            .select('id, numero, updated_at, distancia_km, taxa_entrega, gorjeta, lojas(nome)')
             .eq('entregador_id', uid)
             .eq('status', 'finalizado')
             .gte('updated_at', _inicio.toIso8601String())
@@ -76,23 +76,17 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
   }
 
   double _valor(Map<String, dynamic> p) {
-    if (p['taxa_entrega_motoboy'] != null) {
-      return double.tryParse(p['taxa_entrega_motoboy'].toString()) ?? 0;
-    }
+    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
     if (_faixas.isEmpty) {
-      return double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
+      return (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0) + gorjeta;
     }
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final temRetorno = p['com_retorno'] == true;
     final faixa = km <= 0
         ? _faixas.first
         : _faixas.firstWhere(
             (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
             orElse: () => _faixas.last);
-    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
-    double base = double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0;
-    base += double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    return base;
+    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
   }
 
   double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));
