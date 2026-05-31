@@ -295,90 +295,148 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       body: Stack(
         children: [
 
-          // MAPA
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(initialCenter: pos, initialZoom: 15),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
-              ),
+          // MAPA em card arredondado
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+              color: Colors.black,
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(initialCenter: pos, initialZoom: 15),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                    ),
 
-              // Pins dos pedidos em andamento
-              if (_pedidosEmAndamento.isNotEmpty)
-                MarkerLayer(
-                  markers: _pedidosEmAndamento
-                      .where((p) => p['latitude'] != null && p['longitude'] != null)
-                      .map((p) {
-                        final lat = (p['latitude'] as num).toDouble();
-                        final lng = (p['longitude'] as num).toDouble();
-                        final numero = p['numero']?.toString() ?? '—';
-                        return Marker(
-                          point: LatLng(lat, lng),
-                          width: 56, height: 60,
+                    // Pins dos pedidos em andamento
+                    if (_pedidosEmAndamento.isNotEmpty)
+                      MarkerLayer(
+                        markers: _pedidosEmAndamento
+                            .where((p) => p['latitude'] != null && p['longitude'] != null)
+                            .map((p) {
+                              final lat = (p['latitude'] as num).toDouble();
+                              final lng = (p['longitude'] as num).toDouble();
+                              final numero = p['numero']?.toString() ?? '—';
+                              return Marker(
+                                point: LatLng(lat, lng),
+                                width: 56, height: 60,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 36, height: 36,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1A56DB),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
+                                      ),
+                                      child: const Icon(Icons.location_on, color: Colors.white, size: 18),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1A56DB),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text('#$numero',
+                                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                      ),
+
+                    // Pin do motoboy
+                    if (_posicaoAtual != null)
+                      MarkerLayer(markers: [
+                        Marker(
+                          point: _posicaoAtual!,
+                          width: 64, height: 100,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                width: 36, height: 36,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1A56DB),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
+                              SizedBox(
+                                width: 48, height: 48,
+                                child: SvgPicture.string(
+                                  su.svgHelmet(
+                                    _online ? '#10B981' : '#EF4444',
+                                    _online ? '#065f46' : '#991b1b',
+                                  ),
+                                  fit: BoxFit.contain,
                                 ),
-                                child: const Icon(Icons.location_on, color: Colors.white, size: 18),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1A56DB),
+                                  color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text('#$numero',
-                                    style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+                                child: Text(nome,
+                                    textScaler: TextScaler.noScaling,
+                                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                               ),
                             ],
                           ),
-                        );
-                      }).toList(),
+                        ),
+                      ]),
+                  ],
                 ),
 
-              // Pin do motoboy
-              if (_posicaoAtual != null)
-                MarkerLayer(markers: [
-                  Marker(
-                    point: _posicaoAtual!,
-                    width: 64, height: 100,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 48, height: 48,
-                          child: SvgPicture.string(
-                            su.svgHelmet(
-                              _online ? '#10B981' : '#EF4444',
-                              _online ? '#065f46' : '#991b1b',
-                            ),
-                            fit: BoxFit.contain,
-                          ),
+                // BOTÃO CHAT - canto inferior esquerdo do mapa
+                Positioned(
+                  bottom: 16, left: 16,
+                  child: GestureDetector(
+                    onTap: _abrirChat,
+                    child: Stack(children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF22c55e),
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(nome,
-                              textScaler: TextScaler.noScaling,
-                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                        child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
+                      ),
+                      Positioned(
+                        top: 0, right: 0,
+                        child: Container(
+                          width: 16, height: 16,
+                          decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
+                          child: const Center(child: Text('1',
+                              style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
                         ),
-                      ],
+                      ),
+                    ]),
+                  ),
+                ),
+
+                // BOTÃO GPS - canto inferior direito do mapa
+                Positioned(
+                  bottom: 16, right: 16,
+                  child: GestureDetector(
+                    onTap: () { if (_posicaoAtual != null) _mapController.move(_posicaoAtual!, 15); },
+                    child: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF161820),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFF2a2d3a)),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
+                      ),
+                      child: const Icon(Icons.my_location, color: Colors.white, size: 20),
                     ),
                   ),
-                ]),
-            ],
+                ),
+              ],
+            ),
           ),
 
           // OVERLAY ESCURO TOPO
@@ -465,51 +523,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
               child: _buildCardRota(),
             ),
 
-          // BOTÃO CHAT - canto inferior esquerdo
-          Positioned(
-            bottom: 80, left: 16,
-            child: GestureDetector(
-              onTap: _abrirChat,
-              child: Stack(children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF22c55e),
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                  ),
-                  child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
-                ),
-                Positioned(
-                  top: 0, right: 0,
-                  child: Container(
-                    width: 16, height: 16,
-                    decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-                    child: const Center(child: Text('1',
-                        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
-                  ),
-                ),
-              ]),
-            ),
-          ),
-
-          // BOTÃO GPS - canto inferior direito
-          Positioned(
-            bottom: 80, right: 16,
-            child: GestureDetector(
-              onTap: () { if (_posicaoAtual != null) _mapController.move(_posicaoAtual!, 15); },
-              child: Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161820),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF2a2d3a)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                ),
-                child: const Icon(Icons.my_location, color: Colors.white, size: 20),
-              ),
-            ),
-          ),
         ],
       ),
     );
