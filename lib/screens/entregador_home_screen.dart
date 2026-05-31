@@ -350,7 +350,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                 MarkerLayer(markers: [
                   Marker(
                     point: _posicaoAtual!,
-                    width: 64, height: 96,
+                    width: 64, height: 100,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -411,9 +411,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       child: const Icon(Icons.menu, color: Colors.white, size: 20),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Text(nome,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
                   const Spacer(),
                   _buildToggleCompacto(),
                 ]),
@@ -470,7 +467,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
           // BOTÃO CHAT - canto inferior esquerdo
           Positioned(
-            bottom: 160, left: 16,
+            bottom: 80, left: 16,
             child: GestureDetector(
               onTap: _abrirChat,
               child: Stack(children: [
@@ -498,7 +495,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
           // BOTÃO GPS - canto inferior direito
           Positioned(
-            bottom: 160, right: 16,
+            bottom: 80, right: 16,
             child: GestureDetector(
               onTap: () { if (_posicaoAtual != null) _mapController.move(_posicaoAtual!, 15); },
               child: Container(
