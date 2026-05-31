@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/taxa_helper.dart' as th;
 
 class ConfirmarSaqueScreen extends StatefulWidget {
   const ConfirmarSaqueScreen({Key? key}) : super(key: key);
@@ -21,9 +22,6 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
   String? _chavePix;
   String? _tipoChavePix;
   String? _banco;
-
-  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
-  List<Map<String, dynamic>> _faixas = [];
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
@@ -47,37 +45,36 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     setState(() => _carregando = true);
     try {
       final agora = DateTime.now();
+      final diasDesdeSegunda = agora.weekday - 1;
       final inicioSemana = DateTime(
-          agora.year, agora.month, agora.day - (agora.weekday - 1));
-      final fimSemana =
-          inicioSemana.add(const Duration(days: 6, hours: 23, minutes: 59));
+          agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 0, 0);
 
-      final results = await Future.wait([
+      await th.carregarFaixas();
+
+      final results = await Future.wait<dynamic>([
         _supabase
             .from('entregadores')
             .select('chave_pix, tipo_chave_pix, banco')
             .eq('id', _uid)
             .single(),
         _supabase
-            .from('tabelas_preco_faixas')
-            .select('km_ate, valor_sem_retorno, valor_com_retorno')
-            .eq('tabela_id', _tabelaPagamentoId)
-            .order('km_ate'),
-        _supabase
             .from('pedidos')
-            .select('distancia_km, gorjeta')
+            .select('distancia_km, com_retorno, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
-            .gte('updated_at', inicioSemana.toIso8601String())
-            .lte('updated_at', fimSemana.toIso8601String()),
+            .gte('updated_at', inicioSemana.toIso8601String()),
       ]);
 
       final entregador = results[0] as Map<String, dynamic>;
-      _faixas = List<Map<String, dynamic>>.from(results[1] as List);
-      final pedidos = List<Map<String, dynamic>>.from(results[2] as List);
+      final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
 
-      final totalSemana =
-          pedidos.fold<double>(0, (s, p) => s + _calcTaxa(p));
+      double totalSemana = 0;
+      for (final p in pedidos) {
+        final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+        final comRetorno = p['com_retorno'] == true;
+        final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
+        totalSemana += th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
+      }
 
       if (mounted) {
         setState(() {
@@ -91,18 +88,6 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     } catch (_) {
       if (mounted) setState(() => _carregando = false);
     }
-  }
-
-  double _calcTaxa(Map<String, dynamic> p) {
-    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (_faixas.isEmpty) return gorjeta;
-    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final faixa = km <= 0
-        ? _faixas.first
-        : _faixas.firstWhere(
-            (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
-            orElse: () => _faixas.last);
-    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
   }
 
   Future<void> _solicitarSaque() async {
