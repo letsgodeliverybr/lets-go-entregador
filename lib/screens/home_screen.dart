@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String _nome = '';
+  String? _fotoUrl;
   double _saldoDia = 0;
   int _entregasHoje = 0;
   double _saldoSemana = 0;
@@ -57,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await th.carregarFaixas();
 
       final r = await Future.wait<dynamic>([
-        _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
+        _supabase.from('entregadores').select('nome, foto_url, avatar_url').eq('id', _uid).single(),
         _supabase
             .from('pedidos')
             .select('distancia_km, com_retorno, gorjeta')
@@ -88,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _nome = entregador['nome'] ?? '';
+          _fotoUrl = entregador['foto_url']?.toString() ?? entregador['avatar_url']?.toString();
           _saldoDia = totalDia;
           _entregasHoje = listaDia.length;
           _saldoSemana = totalSemana;
@@ -183,10 +185,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildPerfilRow() {
     return Row(
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           radius: 28,
-          backgroundColor: Color(0xFF1A56DB),
-          child: Icon(Icons.person, color: Colors.white, size: 28),
+          backgroundColor: const Color(0xFF1A56DB),
+          backgroundImage: _fotoUrl != null && _fotoUrl!.isNotEmpty
+              ? NetworkImage(_fotoUrl!)
+              : null,
+          child: _fotoUrl == null || _fotoUrl!.isEmpty
+              ? const Icon(Icons.person, color: Colors.white, size: 28)
+              : null,
         ),
         const SizedBox(width: 12),
         Expanded(
