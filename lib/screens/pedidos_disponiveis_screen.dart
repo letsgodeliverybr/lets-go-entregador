@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../services/notification_service.dart';
+import '../utils/taxa_helper.dart' as th;
 import 'pedidos_aceitos_screen.dart';
 import 'rota_disponivel_screen.dart';
 
@@ -30,32 +31,12 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
-  List<Map<String, dynamic>> _faixasPagamento = [];
-
-  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
 
   double _calcTaxaMotoboy(Map<String, dynamic> pedido) {
     final km = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final temRetorno = pedido['com_retorno'] == true || pedido['retorno'] == true;
-
-    double base = 0;
-    if (_faixasPagamento.isNotEmpty) {
-      Map<String, dynamic> faixa;
-      if (km <= 0) {
-        faixa = _faixasPagamento.first; // km=0 → primeira faixa (km_ate=2, valor=7.50)
-      } else {
-        faixa = _faixasPagamento.firstWhere(
-          (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
-          orElse: () => _faixasPagamento.last,
-        );
-      }
-      final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
-      base = double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0;
-    } else {
-      base = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    }
-
+    double base = th.calcularTaxaMotoboy(km, temRetorno, th.faixasGlobais);
     if (_precoDinamico > 0) base += 1.60;
     return base + gorjeta;
   }
@@ -64,6 +45,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   void initState() {
     super.initState();
     _obterPosicao();
+    th.carregarFaixas();
     _verificarEIniciar();
   }
 
@@ -130,7 +112,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      final futures = <Future>[
+      final results = await Future.wait([
         _supabase
             .from('pedidos')
             .select('*, lojas(nome, latitude, longitude)')
@@ -143,23 +125,12 @@ class _State extends State<PedidosDisponiveisScreen> {
             .select('valor')
             .eq('chave', 'preco_dinamico_motoboy')
             .maybeSingle(),
-        if (_faixasPagamento.isEmpty)
-          _supabase
-              .from('tabelas_preco_faixas')
-              .select('km_ate, valor_sem_retorno, valor_com_retorno')
-              .eq('tabela_id', _tabelaPagamentoId)
-              .order('km_ate'),
-      ];
-
-      final results = await Future.wait(futures);
+      ]);
 
       final lista = List<Map<String, dynamic>>.from(results[0] as List);
       final precoDinamico = double.tryParse(
               (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
-      if (results.length > 2) {
-        _faixasPagamento = List<Map<String, dynamic>>.from(results[2] as List);
-      }
 
       // Toca som apenas para pedidos que ainda não estavam na lista
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
@@ -312,7 +283,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final taxaMotoboy = _calcTaxaMotoboy(pedido);
       final result = await _supabase
           .from('pedidos')
           .update({
@@ -321,7 +291,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
             'entregador_id': user.id,
-            'taxa_entrega_motoboy': taxaMotoboy,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('status', 'pronto')

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../widgets/pedido_card_widget.dart';
 import '../utils/status_utils.dart' as su;
+import '../utils/taxa_helper.dart' as th;
 import 'entrega_screen.dart';
 
 class PedidosAceitosScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class _State extends State<PedidosAceitosScreen> {
   @override
   void initState() {
     super.initState();
+    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _buscar();
     _obterPosicao();
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());

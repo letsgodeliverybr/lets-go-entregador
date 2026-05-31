@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/taxa_helper.dart' as th;
 
 class ExtratoScreen extends StatefulWidget {
   const ExtratoScreen({super.key});
@@ -9,16 +10,14 @@ class ExtratoScreen extends StatefulWidget {
 
 class _ExtratoScreenState extends State<ExtratoScreen> {
   final _supabase = Supabase.instance.client;
-  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
-
   List<Map<String, dynamic>> _pedidos = [];
-  List<Map<String, dynamic>> _faixas = [];
   bool _carregando = true;
   String _filtro = 'mes';
 
   @override
   void initState() {
     super.initState();
+    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _carregar();
   }
 
@@ -46,29 +45,15 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
       debugPrint('UID: $uid');
 
-      final futures = <Future>[
-        _supabase
-            .from('pedidos')
-            .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id')
-            .eq('entregador_id', uid)
-            .eq('status', 'finalizado')
-            .gte('updated_at', _inicio.toIso8601String())
-            .order('updated_at', ascending: false),
-        if (_faixas.isEmpty)
-          _supabase
-              .from('tabelas_preco_faixas')
-              .select('km_ate, valor_sem_retorno, valor_com_retorno')
-              .eq('tabela_id', _tabelaPagamentoId)
-              .order('km_ate'),
-      ];
-
-      final results = await Future.wait(futures);
-      final lista = List<Map<String, dynamic>>.from(results[0] as List);
+      final raw = await _supabase
+          .from('pedidos')
+          .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id')
+          .eq('entregador_id', uid)
+          .eq('status', 'finalizado')
+          .gte('updated_at', _inicio.toIso8601String())
+          .order('updated_at', ascending: false);
+      final lista = List<Map<String, dynamic>>.from(raw);
       debugPrint('Pedidos encontrados: ${lista.length}');
-      if (results.length > 1) {
-        _faixas = List<Map<String, dynamic>>.from(results[1] as List);
-        debugPrint('ExtratoScreen: ${_faixas.length} faixas carregadas');
-      }
 
       if (mounted) setState(() { _pedidos = lista; _carregando = false; });
     } catch (e) {
@@ -78,17 +63,10 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
   }
 
   double _valor(Map<String, dynamic> p) {
-    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (_faixas.isEmpty) return gorjeta;
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final temRetorno = p['com_retorno'] == true;
-    final faixa = km <= 0
-        ? _faixas.first
-        : _faixas.firstWhere(
-            (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
-            orElse: () => _faixas.last);
-    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
-    return (double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0) + gorjeta;
+    final comRetorno = p['com_retorno'] == true;
+    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
+    return th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
   }
 
   double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/taxa_helper.dart' as th;
 import 'pedidos_aceitos_screen.dart';
 
 class AceitarPedidoScreen extends StatefulWidget {
@@ -14,6 +15,12 @@ class AceitarPedidoScreen extends StatefulWidget {
 class _State extends State<AceitarPedidoScreen> {
   final _supabase = Supabase.instance.client;
   bool _aceitando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
+  }
 
   // Coordenadas do pedido (cliente)
   LatLng? get _latLngCliente {
@@ -83,7 +90,9 @@ class _State extends State<AceitarPedidoScreen> {
   Widget build(BuildContext context) {
     final numero = widget.pedido['numero'] ?? widget.pedido['id'].toString().substring(0, 6);
     final endereco = widget.pedido['endereco'] ?? '—';
-    final valor = double.tryParse(widget.pedido['valor']?.toString() ?? '0') ?? 0;
+    final km = double.tryParse(widget.pedido['distancia_km']?.toString() ?? '0') ?? 0;
+    final comRetorno = widget.pedido['com_retorno'] == true;
+    final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
     final clienteLatLng = _latLngCliente;
 
     // Marcadores no mapa
@@ -210,7 +219,8 @@ class _State extends State<AceitarPedidoScreen> {
                           )),
                         ]),
                         const SizedBox(height: 12),
-                        Text('R\$ ${valor.toStringAsFixed(2)}',
+                        const Text('SUA TAXA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
+                        Text('R\$ ${taxaMotoboy.toStringAsFixed(2)}',
                             style: const TextStyle(color: Color(0xFF10b981), fontSize: 20, fontWeight: FontWeight.bold)),
                       ],
                     ),

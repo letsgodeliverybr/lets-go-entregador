@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/status_utils.dart';
+import '../utils/taxa_helper.dart' as th;
 
 class PedidoCardWidget extends StatelessWidget {
   final Map<String, dynamic> pedido;
@@ -30,10 +31,11 @@ class PedidoCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxa = double.tryParse(pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
-    final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaFinal = taxa + gorjeta + precoDinamico;
     final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
+    final comRetorno = pedido['com_retorno'] == true;
+    final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
+    final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final taxaFinal = taxaMotoboy + gorjeta + precoDinamico;
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final loja = pedido['lojas'];
@@ -124,8 +126,8 @@ class PedidoCardWidget extends StatelessWidget {
                 Text('${distanciaKm.toStringAsFixed(2)} km',
                     style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 const Spacer(),
-                if (taxaFinal > taxa) ...[
-                  Text('R\$${taxa.toStringAsFixed(2)}',
+                if (gorjeta > 0 || precoDinamico > 0) ...[
+                  Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.red, fontSize: 13,
                         decoration: TextDecoration.lineThrough,

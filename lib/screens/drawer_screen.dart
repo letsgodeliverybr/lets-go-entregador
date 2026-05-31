@@ -120,7 +120,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
     return Padding(
       padding: const EdgeInsets.only(left: 56),
       child: ListTile(
-        title: Text(label, style: _styleSubItem),
+        title: Text(label.toUpperCase(), style: _styleSubItem),
         onTap: onTap,
       ),
     );
@@ -140,7 +140,7 @@ class _DrawerScreenState extends State<DrawerScreen> {
           ...items.map((item) => Padding(
             padding: const EdgeInsets.only(left: 56),
             child: ListTile(
-              title: Text(item, style: _styleSubItem),
+              title: Text(item.toUpperCase(), style: _styleSubItem),
               onTap: () {
                 if (item == 'Vagas de Motoboy Fixo' || item == 'Promoções de Feriado') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const VagasScreen()));
