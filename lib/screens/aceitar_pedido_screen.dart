@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/taxa_helper.dart' as th;
-import '../utils/status_utils.dart' as su;
 import 'pedidos_aceitos_screen.dart';
 
 class AceitarPedidoScreen extends StatefulWidget {
@@ -112,29 +110,23 @@ class _State extends State<AceitarPedidoScreen> {
     // Marcadores no mapa
     final markers = <Marker>[];
 
-    // Marcador do motoboy (capacete azul)
+    // Marcador do motoboy — capacete azul
     if (_posicaoAtual != null) {
       markers.add(Marker(
         point: LatLng(_posicaoAtual!.latitude, _posicaoAtual!.longitude),
-        width: 56, height: 70,
+        width: 56, height: 68,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40, height: 40,
+              width: 44, height: 44,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A56DB),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: SvgPicture.string(
-                  su.svgHelmet('#FFFFFF', '#CCCCCC'),
-                  fit: BoxFit.contain,
-                ),
-              ),
+              child: const Icon(Icons.sports_motorsports, color: Colors.white, size: 24),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -149,56 +141,53 @@ class _State extends State<AceitarPedidoScreen> {
       ));
     }
 
-    // Marcador do cliente (pin azul)
+    // Marcador do pedido — pin azul com número
     if (clienteLatLng != null) {
       markers.add(Marker(
         point: clienteLatLng,
-        width: 52, height: 64,
+        width: 56, height: 68,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 36, height: 36,
+              width: 44, height: 44,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A56DB),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
               ),
-              child: const Icon(Icons.person_pin, color: Colors.white, size: 18),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A56DB),
-                borderRadius: BorderRadius.circular(4),
+              child: Center(
+                child: Text('#$numero',
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
               ),
-              child: const Text('Cliente', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -3),
+              child: Container(width: 10, height: 10,
+                  decoration: const BoxDecoration(color: Color(0xFF1A56DB), shape: BoxShape.circle)),
             ),
           ],
         ),
       ));
     }
 
-    // Marcador da loja (pin azul com ícone loja)
+    // Marcador da loja — pin azul com ícone loja
     markers.add(Marker(
       point: _centro,
-      width: 52, height: 64,
+      width: 56, height: 68,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 36, height: 36,
+            width: 44, height: 44,
             decoration: BoxDecoration(
               color: const Color(0xFF1A56DB),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
               boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
             ),
-            child: SizedBox(
-              width: 22, height: 22,
-              child: SvgPicture.string(su.svgPinLoja, fit: BoxFit.contain),
-            ),
+            child: const Icon(Icons.store, color: Colors.white, size: 22),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
