@@ -95,7 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final totalSemana =
           listaSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      debugPrint('HomeScreen: uid=$_uid hoje=${listaDia.length} semana=${listaSemana.length} saldoDia=$totalDia saldoSemana=$totalSemana');
+      debugPrint('UID: $_uid');
+      debugPrint('HomeScreen: hoje=${listaDia.length} semana=${listaSemana.length} saldoDia=$totalDia saldoSemana=$totalSemana');
 
       if (mounted) {
         setState(() {

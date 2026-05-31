@@ -44,10 +44,12 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
         return;
       }
 
+      debugPrint('UID: $uid');
+
       final futures = <Future>[
         _supabase
             .from('pedidos')
-            .select('id, numero, updated_at, distancia_km, taxa_entrega, gorjeta, lojas(nome)')
+            .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id')
             .eq('entregador_id', uid)
             .eq('status', 'finalizado')
             .gte('updated_at', _inicio.toIso8601String())
@@ -62,7 +64,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
       final results = await Future.wait(futures);
       final lista = List<Map<String, dynamic>>.from(results[0] as List);
-      debugPrint('ExtratoScreen: ${lista.length} pedidos retornados');
+      debugPrint('Pedidos encontrados: ${lista.length}');
       if (results.length > 1) {
         _faixas = List<Map<String, dynamic>>.from(results[1] as List);
         debugPrint('ExtratoScreen: ${_faixas.length} faixas carregadas');
@@ -77,16 +79,16 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
   double _valor(Map<String, dynamic> p) {
     final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (_faixas.isEmpty) {
-      return (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0) + gorjeta;
-    }
+    if (_faixas.isEmpty) return gorjeta;
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+    final temRetorno = p['com_retorno'] == true;
     final faixa = km <= 0
         ? _faixas.first
         : _faixas.firstWhere(
             (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
             orElse: () => _faixas.last);
-    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
+    final campo = temRetorno ? 'valor_com_retorno' : 'valor_sem_retorno';
+    return (double.tryParse(faixa[campo]?.toString() ?? '0') ?? 0) + gorjeta;
   }
 
   double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));
@@ -191,7 +193,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     final dataStr = data != null
         ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year} às ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
         : '—';
-    final nomeLoja = (p['lojas'] as Map?)?['nome'] as String? ?? '—';
+    final lojaId = p['loja_id']?.toString();
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
 
     return Container(
@@ -210,7 +212,8 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
           Text(dataStr,
               style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           const SizedBox(height: 2),
-          Text(nomeLoja, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          if (lojaId != null)
+            Text('Loja: ${lojaId.length > 8 ? lojaId.substring(0, 8) : lojaId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
           if (km > 0)
             Text('${km.toStringAsFixed(1)} km',
                 style: const TextStyle(color: Colors.white38, fontSize: 11)),
