@@ -107,6 +107,13 @@ class _State extends State<AceitarPedidoScreen> {
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
     final taxaTotal = taxaMotoboy + gorjeta;
+    debugPrint('=== ACEITAR PEDIDO ===');
+    debugPrint('distancia_km: ${widget.pedido['distancia_km']}');
+    debugPrint('com_retorno: ${widget.pedido['com_retorno']}');
+    debugPrint('gorjeta: ${widget.pedido['gorjeta']}');
+    debugPrint('faixas carregadas: ${th.faixasGlobais.length}');
+    debugPrint('taxaMotoboy calculado: $taxaMotoboy');
+    debugPrint('taxaTotal: $taxaTotal');
     final clienteLatLng = _latLngCliente;
 
     // Marcadores no mapa
