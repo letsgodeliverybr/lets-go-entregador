@@ -47,7 +47,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
       final raw = await _supabase
           .from('pedidos')
-          .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id')
+          .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id, lojas(nome)')
           .eq('entregador_id', uid)
           .eq('status', 'finalizado')
           .gte('updated_at', _inicio.toIso8601String())
@@ -171,7 +171,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     final dataStr = data != null
         ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year} às ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
         : '—';
-    final lojaId = p['loja_id']?.toString();
+    final nomeLoja = (p['lojas'] as Map?)?['nome']?.toString() ?? 'Loja desconhecida';
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
 
     return Container(
@@ -190,8 +190,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
           Text(dataStr,
               style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           const SizedBox(height: 2),
-          if (lojaId != null)
-            Text('Loja: ${lojaId.length > 8 ? lojaId.substring(0, 8) : lojaId}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          Text(nomeLoja, style: const TextStyle(color: Colors.white54, fontSize: 12)),
           if (km > 0)
             Text('${km.toStringAsFixed(1)} km',
                 style: const TextStyle(color: Colors.white38, fontSize: 11)),
