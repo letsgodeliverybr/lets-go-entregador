@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
+import '../utils/taxa_helper.dart' as th;
 import 'entrega_screen.dart';
 import 'pedidos_disponiveis_screen.dart';
 
@@ -41,6 +42,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   @override
   void initState() {
     super.initState();
+    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _obterPosicaoEntregador();
     Future.delayed(const Duration(milliseconds: 300), _ajustarMapa);
   }
@@ -159,9 +161,10 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Estabelecimento').toString();
     final endLoja = (_pedido['lojas']?['endereco'] ?? '—').toString();
     final endCliente = (_pedido['endereco'] ?? '—').toString();
-    final taxa = double.tryParse(_pedido['taxa_entrega']?.toString() ?? '0') ?? 0;
+    final km = double.tryParse(_pedido['distancia_km']?.toString() ?? '0') ?? 0;
+    final comRetorno = _pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaTotal = taxa + gorjeta;
+    final taxaTotal = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
     final numero = _pedido['numero']?.toString() ?? '—';
 
     return Scaffold(
@@ -220,10 +223,20 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF22c55e).withOpacity(0.3)),
               ),
-              child: Row(children: [
-                const Text('💰 Taxa de entrega', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const Spacer(),
-                Text('R\$ ${taxaTotal.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Text('💰 Sua taxa', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const Spacer(),
+                  Text('R\$ ${taxaTotal.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                ]),
+                if (gorjeta > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Text('🎁 Gorjeta incluída:', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 12)),
+                    const Spacer(),
+                    Text('R\$ ${gorjeta.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                ],
               ]),
             ),
             const SizedBox(height: 16),
