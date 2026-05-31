@@ -20,10 +20,7 @@ class _SelecionarContaScreenState extends State<SelecionarContaScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ConfirmarSaqueScreen(
-          valor: widget.valor,
-          conta: _contas[_contaSelecionada!],
-        ),
+        builder: (_) => const ConfirmarSaqueScreen(),
       ),
     );
   }

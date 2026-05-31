@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'carteira_screen.dart';
+import 'confirmar_saque_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
 import 'entregador_home_screen.dart';
@@ -560,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const CarteiraScreen())),
+                  MaterialPageRoute(builder: (_) => const ConfirmarSaqueScreen())),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A56DB),
                 shape: RoundedRectangleBorder(
