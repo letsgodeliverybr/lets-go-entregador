@@ -350,7 +350,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                 MarkerLayer(markers: [
                   Marker(
                     point: _posicaoAtual!,
-                    width: 64, height: 90,
+                    width: 64, height: 96,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -371,6 +371,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(nome,
+                              textScaler: TextScaler.noScaling,
                               style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                         ),
                       ],
