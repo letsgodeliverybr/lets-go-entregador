@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/taxa_helper.dart' as th;
 import 'confirmar_saque_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
@@ -25,22 +26,14 @@ class _HomeScreenState extends State<HomeScreen> {
   double _saldoDia = 0;
   int _entregasHoje = 0;
   double _saldoSemana = 0;
-  List<Map<String, dynamic>> _faixasPagamento = [];
-
-  static const _tabelaPagamentoId = '7bf1cf41-b3f2-4694-b326-d4e830dae8e1';
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
   double _calcTaxaMotoboy(Map<String, dynamic> p) {
     final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
+    final comRetorno = p['com_retorno'] == true;
     final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    if (_faixasPagamento.isEmpty) return gorjeta;
-    final faixa = km <= 0
-        ? _faixasPagamento.first
-        : _faixasPagamento.firstWhere(
-            (f) => km <= (double.tryParse(f['km_ate']?.toString() ?? '0') ?? 0),
-            orElse: () => _faixasPagamento.last);
-    return (double.tryParse(faixa['valor_sem_retorno']?.toString() ?? '0') ?? 0) + gorjeta;
+    return th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
   }
 
   @override
@@ -61,30 +54,24 @@ class _HomeScreenState extends State<HomeScreen> {
       final fimSemana =
           inicioSemana.add(const Duration(days: 6, hours: 23, minutes: 59));
 
+      await th.carregarFaixas();
+
       final r = await Future.wait<dynamic>([
         _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
         _supabase
             .from('pedidos')
-            .select('distancia_km, gorjeta')
+            .select('distancia_km, com_retorno, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioDia.toIso8601String()),
         _supabase
             .from('pedidos')
-            .select('distancia_km, gorjeta')
+            .select('distancia_km, com_retorno, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioSemana.toIso8601String())
             .lte('updated_at', fimSemana.toIso8601String()),
-        _supabase
-            .from('tabelas_preco_faixas')
-            .select('km_ate, valor_sem_retorno, valor_com_retorno')
-            .eq('tabela_id', _tabelaPagamentoId)
-            .order('km_ate'),
       ]);
-
-      _faixasPagamento =
-          List<Map<String, dynamic>>.from(r[3] as List);
 
       final entregador = r[0] as Map<String, dynamic>;
       final listaDia = List<Map<String, dynamic>>.from(r[1] as List);
