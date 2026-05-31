@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/taxa_helper.dart' as th;
+import '../utils/status_utils.dart' as su;
 import 'pedidos_aceitos_screen.dart';
 
 class AceitarPedidoScreen extends StatefulWidget {
@@ -110,23 +112,53 @@ class _State extends State<AceitarPedidoScreen> {
     // Marcadores no mapa
     final markers = <Marker>[];
 
-    // Marcador do motoboy — capacete azul
+    // Marcador do motoboy — svgHelmet azul (copiado de entregador_home_screen)
     if (_posicaoAtual != null) {
       markers.add(Marker(
         point: LatLng(_posicaoAtual!.latitude, _posicaoAtual!.longitude),
-        width: 56, height: 68,
+        width: 64, height: 90,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 48, height: 48,
+              child: SvgPicture.string(
+                su.svgHelmet('#1A56DB', '#0E3A99'),
+                fit: BoxFit.contain,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('Você',
+                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    // Marcador do pedido — círculo azul + número (copiado de entregador_home_screen)
+    if (clienteLatLng != null) {
+      markers.add(Marker(
+        point: clienteLatLng,
+        width: 56, height: 60,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 44, height: 44,
+              width: 36, height: 36,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A56DB),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
               ),
-              child: const Icon(Icons.sports_motorsports, color: Colors.white, size: 24),
+              child: const Icon(Icons.location_on, color: Colors.white, size: 18),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -134,60 +166,24 @@ class _State extends State<AceitarPedidoScreen> {
                 color: const Color(0xFF1A56DB),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text('Você', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+              child: Text('#$numero',
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
             ),
           ],
         ),
       ));
     }
 
-    // Marcador do pedido — pin azul com número
-    if (clienteLatLng != null) {
-      markers.add(Marker(
-        point: clienteLatLng,
-        width: 56, height: 68,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A56DB),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
-              ),
-              child: Center(
-                child: Text('#$numero',
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
-              ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -3),
-              child: Container(width: 10, height: 10,
-                  decoration: const BoxDecoration(color: Color(0xFF1A56DB), shape: BoxShape.circle)),
-            ),
-          ],
-        ),
-      ));
-    }
-
-    // Marcador da loja — pin azul com ícone loja
+    // Marcador da loja — svgPinLoja (já fill="#1A56DB")
     markers.add(Marker(
       point: _centro,
-      width: 56, height: 68,
+      width: 56, height: 60,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
+          SizedBox(
             width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A56DB),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
-            ),
-            child: const Icon(Icons.store, color: Colors.white, size: 22),
+            child: SvgPicture.string(su.svgPinLoja, fit: BoxFit.contain),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -195,7 +191,8 @@ class _State extends State<AceitarPedidoScreen> {
               color: const Color(0xFF1A56DB),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Text('Loja', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+            child: const Text('Loja',
+                style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
