@@ -70,17 +70,31 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
-      // ── 2. INSERT entregadores ─────────────────────────────
+      // ── 2. INSERT entregadores (sem created_at — gerado pelo banco) ──
       debugPrint('[REGISTRO] inserindo row em entregadores id=${user.id}...');
-      await supabase.from('entregadores').upsert({
-        'id': user.id,
-        'status': 'ativo',
-        'aprovado': false,
-        'status_cadastro': 'pendente',
-      });
-      debugPrint('[REGISTRO] ✅ entregadores row inserida');
+      try {
+        await supabase.from('entregadores').insert({
+          'id': user.id,
+          'email': email,
+          'status': 'inativo',
+          'aprovado': false,
+          'status_cadastro': 'pendente',
+        });
+        debugPrint('[REGISTRO] ✅ entregadores row inserida');
+      } catch (insertErr) {
+        final errStr = insertErr.toString().toLowerCase();
+        debugPrint('[REGISTRO] ⚠️ erro INSERT entregadores: $insertErr');
+        // Conflito de PK = row já existe (re-registro) → prossegue normalmente
+        if (!errStr.contains('duplicate') &&
+            !errStr.contains('unique') &&
+            !errStr.contains('23505') &&
+            !errStr.contains('already exists')) {
+          rethrow;
+        }
+        debugPrint('[REGISTRO] ℹ️ row já existia, prosseguindo para aprovação...');
+      }
 
-      // ── 3. Navegar para cadastro ───────────────────────────
+      // ── 3. Navegar para tela de aprovação ─────────────────
       debugPrint('[REGISTRO] navegando para CadastroAprovacaoScreen...');
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -92,7 +106,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
     } on AuthException catch (e) {
       debugPrint('[REGISTRO] ❌ AuthException: "${e.message}" statusCode=${e.statusCode}');
       final msg = e.message.toLowerCase();
-      if (msg.contains('already registered') || msg.contains('already been registered') || msg.contains('email address is already')) {
+      if (msg.contains('already registered') || msg.contains('already been registered') || msg.contains('email address is already') || msg.contains('user already') || msg.contains('already exists')) {
         _mostrarErro('E-mail já cadastrado. Faça login.');
       } else if (msg.contains('invalid') && msg.contains('email')) {
         _mostrarErro('E-mail inválido.');

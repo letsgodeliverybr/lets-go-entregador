@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'aguardo_aprovacao_screen.dart';
 
@@ -32,6 +33,14 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   // Foto / selfie
   XFile? _foto;
   final _picker = ImagePicker();
+
+  // Máscaras
+  final _cpfMask = MaskTextInputFormatter(
+      mask: '###.###.###-##', filter: {'#': RegExp(r'[0-9]')});
+  final _telefoneMask = MaskTextInputFormatter(
+      mask: '(##) #####-####', filter: {'#': RegExp(r'[0-9]')});
+  final _cepMask = MaskTextInputFormatter(
+      mask: '#####-###', filter: {'#': RegExp(r'[0-9]')});
 
   // Dados do Veículo
   String _modalVeiculo = 'moto';
@@ -287,12 +296,20 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _fotoField(),
               _campo('Nome completo', _nomeCtrl, obrigatorio: true),
               _campo('Telefone', _telefoneCtrl,
-                  tipo: TextInputType.phone, hint: '(16) 99999-9999'),
-              _campo('CPF', _cpfCtrl, hint: '000.000.000-00'),
+                  tipo: TextInputType.phone,
+                  hint: '(00) 00000-0000',
+                  obrigatorio: true,
+                  formatters: [_telefoneMask]),
+              _campo('CPF', _cpfCtrl,
+                  hint: '000.000.000-00',
+                  obrigatorio: true,
+                  formatters: [_cpfMask]),
               _campo('RG', _rgCtrl),
               _dataNascimentoField(),
               _campo('CEP', _cepCtrl,
-                  tipo: TextInputType.number, hint: '00000-000'),
+                  tipo: TextInputType.number,
+                  hint: '00000-000',
+                  formatters: [_cepMask]),
               _campo('Bairro', _bairroCtrl),
               _campo('Logradouro', _logradouroCtrl, hint: 'Rua, Av...'),
               Row(children: [
@@ -540,6 +557,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     String? hint,
     bool obrigatorio = false,
     bool padding = true,
+    List<dynamic>? formatters,
   }) {
     return Padding(
       padding: EdgeInsets.only(bottom: padding ? 12 : 0),
@@ -554,6 +572,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         TextFormField(
           controller: ctrl,
           keyboardType: tipo,
+          inputFormatters: formatters?.cast(),
           style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
