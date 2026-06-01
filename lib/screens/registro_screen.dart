@@ -70,7 +70,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
-      // ── 2. INSERT entregadores (sem created_at — gerado pelo banco) ──
+      // ── 2. INSERT entregadores — best-effort, nunca bloqueia o fluxo ──
       debugPrint('[REGISTRO] inserindo row em entregadores id=${user.id}...');
       try {
         await supabase.from('entregadores').insert({
@@ -82,16 +82,9 @@ class _RegistroScreenState extends State<RegistroScreen> {
         });
         debugPrint('[REGISTRO] ✅ entregadores row inserida');
       } catch (insertErr) {
-        final errStr = insertErr.toString().toLowerCase();
-        debugPrint('[REGISTRO] ⚠️ erro INSERT entregadores: $insertErr');
-        // Conflito de PK = row já existe (re-registro) → prossegue normalmente
-        if (!errStr.contains('duplicate') &&
-            !errStr.contains('unique') &&
-            !errStr.contains('23505') &&
-            !errStr.contains('already exists')) {
-          rethrow;
-        }
-        debugPrint('[REGISTRO] ℹ️ row já existia, prosseguindo para aprovação...');
+        // Row já existe, RLS bloqueou ou qualquer outro erro — conta já foi criada,
+        // continua para a tela de aprovação normalmente.
+        debugPrint('[REGISTRO] ⚠️ INSERT entregadores falhou (não bloqueia): $insertErr');
       }
 
       // ── 3. Navegar para tela de aprovação ─────────────────
@@ -148,17 +141,17 @@ class _RegistroScreenState extends State<RegistroScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFF1E1E1E),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: const Color(0xFF2D2D2D),
+        foregroundColor: Colors.white,
         elevation: 0,
         title: const Text('Criar conta',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
+          child: Container(height: 1, color: const Color(0xFF3A3A3A)),
         ),
       ),
       body: SingleChildScrollView(
@@ -171,12 +164,12 @@ class _RegistroScreenState extends State<RegistroScreen> {
               const SizedBox(height: 16),
               const Text('Bem-vindo(a)!',
                   style: TextStyle(
-                      color: Color(0xFF1A1A1A),
+                      color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               const Text('Crie sua conta para começar a entregar',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 14)),
+                  style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 14)),
               const SizedBox(height: 32),
               _label('E-mail'),
               const SizedBox(height: 8),
@@ -254,7 +247,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
   Widget _label(String texto) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(texto,
-            style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
+            style: const TextStyle(color: Color(0xFFBBBBBB), fontSize: 13)),
       );
 
   Widget _campo({
@@ -269,20 +262,20 @@ class _RegistroScreenState extends State<RegistroScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: teclado,
-        style: const TextStyle(color: Color(0xFF1A1A1A)),
+        style: const TextStyle(color: Colors.white),
         validator: validar,
         decoration: InputDecoration(
-          prefixIcon: Icon(icone, color: const Color(0xFF9E9E9E), size: 20),
+          prefixIcon: Icon(icone, color: const Color(0xFFBBBBBB), size: 20),
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+          hintStyle: const TextStyle(color: Color(0xFF777777)),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: const Color(0xFF2D2D2D),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A))),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A))),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF1A56DB))),
@@ -308,26 +301,26 @@ class _RegistroScreenState extends State<RegistroScreen> {
       child: TextFormField(
         controller: controller,
         obscureText: !visivel,
-        style: const TextStyle(color: Color(0xFF1A1A1A)),
+        style: const TextStyle(color: Colors.white),
         validator: validar,
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.lock_outline,
-              color: Color(0xFF9E9E9E), size: 20),
+              color: Color(0xFFBBBBBB), size: 20),
           suffixIcon: IconButton(
             icon: Icon(visivel ? Icons.visibility : Icons.visibility_off,
-                color: const Color(0xFF9E9E9E), size: 20),
+                color: const Color(0xFFBBBBBB), size: 20),
             onPressed: onToggle,
           ),
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+          hintStyle: const TextStyle(color: Color(0xFF777777)),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: const Color(0xFF2D2D2D),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A))),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A))),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF1A56DB))),

@@ -156,25 +156,54 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     debugPrint('[DEBUG] form válido: $formValido');
     if (!formValido) return;
 
-    // DEBUG 1: usuário logado
-    final user = _supabase.auth.currentUser;
+    // Resolve o usuário com fallback para session e refreshSession,
+    // pois currentUser pode ser null logo após o signUp.
+    User? user = _supabase.auth.currentUser
+        ?? _supabase.auth.currentSession?.user;
     debugPrint('[DEBUG] currentUser: id=${user?.id} email=${user?.email} isNull=${user == null}');
-    debugPrint('[DEBUG] _uid getter: "$_uid"');
 
-    if (_uid.isEmpty) {
-      debugPrint('[DEBUG] _uid vazio → abortando envio');
+    if (user == null) {
+      debugPrint('[DEBUG] currentUser nulo → tentando refreshSession...');
+      try {
+        final refreshed = await _supabase.auth.refreshSession();
+        user = refreshed.user;
+        debugPrint('[DEBUG] refreshSession resultado: user=${user?.id}');
+      } catch (e) {
+        debugPrint('[DEBUG] refreshSession falhou: $e');
+      }
+    }
+
+    if (user == null) {
+      debugPrint('[DEBUG] usuário não encontrado após refresh → abortando');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sessão expirada. Faça login novamente.'),
+            backgroundColor: Color(0xFFef4444),
+          ),
+        );
+      }
       return;
     }
-    // Verificar CPF duplicado antes de salvar
+
+    final uid = user.id;
+    debugPrint('[DEBUG] uid resolvido: "$uid"');
+
+    // ── Verificar CPF duplicado ──────────────────────────────
     final cpfDigitado = _cpfCtrl.text.trim();
     if (cpfDigitado.isNotEmpty) {
       try {
+        // Compara com e sem formatação para cobrir qualquer padrão gravado no banco
+        final cpfSomenteDigitos =
+            cpfDigitado.replaceAll(RegExp(r'[^0-9]'), '');
+        debugPrint('[DEBUG] verificando CPF duplicado: formatado="$cpfDigitado" digitos="$cpfSomenteDigitos" excluindo uid=$uid');
         final duplicado = await _supabase
             .from('entregadores')
             .select('id')
-            .eq('cpf', cpfDigitado)
-            .neq('id', _uid)
+            .or('cpf.eq.$cpfDigitado,cpf.eq.$cpfSomenteDigitos')
+            .neq('id', uid)
             .limit(1);
+        debugPrint('[DEBUG] resultado CPF duplicado: ${duplicado.length} registro(s)');
         if (duplicado.isNotEmpty) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -191,6 +220,32 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       }
     }
 
+    // ── Verificar Telefone duplicado ─────────────────────────
+    final telefoneDigitado = _telefoneCtrl.text.trim();
+    if (telefoneDigitado.isNotEmpty) {
+      try {
+        final duplicadoTel = await _supabase
+            .from('entregadores')
+            .select('id')
+            .eq('telefone', telefoneDigitado)
+            .neq('id', uid)
+            .limit(1);
+        if (duplicadoTel.isNotEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Telefone já cadastrado por outro entregador'),
+              backgroundColor: Color(0xFFef4444),
+              duration: Duration(seconds: 5),
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('[DEBUG] Erro ao verificar telefone duplicado: $e');
+      }
+    }
+
     setState(() => _salvando = true);
     try {
       // Upload de foto — não-bloqueante: falha é logada mas não aborta o envio
@@ -198,7 +253,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       if (_foto != null) {
         try {
           final bytes = await File(_foto!.path).readAsBytes();
-          final path = '$_uid/selfie.jpg';
+          final path = '$uid/selfie.jpg';
           await _supabase.storage
               .from('fotos-cadastro')
               .uploadBinary(path, bytes,
@@ -215,7 +270,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         debugPrint('[DEBUG] nenhuma foto selecionada');
       }
 
-      // DEBUG 2: payload do PATCH
       final payload = {
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
@@ -237,10 +291,10 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       };
-      debugPrint('[DEBUG] PATCH entregadores WHERE id=$_uid');
+      debugPrint('[DEBUG] PATCH entregadores WHERE id=$uid');
       debugPrint('[DEBUG] payload: $payload');
 
-      await _supabase.from('entregadores').update(payload).eq('id', _uid);
+      await _supabase.from('entregadores').update(payload).eq('id', uid);
 
       debugPrint('[DEBUG] PATCH concluído com sucesso');
       debugPrint('[DEBUG] navegando para AguardoAprovacaoScreen');
@@ -252,7 +306,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       );
       debugPrint('[DEBUG] Navigator.pushReplacement chamado');
     } catch (e, st) {
-      // DEBUG 3: erro detalhado do PATCH
       debugPrint('[DEBUG] ❌ ERRO no PATCH: $e');
       debugPrint('[DEBUG] ❌ tipo do erro: ${e.runtimeType}');
       debugPrint('[DEBUG] ❌ stacktrace: $st');
@@ -272,17 +325,17 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFF1E1E1E),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: const Color(0xFF2D2D2D),
+        foregroundColor: Colors.white,
         centerTitle: true,
         elevation: 0,
         title: const Text('Cadastro para Aprovação',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
+          child: Container(height: 1, color: const Color(0xFF3A3A3A)),
         ),
       ),
       body: Form(
@@ -348,7 +401,9 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: ColoredBox(
+        color: const Color(0xFF1E1E1E),
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: SizedBox(
@@ -380,7 +435,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -390,7 +445,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Foto / Selfie',
             style: TextStyle(
-                color: Color(0xFF666666),
+                color: Color(0xFFBBBBBB),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -401,15 +456,14 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             width: double.infinity,
             height: 180,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFF2D2D2D),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _foto != null
                     ? const Color(0xFF1A56DB)
-                    : const Color(0xFFE0E0E0),
+                    : const Color(0xFF3A3A3A),
                 width: _foto != null ? 1.5 : 1,
               ),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
             ),
             child: _foto != null
                 ? Stack(children: [
@@ -444,11 +498,11 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.add_a_photo_outlined,
-                          color: Color(0xFF9E9E9E), size: 36),
+                          color: Color(0xFFBBBBBB), size: 36),
                       const SizedBox(height: 10),
                       const Text('Toque para adicionar sua foto',
                           style: TextStyle(
-                              color: Color(0xFF666666),
+                              color: Color(0xFFBBBBBB),
                               fontSize: 13,
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 14),
@@ -492,7 +546,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   }
 
   void _mostrarOpcoesFoto() {
-    if (_foto != null) return; // já tem foto, toca direto no X para remover
+    if (_foto != null) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E2130),
@@ -545,7 +599,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1)),
         const SizedBox(height: 6),
-        Container(height: 1, color: const Color(0xFF2A2D35)),
+        Container(height: 1, color: const Color(0xFF3A3A3A)),
       ]),
     );
   }
@@ -564,7 +618,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF666666),
+                color: Color(0xFFBBBBBB),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -573,21 +627,21 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           controller: ctrl,
           keyboardType: tipo,
           inputFormatters: formatters?.cast(),
-          style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 14),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
+            hintStyle: const TextStyle(color: Color(0xFF777777), fontSize: 14),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: const Color(0xFF2D2D2D),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -612,7 +666,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Data de nascimento',
             style: TextStyle(
-                color: Color(0xFF666666),
+                color: Color(0xFFBBBBBB),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
@@ -623,9 +677,9 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFF2D2D2D),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE0E0E0)),
+              border: Border.all(color: const Color(0xFF3A3A3A)),
             ),
             child: Row(children: [
               Expanded(
@@ -633,13 +687,13 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                   _dataNascimento ?? 'Selecionar data',
                   style: TextStyle(
                       color: _dataNascimento != null
-                          ? const Color(0xFF1A1A1A)
-                          : const Color(0xFF9E9E9E),
+                          ? Colors.white
+                          : const Color(0xFF777777),
                       fontSize: 14),
                 ),
               ),
               const Icon(Icons.calendar_today,
-                  color: Color(0xFF9E9E9E), size: 18),
+                  color: Color(0xFFBBBBBB), size: 18),
             ]),
           ),
         ),
@@ -658,27 +712,27 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF666666),
+                color: Color(0xFFBBBBBB),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
         const SizedBox(height: 5),
         DropdownButtonFormField<String>(
           value: itens.containsKey(value) ? value : itens.keys.first,
-          dropdownColor: Colors.white,
-          style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 14),
+          dropdownColor: const Color(0xFF2D2D2D),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.white,
+            fillColor: const Color(0xFF2D2D2D),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

@@ -83,15 +83,15 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFF1E1E1E),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: const Color(0xFF2D2D2D),
+        foregroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: const Color(0xFFE0E0E0)),
+          child: Container(height: 1, color: const Color(0xFF3A3A3A)),
         ),
       ),
       body: SafeArea(
@@ -128,7 +128,7 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
                 'Documentos em análise',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF1A1A1A),
+                  color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
                   letterSpacing: .3,
@@ -141,7 +141,7 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
                 'Seus documentos estão sendo analisados. Procure um líder responsável na sua região para agilizar sua aprovação.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF666666),
+                  color: Color(0xFFBBBBBB),
                   fontSize: 15,
                   height: 1.6,
                 ),
