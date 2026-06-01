@@ -105,13 +105,27 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
     } on AuthException catch (e) {
       debugPrint('[REGISTRO] ❌ AuthException: "${e.message}" statusCode=${e.statusCode}');
+      // ignore: avoid_print
+      print('[REGISTRO] AuthException toString: ${e.toString()}');
+      // ignore: avoid_print
+      print('[REGISTRO] AuthException runtimeType: ${e.runtimeType}');
       final msg = e.message.toLowerCase();
-      if (msg.contains('already registered') || msg.contains('already been registered') || msg.contains('email address is already') || msg.contains('user already') || msg.contains('already exists')) {
-        _mostrarErro('E-mail já cadastrado. Faça login.');
+      if (msg.contains('already registered') ||
+          msg.contains('already been registered') ||
+          msg.contains('email address is already') ||
+          msg.contains('user already') ||
+          msg.contains('already exists')) {
+        _mostrarErro('Este e-mail já está cadastrado. Faça login.');
+      } else if (msg.contains('security purposes') ||
+          msg.contains('after 6 seconds') ||
+          msg.contains('after 60 seconds')) {
+        _mostrarErro('Aguarde alguns segundos e tente novamente.');
       } else if (msg.contains('invalid') && msg.contains('email')) {
         _mostrarErro('E-mail inválido.');
-      } else if (msg.contains('password') || msg.contains('senha')) {
-        _mostrarErro('Senha fraca. Use pelo menos 6 caracteres.');
+      } else if (msg.contains('weak password') ||
+          msg.contains('password') ||
+          msg.contains('senha')) {
+        _mostrarErro('Senha muito fraca, use pelo menos 6 caracteres.');
       } else {
         _mostrarErro('Erro ao criar conta: ${e.message}');
       }
@@ -119,6 +133,12 @@ class _RegistroScreenState extends State<RegistroScreen> {
       debugPrint('[REGISTRO] ❌ Erro inesperado: $e');
       debugPrint('[REGISTRO] ❌ tipo: ${e.runtimeType}');
       debugPrint('[REGISTRO] ❌ stacktrace: $st');
+      // ignore: avoid_print
+      print('[REGISTRO] ERRO toString: ${e.toString()}');
+      // ignore: avoid_print
+      print('[REGISTRO] ERRO runtimeType: ${e.runtimeType}');
+      // ignore: avoid_print
+      print('[REGISTRO] ERRO stacktrace: $st');
       _mostrarErro('Erro inesperado. Tente novamente.');
     } finally {
       if (mounted) setState(() => _carregando = false);
