@@ -48,49 +48,36 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final agora = DateTime.now();
       final inicioDia = DateTime(agora.year, agora.month, agora.day);
-      final diasDesdeSegunda = agora.weekday - 1;
-      final inicioSemana = DateTime(
-          agora.year, agora.month, agora.day - diasDesdeSegunda);
-      final fimSemana =
-          inicioSemana.add(const Duration(days: 6, hours: 23, minutes: 59));
 
       await th.carregarFaixas();
 
       final r = await Future.wait<dynamic>([
-        _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
+        // Lê nome e saldo diretamente do banco — saldo é gerenciado pelo painel
+        _supabase.from('entregadores').select('nome, saldo').eq('id', _uid).single(),
         _supabase
             .from('pedidos')
             .select('distancia_km, com_retorno, gorjeta')
             .eq('entregador_id', _uid)
             .eq('status', 'finalizado')
             .gte('updated_at', inicioDia.toIso8601String()),
-        _supabase
-            .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta')
-            .eq('entregador_id', _uid)
-            .eq('status', 'finalizado')
-            .gte('updated_at', inicioSemana.toIso8601String())
-            .lte('updated_at', fimSemana.toIso8601String()),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
       final listaDia = List<Map<String, dynamic>>.from(r[1] as List);
-      final listaSemana = List<Map<String, dynamic>>.from(r[2] as List);
 
       final totalDia =
           listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
-      final totalSemana =
-          listaSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+      final saldoDB = (entregador['saldo'] as num?)?.toDouble() ?? 0.0;
 
       debugPrint('UID: $_uid');
-      debugPrint('HomeScreen: hoje=${listaDia.length} semana=${listaSemana.length} saldoDia=$totalDia saldoSemana=$totalSemana');
+      debugPrint('HomeScreen: hoje=${listaDia.length} saldoDia=$totalDia saldoDB=$saldoDB');
 
       if (mounted) {
         setState(() {
           _nome = entregador['nome'] ?? '';
           _saldoDia = totalDia;
           _entregasHoje = listaDia.length;
-          _saldoSemana = totalSemana;
+          _saldoSemana = saldoDB;
           _loadingStats = false;
         });
       }
@@ -534,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Seg a Dom\nreseta toda segunda',
+            'Atualizado pelo painel',
             style: TextStyle(color: Color(0xFF4B5563), fontSize: 10, height: 1.4),
           ),
           const Spacer(),

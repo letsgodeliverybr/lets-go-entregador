@@ -27,7 +27,8 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
       case 'hoje':
         return DateTime(now.year, now.month, now.day);
       case 'semana':
-        return now.subtract(const Duration(days: 7));
+        // Segunda-feira da semana atual (weekday: 1=seg … 7=dom)
+        return DateTime(now.year, now.month, now.day - (now.weekday - 1));
       default:
         return DateTime(now.year, now.month, 1);
     }

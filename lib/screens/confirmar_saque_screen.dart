@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/taxa_helper.dart' as th;
 
 class ConfirmarSaqueScreen extends StatefulWidget {
   const ConfirmarSaqueScreen({Key? key}) : super(key: key);
@@ -44,44 +43,19 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
     setState(() => _carregando = true);
     try {
-      final agora = DateTime.now();
-      final diasDesdeSegunda = agora.weekday - 1;
-      final inicioSemana = DateTime(
-          agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 0, 0);
-
-      await th.carregarFaixas();
-
-      final results = await Future.wait<dynamic>([
-        _supabase
-            .from('entregadores')
-            .select('chave_pix, tipo_chave_pix, banco')
-            .eq('id', _uid)
-            .single(),
-        _supabase
-            .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta')
-            .eq('entregador_id', _uid)
-            .eq('status', 'finalizado')
-            .gte('updated_at', inicioSemana.toIso8601String()),
-      ]);
-
-      final entregador = results[0] as Map<String, dynamic>;
-      final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
-
-      double totalSemana = 0;
-      for (final p in pedidos) {
-        final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-        final comRetorno = p['com_retorno'] == true;
-        final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-        totalSemana += th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
-      }
+      // Lê saldo diretamente do banco — gerenciado pelo painel ao aprovar pagamentos
+      final entregador = await _supabase
+          .from('entregadores')
+          .select('chave_pix, tipo_chave_pix, banco, saldo')
+          .eq('id', _uid)
+          .single();
 
       if (mounted) {
         setState(() {
           _chavePix = entregador['chave_pix']?.toString();
           _tipoChavePix = entregador['tipo_chave_pix']?.toString();
           _banco = entregador['banco']?.toString();
-          _saldoSemana = totalSemana;
+          _saldoSemana = (entregador['saldo'] as num?)?.toDouble() ?? 0.0;
           _carregando = false;
         });
       }
