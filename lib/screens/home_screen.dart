@@ -22,12 +22,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _carregando = false;
   bool _loadingStats = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  Timer? _timerSaldo;
+  RealtimeChannel? _canal;
+  Timer? _debounce;
 
   String _nome = '';
   double _saldoDia = 0;
   int _entregasHoje = 0;
   double _saldoSemana = 0;
+  bool _refreshing = false;
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
@@ -43,24 +45,74 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _carregarDados();
-    _timerSaldo = Timer.periodic(const Duration(seconds: 30), (_) => _carregarDados());
+    _iniciarRealtime();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _carregarDados();
+    if (state == AppLifecycleState.resumed) _carregarDados(silencioso: true);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _timerSaldo?.cancel();
+    _canal?.unsubscribe();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  Future<void> _carregarDados() async {
+  void _iniciarRealtime() {
     if (_uid.isEmpty) return;
-    setState(() => _loadingStats = true);
+    _canal = _supabase
+        .channel('home_saldo_$_uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pedidos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: _uid,
+          ),
+          callback: (_) => _agendarRecarregar(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pedidos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'motoboy_id',
+            value: _uid,
+          ),
+          callback: (_) => _agendarRecarregar(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'saques',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: _uid,
+          ),
+          callback: (_) => _agendarRecarregar(),
+        )
+        .subscribe();
+  }
+
+  void _agendarRecarregar() {
+    _debounce?.cancel();
+    _debounce = Timer(
+      const Duration(milliseconds: 500),
+      () => _carregarDados(silencioso: true),
+    );
+  }
+
+  Future<void> _carregarDados({bool silencioso = false}) async {
+    if (_uid.isEmpty || _refreshing) return;
+    _refreshing = true;
+    if (!silencioso) setState(() => _loadingStats = true);
     try {
       final agora = DateTime.now();
       final inicioDia = DateTime(agora.year, agora.month, agora.day);
@@ -120,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('HomeScreen _carregarDados error: $e');
       if (mounted) setState(() => _loadingStats = false);
+    } finally {
+      _refreshing = false;
     }
   }
 
