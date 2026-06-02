@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _supabase
             .from('pedidos')
             .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta, updated_at')
-            .eq('entregador_id', _uid)
+            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
         // Saques já pagos para subtrair do saldo
         _supabase
@@ -79,14 +79,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      // Saldo disponível = total ganho − saques pagos − saques pendentes
-      final totalGanho = todosPedidos.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+      // Saldo disponível = soma de taxa_entrega_motoboy (valor real pago) − saques pago/pendente
+      double totalGanho = 0;
+      for (final p in todosPedidos) {
+        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
+        totalGanho += taxa > 0 ? taxa : gorjeta;
+      }
       final totalPago = saquesDescontados.fold<double>(
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
-      debugPrint('UID: $_uid');
-      debugPrint('HomeScreen: hoje=${listaDia.length} saldoDia=$totalDia totalGanho=$totalGanho totalPago=$totalPago saldo=$saldoDisponivel');
+      debugPrint('[HOME] UID=$_uid pedidos=${todosPedidos.length} totalGanho=$totalGanho totalPago=$totalPago saldo=$saldoDisponivel');
 
       if (mounted) {
         setState(() {
@@ -534,11 +538,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Color(0xFF10b981),
                 fontSize: 22,
                 fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Atualizado pelo painel',
-            style: TextStyle(color: Color(0xFF4B5563), fontSize: 10, height: 1.4),
           ),
           const Spacer(),
           SizedBox(

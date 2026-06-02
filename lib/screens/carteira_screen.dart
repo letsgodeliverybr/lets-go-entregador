@@ -36,7 +36,7 @@ class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProvid
       final results = await Future.wait<dynamic>([
         _supabase.from('pedidos')
             .select('taxa_entrega_motoboy, gorjeta')
-            .eq('entregador_id', _uid)
+            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
         _supabase.from('saques')
             .select('valor_liquido, valor')

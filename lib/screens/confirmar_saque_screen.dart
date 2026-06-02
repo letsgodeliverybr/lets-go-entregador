@@ -53,7 +53,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
         _supabase
             .from('pedidos')
             .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta')
-            .eq('entregador_id', _uid)
+            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
         _supabase
             .from('saques')
