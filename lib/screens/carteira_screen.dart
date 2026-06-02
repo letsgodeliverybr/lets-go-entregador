@@ -68,7 +68,7 @@ class _CarteiraScreenState extends State<CarteiraScreen>
             .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
         _supabase.from('saques')
-            .select('valor_liquido, valor')
+            .select('valor_bruto, valor')
             .eq('entregador_id', _uid)
             .inFilter('status', ['pago', 'pendente']),
       ]);
@@ -82,9 +82,9 @@ class _CarteiraScreenState extends State<CarteiraScreen>
         totalGanho += taxa > 0 ? taxa : gorjeta;
       }
       final totalDescontado = saques.fold<double>(0, (s, sq) {
-        final liq = (sq['valor_liquido'] as num?)?.toDouble();
-        final val = (sq['valor'] as num?)?.toDouble() ?? 0;
-        return s + (liq ?? val);
+        final bruto = (sq['valor_bruto'] as num?)?.toDouble();
+        final val   = (sq['valor'] as num?)?.toDouble() ?? 0;
+        return s + (bruto ?? val);
       });
       if (mounted) setState(() { _saldo = (totalGanho - totalDescontado).clamp(0, double.infinity); _carregandoSaldo = false; });
     } catch (_) {

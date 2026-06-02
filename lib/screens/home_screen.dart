@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Saques já pagos para subtrair do saldo
         _supabase
             .from('saques')
-            .select('valor')
+            .select('valor_bruto, valor')
             .eq('entregador_id', _uid)
             .inFilter('status', ['pago', 'pendente']),
       ]);
@@ -102,8 +102,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
         totalGanho += taxa > 0 ? taxa : gorjeta;
       }
-      final totalPago = saquesDescontados.fold<double>(
-          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
+      final totalPago = saquesDescontados.fold<double>(0, (s, s2) {
+        final bruto = (s2['valor_bruto'] as num?)?.toDouble();
+        final val   = (s2['valor'] as num?)?.toDouble() ?? 0.0;
+        return s + (bruto ?? val);
+      });
       final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
       debugPrint('[HOME] UID=$_uid pedidos=${todosPedidos.length} totalGanho=$totalGanho totalPago=$totalPago saldo=$saldoDisponivel');

@@ -57,7 +57,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             .eq('status', 'finalizado'),
         _supabase
             .from('saques')
-            .select('valor')
+            .select('valor_bruto, valor')
             .eq('entregador_id', _uid)
             .inFilter('status', ['pago', 'pendente']),
       ]);
@@ -78,8 +78,11 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
         totalGanho += contribuicao;
       }
 
-      final totalPago = saquesDescontados.fold<double>(
-          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
+      final totalPago = saquesDescontados.fold<double>(0, (s, s2) {
+        final bruto = (s2['valor_bruto'] as num?)?.toDouble();
+        final val   = (s2['valor'] as num?)?.toDouble() ?? 0.0;
+        return s + (bruto ?? val);
+      });
       final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
       debugPrint('[SAQUE] totalGanho=$totalGanho totalPago=$totalPago saldo=$saldo');
