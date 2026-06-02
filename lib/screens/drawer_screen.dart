@@ -3,6 +3,7 @@ import 'vagas_screen.dart';
 import 'login_screen.dart';
 import 'extrato_screen.dart';
 import 'historico_saques_screen.dart';
+import 'minha_conta_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -67,7 +68,13 @@ class _DrawerScreenState extends State<DrawerScreen> {
                   ),
                   _buildExpandable(Icons.manage_accounts_outlined, 'CONTA', _contaExpanded,
                     () => setState(() => _contaExpanded = !_contaExpanded),
-                    ['Minha conta', 'Ranking', 'Notificações']),
+                    ['Ranking', 'Notificações'],
+                    customItems: [
+                      _buildSubItem('Minha conta', () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MinhaContaScreen()));
+                      }),
+                    ]),
                   _buildExpandable(Icons.auto_awesome_outlined, 'OPORTUNIDADES', _oportunidadesExpanded,
                     () => setState(() => _oportunidadesExpanded = !_oportunidadesExpanded),
                     ['Promoções de Feriado']),
