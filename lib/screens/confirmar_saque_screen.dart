@@ -66,16 +66,23 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
       final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
       final saquesDescontados = List<Map<String, dynamic>>.from(results[2] as List);
 
+      debugPrint('[SAQUE] pedidos encontrados: ${pedidos.length}');
+      debugPrint('[SAQUE] saques descontados: ${saquesDescontados.length}');
+
       double totalGanho = 0;
       for (final p in pedidos) {
-        final taxa = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
+        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
-        totalGanho += taxa > 0 ? taxa : gorjeta;
+        final contribuicao = taxa > 0 ? taxa : gorjeta;
+        debugPrint('[SAQUE] pedido taxa_motoboy=$taxa gorjeta=$gorjeta contrib=$contribuicao');
+        totalGanho += contribuicao;
       }
-      // Saldo = total ganho − saques pagos − saques pendentes aguardando aprovação
+
       final totalPago = saquesDescontados.fold<double>(
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
+
+      debugPrint('[SAQUE] totalGanho=$totalGanho totalPago=$totalPago saldo=$saldo');
 
       if (mounted) {
         setState(() {
@@ -86,7 +93,9 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
           _carregando = false;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[SAQUE] ERRO ao carregar saldo: $e');
+      debugPrint('[SAQUE] stacktrace: $st');
       if (mounted) setState(() => _carregando = false);
     }
   }
