@@ -16,11 +16,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _supabase = Supabase.instance.client;
   bool _carregando = false;
   bool _loadingStats = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  RealtimeChannel? _realtimeChannel;
 
   String _nome = '';
   double _saldoDia = 0;
@@ -39,7 +40,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _carregarDados();
+    _iniciarRealtime();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _carregarDados();
+  }
+
+  void _iniciarRealtime() {
+    if (_uid.isEmpty) return;
+    _realtimeChannel = _supabase
+        .channel('home-pedidos-$_uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pedidos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'status',
+            value: 'finalizado',
+          ),
+          callback: (_) => _carregarDados(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _carregarDados() async {

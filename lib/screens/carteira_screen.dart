@@ -7,12 +7,14 @@ class CarteiraScreen extends StatefulWidget {
   State<CarteiraScreen> createState() => _CarteiraScreenState();
 }
 
-class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProviderStateMixin {
+class _CarteiraScreenState extends State<CarteiraScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _supabase = Supabase.instance.client;
   late TabController _tabController;
   bool _saldoVisivel = true;
   double _saldo = 0;
   bool _carregandoSaldo = true;
+  RealtimeChannel? _realtimeChannel;
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
@@ -20,11 +22,38 @@ class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
     _carregarSaldo();
+    _iniciarRealtime();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _carregarSaldo();
+  }
+
+  void _iniciarRealtime() {
+    if (_uid.isEmpty) return;
+    _realtimeChannel = _supabase
+        .channel('carteira-pedidos-$_uid')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pedidos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'status',
+            value: 'finalizado',
+          ),
+          callback: (_) => _carregarSaldo(),
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _realtimeChannel?.unsubscribe();
     _tabController.dispose();
     super.dispose();
   }
