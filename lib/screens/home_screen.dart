@@ -52,18 +52,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _iniciarRealtime() {
     if (_uid.isEmpty) return;
+    // Escuta qualquer mudança nos pedidos — sem filtro de status para garantir
+    // que atualizações de 'em_rota' → 'finalizado' sejam capturadas.
     _realtimeChannel = _supabase
         .channel('home-pedidos-$_uid')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all,
+          event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'pedidos',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'status',
-            value: 'finalizado',
-          ),
-          callback: (_) => _carregarDados(),
+          callback: (payload) {
+            final novoStatus = payload.newRecord['status'];
+            if (novoStatus == 'finalizado') _carregarDados();
+          },
         )
         .subscribe();
   }
@@ -350,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: _statCard(
                     'Entregas hoje',
                     '$_entregasHoje',
-                    const Color(0xFF1A56DB),
+                    const Color(0xFF10b981),
                   ),
                 ),
               ]),
