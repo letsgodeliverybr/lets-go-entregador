@@ -59,12 +59,12 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             .from('saques')
             .select('valor')
             .eq('entregador_id', _uid)
-            .eq('status', 'pago'),
+            .inFilter('status', ['pago', 'pendente']),
       ]);
 
       final entregador = results[0] as Map<String, dynamic>;
       final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
-      final saquesPagos = List<Map<String, dynamic>>.from(results[2] as List);
+      final saquesDescontados = List<Map<String, dynamic>>.from(results[2] as List);
 
       double totalGanho = 0;
       for (final p in pedidos) {
@@ -72,7 +72,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
         totalGanho += taxa > 0 ? taxa : gorjeta;
       }
-      final totalPago = saquesPagos.fold<double>(
+      // Saldo = total ganho − saques pagos − saques pendentes aguardando aprovação
+      final totalPago = saquesDescontados.fold<double>(
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
 

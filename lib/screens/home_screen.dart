@@ -64,12 +64,12 @@ class _HomeScreenState extends State<HomeScreen> {
             .from('saques')
             .select('valor')
             .eq('entregador_id', _uid)
-            .eq('status', 'pago'),
+            .inFilter('status', ['pago', 'pendente']),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
       final todosPedidos = List<Map<String, dynamic>>.from(r[1] as List);
-      final saquesPagos = List<Map<String, dynamic>>.from(r[2] as List);
+      final saquesDescontados = List<Map<String, dynamic>>.from(r[2] as List);
 
       // Pedidos de hoje para o card "Saldo do dia"
       final listaDia = todosPedidos.where((p) {
@@ -79,9 +79,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      // Saldo disponível = total ganho em pedidos − total já pago via saques
+      // Saldo disponível = total ganho − saques pagos − saques pendentes
       final totalGanho = todosPedidos.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
-      final totalPago = saquesPagos.fold<double>(
+      final totalPago = saquesDescontados.fold<double>(
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
