@@ -91,51 +91,86 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
   }
 
-  Future<void> _solicitarSaque() async {
-    final valorStr =
-        _valorController.text.trim().replaceAll(',', '.');
-    final valor = double.tryParse(valorStr);
+  double _calcularTaxa(double valorBruto) =>
+      valorBruto < 100 ? 5.0 : double.parse((valorBruto * 0.05).toStringAsFixed(2));
 
-    if (valor == null || valor <= 0) {
+  Future<void> _solicitarSaque() async {
+    final valorStr = _valorController.text.trim().replaceAll(',', '.');
+    final valorBruto = double.tryParse(valorStr);
+
+    if (valorBruto == null || valorBruto <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Informe um valor válido')),
       );
       return;
     }
 
-    if (valor > _saldoSemana) {
+    if (valorBruto > _saldoSemana) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Valor maior que o saldo disponível')),
+        const SnackBar(content: Text('Valor maior que o saldo disponível')),
       );
       return;
     }
+
+    final taxa = _calcularTaxa(valorBruto);
+    final valorLiquido = double.parse((valorBruto - taxa).toStringAsFixed(2));
+
+    // Mostra resumo antes de confirmar
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161820),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirmar saque', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _linhaResumo('Valor solicitado', 'R\$ ${valorBruto.toStringAsFixed(2)}', Colors.white),
+          const SizedBox(height: 8),
+          _linhaResumo('Taxa', '- R\$ ${taxa.toStringAsFixed(2)}', const Color(0xFFef4444)),
+          const Divider(color: Color(0xFF2A2D35), height: 24),
+          _linhaResumo('Você recebe', 'R\$ ${valorLiquido.toStringAsFixed(2)}', const Color(0xFF10b981)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A56DB), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+            child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
 
     setState(() => _processando = true);
     try {
       await _supabase.from('saques').insert({
         'entregador_id': _uid,
-        'valor': valor,
+        'valor_bruto': valorBruto,
+        'taxa': taxa,
+        'valor_liquido': valorLiquido,
+        'valor': valorLiquido, // compatibilidade com queries existentes
         'chave_pix': _chavePix,
         'tipo_chave_pix': _tipoChavePix,
         'banco': _banco,
         'status': 'pendente',
+        'created_at': DateTime.now().toIso8601String(),
       });
-      if (mounted) {
-        setState(() {
-          _processando = false;
-          _sucesso = true;
-        });
-      }
+      if (mounted) setState(() { _processando = false; _sucesso = true; });
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao solicitar saque: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao solicitar saque: $e')));
       }
     }
   }
+
+  Widget _linhaResumo(String label, String valor, Color corValor) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+      Text(valor, style: TextStyle(color: corValor, fontWeight: FontWeight.bold, fontSize: 14)),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {

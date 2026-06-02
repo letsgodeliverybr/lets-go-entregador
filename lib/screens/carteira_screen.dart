@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CarteiraScreen extends StatefulWidget {
   const CarteiraScreen({super.key});
@@ -7,19 +8,59 @@ class CarteiraScreen extends StatefulWidget {
 }
 
 class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProviderStateMixin {
+  final _supabase = Supabase.instance.client;
   late TabController _tabController;
   bool _saldoVisivel = true;
+  double _saldo = 0;
+  bool _carregandoSaldo = true;
+
+  String get _uid => _supabase.auth.currentUser?.id ?? '';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _carregarSaldo();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _carregarSaldo() async {
+    if (_uid.isEmpty) { if (mounted) setState(() => _carregandoSaldo = false); return; }
+    setState(() => _carregandoSaldo = true);
+    try {
+      final results = await Future.wait<dynamic>([
+        _supabase.from('pedidos')
+            .select('taxa_entrega_motoboy, gorjeta')
+            .eq('entregador_id', _uid)
+            .eq('status', 'finalizado'),
+        _supabase.from('saques')
+            .select('valor_liquido, valor')
+            .eq('entregador_id', _uid)
+            .inFilter('status', ['pago', 'pendente']),
+      ]);
+      final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
+      final saques  = List<Map<String, dynamic>>.from(results[1] as List);
+
+      double totalGanho = 0;
+      for (final p in pedidos) {
+        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+        totalGanho += taxa > 0 ? taxa : gorjeta;
+      }
+      final totalDescontado = saques.fold<double>(0, (s, sq) {
+        final liq = (sq['valor_liquido'] as num?)?.toDouble();
+        final val = (sq['valor'] as num?)?.toDouble() ?? 0;
+        return s + (liq ?? val);
+      });
+      if (mounted) setState(() { _saldo = (totalGanho - totalDescontado).clamp(0, double.infinity); _carregandoSaldo = false; });
+    } catch (_) {
+      if (mounted) setState(() => _carregandoSaldo = false);
+    }
   }
 
   @override
@@ -57,8 +98,11 @@ class _CarteiraScreenState extends State<CarteiraScreen> with SingleTickerProvid
                   children: [
                     const Text('Saldo disponível', style: TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 4),
-                    Text(_saldoVisivel ? 'R\$ 0,00' : '••••••',
-                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    _carregandoSaldo
+                        ? const SizedBox(height: 34, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Color(0xFF10b981), strokeWidth: 2))))
+                        : Text(
+                            _saldoVisivel ? 'R\$ ${_saldo.toStringAsFixed(2)}' : '••••••',
+                            style: const TextStyle(color: Color(0xFF10b981), fontSize: 28, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 IconButton(
