@@ -43,19 +43,45 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
     setState(() => _carregando = true);
     try {
-      // Lê saldo diretamente do banco — gerenciado pelo painel ao aprovar pagamentos
-      final entregador = await _supabase
-          .from('entregadores')
-          .select('chave_pix, tipo_chave_pix, banco, saldo')
-          .eq('id', _uid)
-          .single();
+      // Saldo = total ganho em pedidos finalizados − total já pago via saques
+      final results = await Future.wait<dynamic>([
+        _supabase
+            .from('entregadores')
+            .select('chave_pix, tipo_chave_pix, banco')
+            .eq('id', _uid)
+            .single(),
+        _supabase
+            .from('pedidos')
+            .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta')
+            .eq('entregador_id', _uid)
+            .eq('status', 'finalizado'),
+        _supabase
+            .from('saques')
+            .select('valor')
+            .eq('entregador_id', _uid)
+            .eq('status', 'pago'),
+      ]);
+
+      final entregador = results[0] as Map<String, dynamic>;
+      final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
+      final saquesPagos = List<Map<String, dynamic>>.from(results[2] as List);
+
+      double totalGanho = 0;
+      for (final p in pedidos) {
+        final taxa = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
+        totalGanho += taxa > 0 ? taxa : gorjeta;
+      }
+      final totalPago = saquesPagos.fold<double>(
+          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
+      final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
       if (mounted) {
         setState(() {
           _chavePix = entregador['chave_pix']?.toString();
           _tipoChavePix = entregador['tipo_chave_pix']?.toString();
           _banco = entregador['banco']?.toString();
-          _saldoSemana = (entregador['saldo'] as num?)?.toDouble() ?? 0.0;
+          _saldoSemana = saldo;
           _carregando = false;
         });
       }

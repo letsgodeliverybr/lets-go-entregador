@@ -52,32 +52,48 @@ class _HomeScreenState extends State<HomeScreen> {
       await th.carregarFaixas();
 
       final r = await Future.wait<dynamic>([
-        // Lê nome e saldo diretamente do banco — saldo é gerenciado pelo painel
-        _supabase.from('entregadores').select('nome, saldo').eq('id', _uid).single(),
+        _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
+        // Todos os pedidos finalizados — usados para saldo total e filtro de hoje
         _supabase
             .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta')
+            .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta, updated_at')
             .eq('entregador_id', _uid)
-            .eq('status', 'finalizado')
-            .gte('updated_at', inicioDia.toIso8601String()),
+            .eq('status', 'finalizado'),
+        // Saques já pagos para subtrair do saldo
+        _supabase
+            .from('saques')
+            .select('valor')
+            .eq('entregador_id', _uid)
+            .eq('status', 'pago'),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
-      final listaDia = List<Map<String, dynamic>>.from(r[1] as List);
+      final todosPedidos = List<Map<String, dynamic>>.from(r[1] as List);
+      final saquesPagos = List<Map<String, dynamic>>.from(r[2] as List);
 
-      final totalDia =
-          listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
-      final saldoDB = (entregador['saldo'] as num?)?.toDouble() ?? 0.0;
+      // Pedidos de hoje para o card "Saldo do dia"
+      final listaDia = todosPedidos.where((p) {
+        final dt = DateTime.tryParse(p['updated_at']?.toString() ?? '');
+        return dt != null && dt.isAfter(inicioDia);
+      }).toList();
+
+      final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+
+      // Saldo disponível = total ganho em pedidos − total já pago via saques
+      final totalGanho = todosPedidos.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+      final totalPago = saquesPagos.fold<double>(
+          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
+      final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
       debugPrint('UID: $_uid');
-      debugPrint('HomeScreen: hoje=${listaDia.length} saldoDia=$totalDia saldoDB=$saldoDB');
+      debugPrint('HomeScreen: hoje=${listaDia.length} saldoDia=$totalDia totalGanho=$totalGanho totalPago=$totalPago saldo=$saldoDisponivel');
 
       if (mounted) {
         setState(() {
           _nome = entregador['nome'] ?? '';
           _saldoDia = totalDia;
           _entregasHoje = listaDia.length;
-          _saldoSemana = saldoDB;
+          _saldoSemana = saldoDisponivel;
           _loadingStats = false;
         });
       }
