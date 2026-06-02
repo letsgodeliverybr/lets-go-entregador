@@ -147,13 +147,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      // Saldo disponível = soma de taxa_entrega_motoboy (valor real pago) − saques pago/pendente
-      double totalGanho = 0;
-      for (final p in todosPedidos) {
-        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
-        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
-        totalGanho += taxa > 0 ? taxa : gorjeta;
-      }
+      // Saldo disponível = mesma lógica do saldoDia (faixas + gorjeta) − saques pago/pendente
+      final totalGanho = todosPedidos.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
       final totalPago = saquesDescontados.fold<double>(
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
