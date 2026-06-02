@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -16,7 +18,7 @@ class NotificationService {
 
   static bool _initialized = false;
 
-  // ── Inicialização local (sem Firebase) ──────────────────────────────────
+  // ── Notificações locais ─────────────────────────────────────────────────
   static Future<void> initLocal() async {
     if (_initialized) return;
 
@@ -71,7 +73,65 @@ class NotificationService {
     debugPrint('NotificationService: canais criados com sucesso');
   }
 
-  // ── Notificação de novo pedido ───────────────────────────────────────────
+  // ── FCM: foreground + token ─────────────────────────────────────────────
+  static Future<void> initFCM() async {
+    final messaging = FirebaseMessaging.instance;
+
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Mensagens com app em foreground — FCM não exibe automaticamente
+    FirebaseMessaging.onMessage.listen((msg) async {
+      debugPrint('[FCM] foreground: ${msg.data}');
+      final tipo = msg.data['tipo']?.toString() ?? '';
+      if (tipo == 'nova_rota') {
+        await showNovaRotaLocal();
+      } else {
+        await showNovoPedidoLocal();
+      }
+    });
+
+    // Usuário tocou na notificação com app em background
+    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
+      debugPrint('[FCM] aberto via notificação: ${msg.data}');
+    });
+
+    // App estava terminado e foi aberto pela notificação
+    final initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      debugPrint('[FCM] iniciado via notificação: ${initialMessage.data}');
+    }
+  }
+
+  // ── Salva token FCM na tabela entregadores ──────────────────────────────
+  static Future<void> saveFcmToken(String uid) async {
+    if (uid.isEmpty) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return;
+      await Supabase.instance.client
+          .from('entregadores')
+          .update({'fcm_token': token})
+          .eq('id', uid);
+      debugPrint('[FCM] token salvo');
+
+      // Atualiza automaticamente se o token for renovado
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        Supabase.instance.client
+            .from('entregadores')
+            .update({'fcm_token': newToken})
+            .eq('id', uid);
+        debugPrint('[FCM] token renovado e salvo');
+      });
+    } catch (e) {
+      debugPrint('[FCM] erro ao salvar token: $e');
+    }
+  }
+
+  // ── Notificação local: novo pedido ──────────────────────────────────────
   static Future<void> showNovoPedidoLocal() async {
     if (!_initialized) await initLocal();
 
@@ -104,7 +164,7 @@ class NotificationService {
     );
   }
 
-  // ── Notificação de nova rota ─────────────────────────────────────────────
+  // ── Notificação local: nova rota ────────────────────────────────────────
   static Future<void> showNovaRotaLocal() async {
     if (!_initialized) await initLocal();
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -7,8 +9,24 @@ import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'services/notification_service.dart';
 
+// Handler de mensagens FCM com app fechado — deve ser top-level
+@pragma('vm:entry-point')
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await NotificationService.initLocal();
+  final tipo = message.data['tipo']?.toString() ?? '';
+  if (tipo == 'nova_rota') {
+    await NotificationService.showNovaRotaLocal();
+  } else {
+    await NotificationService.showNovoPedidoLocal();
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
   await Supabase.initialize(
     url: 'https://astbkmpegcmqljltmdpx.supabase.co',
@@ -16,6 +34,7 @@ void main() async {
   );
 
   await NotificationService.initLocal();
+  await NotificationService.initFCM();
 
   runApp(const MyApp());
 }
@@ -71,6 +90,10 @@ class _AuthGateState extends State<AuthGate> {
   Future<Widget> _resolverTela() async {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) return const LoginScreen();
+
+    // Salva token FCM agora que o uid é conhecido
+    await NotificationService.saveFcmToken(session.user.id);
+
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
