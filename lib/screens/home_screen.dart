@@ -572,6 +572,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 fontSize: 22,
                 fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 4),
+          const Text('Reset Domingo às 23:59',
+              style: TextStyle(color: Color(0xFF4B5563), fontSize: 10)),
           const Spacer(),
           SizedBox(
             width: double.infinity,
