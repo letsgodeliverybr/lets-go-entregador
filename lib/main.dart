@@ -9,10 +9,19 @@ import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'services/notification_service.dart';
 
+// Valores extraídos de android/app/google-services.json
+const _firebaseOptions = FirebaseOptions(
+  apiKey: 'AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10',
+  appId: '1:935542418052:android:2e356ebfc7f8055f3eb0d1',
+  messagingSenderId: '935542418052',
+  projectId: 'lets-go-delivery-df74d',
+  storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
+);
+
 // Handler de mensagens FCM com app fechado — deve ser top-level
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: _firebaseOptions);
   await NotificationService.initLocal();
   final tipo = message.data['tipo']?.toString() ?? '';
   if (tipo == 'nova_rota') {
@@ -25,7 +34,7 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: _firebaseOptions);
   FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
   await Supabase.initialize(
