@@ -91,8 +91,9 @@ class _MinhaContaScreenState extends State<MinhaContaScreen> {
         'chave_pix':      _chavePIXCtrl.text.trim(),
         'tipo_chave_pix': _tipoPIX,
         'banco':          _bancoCtrl.text.trim(),
-        'dados_editados': true,
-        'updated_at':     DateTime.now().toIso8601String(),
+        'dados_editados':  true,
+        'status_cadastro': 'em_analise',
+        'updated_at':      DateTime.now().toIso8601String(),
       }).eq('id', _uid);
       if (!mounted) return;
       setState(() { _dadosEditados = true; _salvando = false; });
