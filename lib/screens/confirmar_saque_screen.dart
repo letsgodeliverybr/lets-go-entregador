@@ -155,7 +155,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
       // Chama função PostgreSQL que valida saldo atomicamente antes de inserir
       await _supabase.rpc('solicitar_saque', params: {
         'p_entregador_id':   _uid,
-        'p_valor':           valorBruto,
+        'p_valor_bruto':     valorBruto,
         'p_chave_pix':       _chavePix ?? '',
         'p_tipo_chave_pix':  _tipoChavePix ?? '',
         'p_banco':           _banco ?? '',
