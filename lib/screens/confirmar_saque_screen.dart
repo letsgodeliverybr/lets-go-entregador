@@ -152,23 +152,27 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
     setState(() => _processando = true);
     try {
-      await _supabase.from('saques').insert({
-        'entregador_id': _uid,
-        'valor_bruto': valorBruto,
-        'taxa': taxa,
-        'valor_liquido': valorLiquido,
-        'valor': valorLiquido, // compatibilidade com queries existentes
-        'chave_pix': _chavePix,
-        'tipo_chave_pix': _tipoChavePix,
-        'banco': _banco,
-        'status': 'pendente',
-        'created_at': DateTime.now().toIso8601String(),
+      // Chama função PostgreSQL que valida saldo atomicamente antes de inserir
+      await _supabase.rpc('solicitar_saque', params: {
+        'p_entregador_id':   _uid,
+        'p_valor':           valorBruto,
+        'p_chave_pix':       _chavePix ?? '',
+        'p_tipo_chave_pix':  _tipoChavePix ?? '',
+        'p_banco':           _banco ?? '',
       });
       if (mounted) setState(() { _processando = false; _sucesso = true; });
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao solicitar saque: $e')));
+        final msg = e.toString();
+        final exibir = msg.contains('saldo_insuficiente')
+            ? 'Saldo insuficiente para este saque.'
+            : msg.contains('valor_invalido')
+                ? 'Informe um valor válido.'
+                : 'Erro ao solicitar saque. Tente novamente.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(exibir), backgroundColor: const Color(0xFFef4444)),
+        );
       }
     }
   }
