@@ -79,6 +79,27 @@ class _MinhaContaScreenState extends State<MinhaContaScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _salvando = true);
     try {
+      final cpf = _cpfCtrl.text.trim();
+      if (cpf.isNotEmpty) {
+        final duplicado = await _supabase
+            .from('entregadores')
+            .select('id')
+            .eq('cpf', cpf)
+            .neq('id', _uid)
+            .limit(1);
+        if (duplicado.isNotEmpty) {
+          if (mounted) {
+            setState(() => _salvando = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('CPF já cadastrado'),
+                backgroundColor: Color(0xFFef4444),
+              ),
+            );
+          }
+          return;
+        }
+      }
       await _supabase.from('entregadores').update({
         'nome':           _nomeCtrl.text.trim(),
         'telefone':       _telefoneCtrl.text.trim(),
