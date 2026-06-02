@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/taxa_helper.dart' as th;
@@ -21,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _carregando = false;
   bool _loadingStats = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  RealtimeChannel? _realtimeChannel;
+  Timer? _timerSaldo;
 
   String _nome = '';
   double _saldoDia = 0;
@@ -42,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _carregarDados();
-    _iniciarRealtime();
+    _timerSaldo = Timer.periodic(const Duration(seconds: 30), (_) => _carregarDados());
   }
 
   @override
@@ -50,28 +51,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) _carregarDados();
   }
 
-  void _iniciarRealtime() {
-    if (_uid.isEmpty) return;
-    // Escuta qualquer mudança nos pedidos — sem filtro de status para garantir
-    // que atualizações de 'em_rota' → 'finalizado' sejam capturadas.
-    _realtimeChannel = _supabase
-        .channel('home-pedidos-$_uid')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'pedidos',
-          callback: (payload) {
-            final novoStatus = payload.newRecord['status'];
-            if (novoStatus == 'finalizado') _carregarDados();
-          },
-        )
-        .subscribe();
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _realtimeChannel?.unsubscribe();
+    _timerSaldo?.cancel();
     super.dispose();
   }
 
