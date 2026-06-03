@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'registro_screen.dart';
+import '../services/notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -43,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
           'lng': -47.8103,
           'updated_at': DateTime.now().toIso8601String(),
         });
+        await NotificationService.saveFcmToken(user.id);
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
         }
