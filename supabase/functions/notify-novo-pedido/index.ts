@@ -85,12 +85,20 @@ async function sendFCM(
       body: JSON.stringify({
         message: {
           token,
-          // data-only: background handler do Flutter trata e exibe local
+          notification: {
+            title: isRota ? "🛵 Nova Rota!" : "🛵 Novo Pedido!",
+            body: isRota
+              ? "Nova rota com múltiplas entregas para você!"
+              : "Pedido disponível para entrega",
+          },
           data: { tipo },
           android: {
-            priority: "HIGH",
-            // TTL de 60s — pedido disponível é urgente
+            priority: "high",
             ttl: "60s",
+            notification: {
+              channel_id: isRota ? "letsgo_nova_rota" : "letsgo_novo_pedido",
+              sound: "letsgo",
+            },
           },
         },
       }),
