@@ -38,6 +38,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10" />
+
         <!-- FCM: canal padrão de alta prioridade -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
