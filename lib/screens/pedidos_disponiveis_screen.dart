@@ -117,7 +117,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             .from('pedidos')
             .select('*, lojas(nome, latitude, longitude)')
             .inFilter('status', ['pronto'])
-            .not('status', 'in', '("finalizado","cancelado")')
             .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
             .order('pronto_em', ascending: true),
         _supabase
