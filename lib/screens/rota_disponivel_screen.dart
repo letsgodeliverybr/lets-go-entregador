@@ -1,11 +1,12 @@
-import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
+import '../utils/status_utils.dart' as su;
 import '../utils/taxa_helper.dart' as th;
 import 'entrega_screen.dart';
 import 'pedidos_disponiveis_screen.dart';
@@ -23,6 +24,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   final _mapController = MapController();
   bool _processando = false;
   LatLng? _posicaoEntregador;
+  double _distMotoboyLoja = 0;
 
   Map<String, dynamic> get _pedido => widget.pedido;
 
@@ -52,9 +54,22 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
       final pos = await LocationService.getCurrentPosition();
       if (pos != null && mounted) {
         setState(() => _posicaoEntregador = LatLng(pos.latitude, pos.longitude));
+        _calcularDistLoja(pos.latitude, pos.longitude);
         _ajustarMapa();
       }
     } catch (_) {}
+  }
+
+  void _calcularDistLoja(double lat, double lng) {
+    if (_lojaLat == null || _lojaLng == null) return;
+    const R = 6371.0;
+    final dLat = (_lojaLat! - lat) * pi / 180;
+    final dLng = (_lojaLng! - lng) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat * pi / 180) * cos(_lojaLat! * pi / 180) *
+        sin(dLng / 2) * sin(dLng / 2);
+    final dist = R * 2 * atan2(sqrt(a), sqrt(1 - a));
+    if (mounted) setState(() => _distMotoboyLoja = dist);
   }
 
   void _ajustarMapa() {
@@ -122,32 +137,100 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
 
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
+    final numero = _pedido['numero']?.toString() ?? _pedido['id']?.toString().substring(0, 4) ?? '—';
 
-    // Entregador — capacete azul (mesmo padrão do painel adm)
+    // Marcador do entregador — igual à home (círculo azul + 🛵)
     if (_posicaoEntregador != null) {
       markers.add(Marker(
         point: _posicaoEntregador!,
-        width: 64, height: 72,
-        child: _HelmetMarker(),
+        width: 64, height: 80,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 8)],
+              ),
+              child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('Você',
+                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ));
     }
 
-    // Loja — pino GPS azul (mesmo padrão do painel adm)
+    // Pin da loja SVG igual à home
     if (_lojaLat != null && _lojaLng != null) {
+      final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Loja').toString();
       markers.add(Marker(
         point: LatLng(_lojaLat!, _lojaLng!),
-        width: 44, height: 54,
-        child: _GpsPinMarker(color: const Color(0xFF1A56DB), icon: Icons.store),
+        width: 56, height: 60,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 44, height: 44,
+              child: SvgPicture.string(su.svgPinLoja, fit: BoxFit.contain),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                nomeLoja.length > 8 ? nomeLoja.substring(0, 8) : nomeLoja,
+                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
       ));
     }
 
-    // Cliente — etiqueta vermelha com número (mesmo padrão do painel adm)
+    // Marcador do pedido — círculo AZUL com número igual à home
     if (_clienteLat != null && _clienteLng != null) {
-      final numero = _pedido['numero_loja']?.toString() ?? _pedido['numero']?.toString() ?? _pedido['id']?.toString().substring(0, 4) ?? '—';
       markers.add(Marker(
         point: LatLng(_clienteLat!, _clienteLng!),
-        width: 64, height: 36,
-        child: _LabelMarker(numero: numero, color: const Color(0xFFEF4444)),
+        width: 56, height: 60,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
+              ),
+              child: const Icon(Icons.location_on, color: Colors.white, size: 18),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A56DB),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('#$numero',
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ));
     }
 
@@ -159,11 +242,11 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final centerLat = _lojaLat ?? _clienteLat ?? -21.1775;
     final centerLng = _lojaLng ?? _clienteLng ?? -47.8103;
     final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Estabelecimento').toString();
-    final endLoja = (_pedido['lojas']?['endereco'] ?? '—').toString();
     final endCliente = (_pedido['endereco'] ?? '—').toString();
     final km = double.tryParse(_pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = _pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final pontos = _pedido['pontos'] ?? 4;
     final taxaTotal = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
     final numero = _pedido['numero']?.toString() ?? '—';
 
@@ -179,7 +262,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
         title: Text('Pedido #$numero', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
       ),
       body: Column(children: [
-        // MAPA
+        // MAPA escuro
         Expanded(
           flex: 3,
           child: FlutterMap(
@@ -195,7 +278,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
           ),
         ),
 
-        // CARD INFERIOR
+        // CARD INFERIOR com todas as infos
         Container(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           decoration: const BoxDecoration(
@@ -203,42 +286,85 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            // Handle
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFF2a2d3a), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 14),
 
-            // Loja
-            _InfoRow(icon: Icons.store, color: const Color(0xFF1A56DB), title: nomeLoja, subtitle: endLoja),
+            // Linha 1: loja + número
+            Row(children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.store, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(nomeLoja,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 8),
+              Text('#$numero', style: const TextStyle(color: Colors.white54, fontSize: 13)),
+            ]),
             const SizedBox(height: 10),
 
-            // Cliente
-            _InfoRow(icon: Icons.location_on, color: const Color(0xFFEF4444), title: 'Endereço de entrega', subtitle: endCliente),
-            const SizedBox(height: 14),
-
-            // Taxa
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF22c55e).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF22c55e).withOpacity(0.3)),
+            // Linha 2: km de onde você está
+            Row(children: [
+              const Icon(Icons.location_on, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                _distMotoboyLoja > 0
+                    ? '${_distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
+                    : '— km de onde você está',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Text('💰 Sua taxa', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                  const Spacer(),
-                  Text('R\$ ${taxaTotal.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                ]),
-                if (gorjeta > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    const Text('🎁 Gorjeta incluída:', style: TextStyle(color: Color(0xFF1A56DB), fontSize: 12)),
-                    const Spacer(),
-                    Text('R\$ ${gorjeta.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                ],
-              ]),
+            ]),
+            const SizedBox(height: 8),
+
+            // Linha 3: endereço entrega
+            Row(children: [
+              const Icon(Icons.location_pin, color: Color(0xFFec4899), size: 16),
+              const SizedBox(width: 6),
+              Expanded(child: Text(endCliente, style: const TextStyle(color: Colors.white, fontSize: 13))),
+            ]),
+            const SizedBox(height: 8),
+
+            // Linha 4: pontos
+            Row(children: [
+              const Icon(Icons.star_border, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text('$pontos pontos', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ]),
+            const SizedBox(height: 8),
+
+            // Linha 5: bag térmica
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white),
+              ),
+              child: const Text('Bag térmica', style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
+            const SizedBox(height: 12),
+
+            // Linha 6: distância percurso + taxa
+            Row(children: [
+              const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
+              const SizedBox(width: 4),
+              Text('${km.toStringAsFixed(2)} km', style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+              const Spacer(),
+              Text('R\$ ${taxaTotal.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Color(0xFF10b981), fontSize: 18, fontWeight: FontWeight.bold)),
+            ]),
+
+            if (gorjeta > 0) ...[
+              const SizedBox(height: 6),
+              Row(children: [
+                const Text('🎁', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 6),
+                Text('Gorjeta incluída: R\$ ${gorjeta.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 13, fontWeight: FontWeight.w600)),
+              ]),
+            ],
+
             const SizedBox(height: 16),
 
             // Botões
@@ -280,80 +406,6 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   }
 }
 
-// Capacete SVG simplificado — mesmo estilo do painel adm
-class _HelmetMarker extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 44, height: 44,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A56DB),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2.5),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 8)],
-        ),
-        child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
-      ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: BoxDecoration(color: Colors.black.withOpacity(.6), borderRadius: BorderRadius.circular(4)),
-        child: const Text('Você', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
-      ),
-    ],
-  );
-}
-
-// Pino GPS — mesmo estilo azul do painel adm
-class _GpsPinMarker extends StatelessWidget {
-  final Color color;
-  final IconData icon;
-  const _GpsPinMarker({required this.color, required this.icon});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: color, shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 6)],
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
-      ),
-      CustomPaint(size: const Size(10, 8), painter: _TrianglePainter(color)),
-    ],
-  );
-}
-
-// Etiqueta vermelha com número — mesmo estilo dos pedidos no painel adm
-class _LabelMarker extends StatelessWidget {
-  final String numero;
-  final Color color;
-  const _LabelMarker({required this.numero, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
-        ),
-        child: Text('#$numero', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-      ),
-      CustomPaint(size: const Size(10, 7), painter: _TrianglePainter(color)),
-    ],
-  );
-}
-
 class _TrianglePainter extends CustomPainter {
   final Color color;
   const _TrianglePainter(this.color);
@@ -369,27 +421,4 @@ class _TrianglePainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  const _InfoRow({required this.icon, required this.color, required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Container(
-      width: 36, height: 36,
-      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-      child: Icon(icon, color: color, size: 18),
-    ),
-    const SizedBox(width: 10),
-    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-      const SizedBox(height: 2),
-      Text(subtitle, style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-    ])),
-  ]);
 }
