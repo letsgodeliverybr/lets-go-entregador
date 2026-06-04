@@ -419,8 +419,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                                 width: 48, height: 48,
                                 child: SvgPicture.string(
                                   su.svgHelmet(
-                                    _online ? '#10B981' : '#EF4444',
-                                    _online ? '#065f46' : '#991b1b',
+                                    _online ? '#1A56DB' : '#EF4444',
+                                    _online ? '#0E3A99' : '#991b1b',
                                   ),
                                   fit: BoxFit.contain,
                                 ),
@@ -428,7 +428,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: _online ? const Color(0xFF22c55e) : const Color(0xFF475569),
+                                  color: _online ? const Color(0xFF1A56DB) : const Color(0xFF475569),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(nome,
