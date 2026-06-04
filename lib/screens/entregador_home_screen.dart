@@ -311,11 +311,82 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       backgroundColor: const Color(0xFF0D0F14),
       drawer: DrawerScreen(onLogout: _logout),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
-      body: Stack(
+      body: Column(
         children: [
 
-          // MAPA em card arredondado
-          Container(
+          // TOPO: menu + toggle + cards de stats
+          SafeArea(
+            bottom: false,
+            child: Container(
+              color: const Color(0xFF0D0F14),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Column(
+                children: [
+                  // Linha 1: menu e toggle
+                  Row(children: [
+                    GestureDetector(
+                      onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.menu, color: Colors.white, size: 20),
+                      ),
+                    ),
+                    const Spacer(),
+                    _buildToggleCompacto(),
+                  ]),
+                  const SizedBox(height: 12),
+                  // Linha 2: cards lado a lado
+                  Row(children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161820),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF2a2d3a)),
+                        ),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Saldo do dia',
+                              style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text('R\$ ${_saldoDia.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161820),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF2a2d3a)),
+                        ),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Entregas hoje',
+                              style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text('$_entregasHoje',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+
+          // MAPA em card arredondado (ocupa o restante da tela)
+          Expanded(
+            child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: const BoxDecoration(
               borderRadius: BorderRadius.all(Radius.circular(16)),
@@ -487,97 +558,19 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                     ),
                   ),
                 ),
+                // CARD ROTA DISPONÍVEL
+                if (_rotaAtual != null)
+                  Positioned(
+                    bottom: 16, left: 16, right: 16,
+                    child: _buildCardRota(),
+                  ),
               ],
             ),
           ),
-
-          // OVERLAY ESCURO TOPO
-          Positioned(
-            top: 0, left: 0, right: 0,
-            child: Container(
-              height: 100,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withOpacity(.7), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-
-          // TOPBAR
-          Positioned(
-            top: 0, left: 0, right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(children: [
-                  GestureDetector(
-                    onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                    child: Container(
-                      width: 36, height: 36,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(.1), shape: BoxShape.circle),
-                      child: const Icon(Icons.menu, color: Colors.white, size: 20),
-                    ),
-                  ),
-                  const Spacer(),
-                  _buildToggleCompacto(),
-                ]),
-              ),
-            ),
-          ),
-
-          // CARDS SALDO E ENTREGAS
-          Positioned(
-            top: 90, left: 16, right: 16,
-            child: Row(children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161820).withOpacity(.92),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF2a2d3a)),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Saldo do dia', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text('R\$ ${_saldoDia.toStringAsFixed(2)}',
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  ]),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF161820).withOpacity(.92),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF2a2d3a)),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Entregas hoje', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text('$_entregasHoje',
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  ]),
-                ),
-              ),
-            ]),
-          ),
-
-          // CARD ROTA DISPONÍVEL
-          if (_rotaAtual != null)
-            Positioned(
-              bottom: 160, left: 16, right: 16,
-              child: _buildCardRota(),
-            ),
-
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
   }
 
   Widget _buildCardRota() {
