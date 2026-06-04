@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -19,6 +20,7 @@ class _State extends State<AceitarPedidoScreen> {
   final _supabase = Supabase.instance.client;
   bool _aceitando = false;
   Position? _posicaoAtual;
+  double _distMotoboyLoja = 0;
 
   @override
   void initState() {
@@ -30,11 +32,33 @@ class _State extends State<AceitarPedidoScreen> {
   Future<void> _obterPosicao() async {
     try {
       final pos = await Geolocator.getLastKnownPosition();
-      if (pos != null && mounted) setState(() => _posicaoAtual = pos);
+      if (pos != null && mounted) {
+        setState(() => _posicaoAtual = pos);
+        _calcularDistLoja(pos);
+      }
+      final current = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+      if (mounted) {
+        setState(() => _posicaoAtual = current);
+        _calcularDistLoja(current);
+      }
     } catch (_) {}
   }
 
-  // Coordenadas do pedido (cliente)
+  void _calcularDistLoja(Position pos) {
+    final loja = widget.pedido['lojas'];
+    final lat = (loja?['latitude'] ?? loja?['lat']) as num?;
+    final lng = (loja?['longitude'] ?? loja?['lng']) as num?;
+    if (lat == null || lng == null) return;
+    const R = 6371.0;
+    final dLat = (lat.toDouble() - pos.latitude) * pi / 180;
+    final dLng = (lng.toDouble() - pos.longitude) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(pos.latitude * pi / 180) * cos(lat.toDouble() * pi / 180) *
+        sin(dLng / 2) * sin(dLng / 2);
+    final dist = R * 2 * atan2(sqrt(a), sqrt(1 - a));
+    if (mounted) setState(() => _distMotoboyLoja = dist);
+  }
+
   LatLng? get _latLngCliente {
     final lat = widget.pedido['latitude'];
     final lng = widget.pedido['longitude'];
@@ -42,14 +66,20 @@ class _State extends State<AceitarPedidoScreen> {
     return LatLng((lat as num).toDouble(), (lng as num).toDouble());
   }
 
-  // Ribeirão Preto como centro padrão
+  LatLng? get _latLngLoja {
+    final loja = widget.pedido['lojas'];
+    final lat = (loja?['latitude'] ?? loja?['lat']) as num?;
+    final lng = (loja?['longitude'] ?? loja?['lng']) as num?;
+    if (lat == null || lng == null) return null;
+    return LatLng(lat.toDouble(), lng.toDouble());
+  }
+
   static const _centro = LatLng(-21.1775, -47.8103);
 
   Future<void> _aceitar() async {
     setState(() => _aceitando = true);
     final user = _supabase.auth.currentUser;
     if (user == null) return;
-
     try {
       final result = await _supabase
           .from('pedidos')
@@ -65,7 +95,6 @@ class _State extends State<AceitarPedidoScreen> {
           .select();
 
       if (!mounted) return;
-
       if (result.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -76,8 +105,6 @@ class _State extends State<AceitarPedidoScreen> {
         Navigator.pop(context);
         return;
       }
-
-      // Vai para aba Aceitos
       Navigator.pushAndRemoveUntil(
         context,
         PageRouteBuilder(
@@ -105,21 +132,17 @@ class _State extends State<AceitarPedidoScreen> {
     final km = double.tryParse(widget.pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = widget.pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
+    final pontos = widget.pedido['pontos'] ?? 4;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
     final taxaTotal = taxaMotoboy + gorjeta;
-    debugPrint('=== ACEITAR PEDIDO ===');
-    debugPrint('distancia_km: ${widget.pedido['distancia_km']}');
-    debugPrint('com_retorno: ${widget.pedido['com_retorno']}');
-    debugPrint('gorjeta: ${widget.pedido['gorjeta']}');
-    debugPrint('faixas carregadas: ${th.faixasGlobais.length}');
-    debugPrint('taxaMotoboy calculado: $taxaMotoboy');
-    debugPrint('taxaTotal: $taxaTotal');
+    final loja = widget.pedido['lojas'];
+    final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
     final clienteLatLng = _latLngCliente;
+    final lojaLatLng = _latLngLoja ?? _centro;
 
-    // Marcadores no mapa
     final markers = <Marker>[];
 
-    // Marcador do motoboy — svgHelmet azul (copiado de entregador_home_screen)
+    // Marcador do motoboy — capacete azul
     if (_posicaoAtual != null) {
       markers.add(Marker(
         point: LatLng(_posicaoAtual!.latitude, _posicaoAtual!.longitude),
@@ -149,7 +172,7 @@ class _State extends State<AceitarPedidoScreen> {
       ));
     }
 
-    // Marcador do pedido — círculo azul + número (copiado de entregador_home_screen)
+    // Marcador do pedido — círculo azul + número
     if (clienteLatLng != null) {
       markers.add(Marker(
         point: clienteLatLng,
@@ -181,9 +204,9 @@ class _State extends State<AceitarPedidoScreen> {
       ));
     }
 
-    // Marcador da loja — svgPinLoja (já fill="#1A56DB")
+    // Marcador da loja — pin da loja
     markers.add(Marker(
-      point: _centro,
+      point: lojaLatLng,
       width: 56, height: 60,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -198,8 +221,8 @@ class _State extends State<AceitarPedidoScreen> {
               color: const Color(0xFF1A56DB),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Text('Loja',
-                style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+            child: Text(nomeLoja.length > 8 ? nomeLoja.substring(0, 8) : nomeLoja,
+                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -215,12 +238,12 @@ class _State extends State<AceitarPedidoScreen> {
       ),
       body: Column(
         children: [
-          // Mapa
+          // Mapa escuro
           SizedBox(
-            height: 260,
+            height: 240,
             child: FlutterMap(
               options: MapOptions(
-                initialCenter: clienteLatLng ?? _centro,
+                initialCenter: clienteLatLng ?? lojaLatLng,
                 initialZoom: 13,
               ),
               children: [
@@ -233,17 +256,18 @@ class _State extends State<AceitarPedidoScreen> {
             ),
           ),
 
-          // Detalhes
+          // Card com todas as infos
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Endereço de entrega
+
+                  // Card principal igual ao card de disponíveis
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFF161820),
                       borderRadius: BorderRadius.circular(14),
@@ -252,60 +276,106 @@ class _State extends State<AceitarPedidoScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Coleta
+
+                        // Linha 1: ícone loja + nome + número
                         Row(children: [
-                          const Icon(Icons.store, color: Color(0xFF8b5cf6), size: 18),
+                          Container(
+                            width: 42, height: 42,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A56DB),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.store, color: Colors.white, size: 22),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(nomeLoja,
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
                           const SizedBox(width: 8),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('COLETA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
-                              const Text('Estabelecimento', style: TextStyle(color: Colors.white, fontSize: 14)),
-                            ],
-                          )),
+                          Text('#$numero',
+                              style: const TextStyle(color: Colors.white54, fontSize: 13)),
                         ]),
-                        const SizedBox(height: 4),
-                        // Linha
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8),
-                          child: Column(children: [
-                            SizedBox(height: 2, width: 2),
-                            Icon(Icons.more_vert, color: Colors.white24, size: 16),
-                          ]),
+                        const SizedBox(height: 10),
+
+                        // Linha 2: km de onde você está
+                        Row(children: [
+                          const Icon(Icons.location_on, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            _distMotoboyLoja > 0
+                                ? '${_distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
+                                : '— km de onde você está',
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                          ),
+                        ]),
+                        const SizedBox(height: 8),
+
+                        // Linha 3: endereço de entrega
+                        Row(children: [
+                          const Icon(Icons.location_pin, color: Color(0xFFec4899), size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(endereco,
+                                style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          ),
+                        ]),
+                        const SizedBox(height: 8),
+
+                        // Linha 4: pontos
+                        Row(children: [
+                          const Icon(Icons.star_border, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text('$pontos pontos',
+                              style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        ]),
+                        const SizedBox(height: 8),
+
+                        // Linha 5: tag Bag térmica
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.white),
+                          ),
+                          child: const Text('Bag térmica',
+                              style: TextStyle(color: Colors.white, fontSize: 12)),
                         ),
-                        // Entrega
-                        Row(children: [
-                          const Icon(Icons.location_on, color: Color(0xFFec4899), size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('ENTREGA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
-                              Text(endereco, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                            ],
-                          )),
-                        ]),
                         const SizedBox(height: 12),
-                        const Text('SUA TAXA', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.5)),
-                        Text('R\$ ${taxaTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(color: Color(0xFF10b981), fontSize: 20, fontWeight: FontWeight.bold)),
+
+                        // Linha 6: distância percurso + taxa
+                        Row(children: [
+                          const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
+                          const SizedBox(width: 4),
+                          Text('${km.toStringAsFixed(2)} km',
+                              style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+                          const Spacer(),
+                          Text('R\$ ${taxaTotal.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                  color: Color(0xFF10b981),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold)),
+                        ]),
+
+                        // Gorjeta
                         if (gorjeta > 0) ...[
                           const SizedBox(height: 6),
                           Row(children: [
                             const Text('🎁', style: TextStyle(fontSize: 14)),
                             const SizedBox(width: 6),
-                            Text('+ R\$ ${gorjeta.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 14, fontWeight: FontWeight.w600)),
+                            Text('Gorjeta incluída: R\$ ${gorjeta.toStringAsFixed(2)}',
+                                style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 13, fontWeight: FontWeight.w600)),
                           ]),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+
+                  const SizedBox(height: 16),
 
                   // Botões
                   Row(children: [
-                    // Recusar
                     Expanded(
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
@@ -326,7 +396,6 @@ class _State extends State<AceitarPedidoScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Aceitar
                     Expanded(
                       flex: 2,
                       child: ElevatedButton(
