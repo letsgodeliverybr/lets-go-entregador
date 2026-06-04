@@ -388,7 +388,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFEF4444),
+                                    color: const Color(0xFF1A56DB),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Colors.white, width: 1.5),
                                     boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
@@ -398,7 +398,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                                 ),
                                 const CustomPaint(
                                   size: Size(12, 8),
-                                  painter: _TrianglePainter(Color(0xFFEF4444)),
+                                  painter: _TrianglePainter(Color(0xFF1A56DB)),
                                 ),
                               ],
                             ),
