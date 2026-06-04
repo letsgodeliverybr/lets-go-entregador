@@ -530,10 +530,10 @@ class _State extends State<PedidosDisponiveisScreen> {
 
             // Linha 5: distância percurso + valor
             Row(children: [
-              const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
+              const Icon(Icons.route_outlined, color: Colors.white, size: 16),
               const SizedBox(width: 4),
               Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  style: const TextStyle(color: Colors.white, fontSize: 13)),
               const Spacer(),
               if (temBonus) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',
