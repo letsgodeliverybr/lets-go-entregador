@@ -7,9 +7,10 @@ import 'screens/home_screen.dart';
 import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
+import 'screens/aguardo_aprovacao_screen.dart';
+import 'screens/cadastro_aprovacao_screen.dart';
 import 'services/notification_service.dart';
 
-// Valores extraídos de android/app/google-services.json
 const _firebaseOptions = FirebaseOptions(
   apiKey: 'AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10',
   appId: '1:935542418052:android:2e356ebfc7f8055f3eb0d1',
@@ -18,7 +19,6 @@ const _firebaseOptions = FirebaseOptions(
   storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
 );
 
-// Handler de mensagens FCM com app fechado — deve ser top-level
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: _firebaseOptions);
@@ -100,18 +100,43 @@ class _AuthGateState extends State<AuthGate> {
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) return const LoginScreen();
 
-    // Salva token FCM agora que o uid é conhecido
     await NotificationService.saveFcmToken(session.user.id);
 
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
-          .select('disponivel')
+          .select('disponivel, status_cadastro, aprovado, status, nome')
           .eq('id', session.user.id)
           .single();
+
+      final statusCadastro = e['status_cadastro']?.toString() ?? '';
+      final aprovado = e['aprovado'] == true;
+      final status = e['status']?.toString() ?? '';
+      final nome = e['nome']?.toString() ?? '';
+
+      // Pendente ou em análise → aguardo aprovação
+      if (statusCadastro == 'pendente' || statusCadastro == 'em_analise') {
+        return const AguardoAprovacaoScreen();
+      }
+
+      // Tem cadastro mas não preencheu os dados ainda
+      if (!aprovado && status != 'ativo' && statusCadastro != 'aprovado' && nome.isEmpty) {
+        return const CadastroAprovacaoScreen();
+      }
+
+      // Aprovado mas não aprovado ainda → aguardo
+      if (!aprovado && status != 'ativo' && statusCadastro != 'aprovado') {
+        return const AguardoAprovacaoScreen();
+      }
+
+      // Aprovado → home normal
       if (e['disponivel'] == true) return const EntregadorHomeScreen();
-    } catch (_) {}
-    return const HomeScreen();
+      return const HomeScreen();
+
+    } catch (_) {
+      // Não tem registro na tabela entregadores → preencher cadastro
+      return const CadastroAprovacaoScreen();
+    }
   }
 
   @override
