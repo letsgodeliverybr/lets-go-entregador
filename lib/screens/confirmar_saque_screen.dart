@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/taxa_helper.dart';
 
 class ConfirmarSaqueScreen extends StatefulWidget {
   const ConfirmarSaqueScreen({Key? key}) : super(key: key);
@@ -43,16 +44,19 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
     setState(() => _carregando = true);
     try {
-      // Saldo = total ganho em pedidos finalizados − total já pago via saques
+      // Garante que as faixas de preço estão carregadas
+      await carregarFaixas();
+
       final results = await Future.wait<dynamic>([
         _supabase
             .from('entregadores')
             .select('chave_pix, tipo_chave_pix, banco')
             .eq('id', _uid)
             .single(),
+        // ✅ Busca distancia_km e com_retorno para calcular igual ao home_screen
         _supabase
             .from('pedidos')
-            .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta')
+            .select('distancia_km, com_retorno, gorjeta')
             .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
         _supabase
@@ -64,17 +68,25 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
       final entregador = results[0] as Map<String, dynamic>;
       final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
-      final saquesDescontados = List<Map<String, dynamic>>.from(results[2] as List);
+      final saquesDescontados =
+          List<Map<String, dynamic>>.from(results[2] as List);
 
       debugPrint('[SAQUE] pedidos encontrados: ${pedidos.length}');
       debugPrint('[SAQUE] saques descontados: ${saquesDescontados.length}');
 
+      // ✅ Mesmo cálculo do home_screen usando calcularTaxaMotoboy por faixas
       double totalGanho = 0;
       for (final p in pedidos) {
-        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0.0;
+        final distancia = (p['distancia_km'] as num?)?.toDouble() ?? 0.0;
+        final comRetorno = p['com_retorno'] == true;
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
+
+        final taxa = faixasGlobais.isNotEmpty
+            ? calcularTaxaMotoboy(distancia, comRetorno, faixasGlobais)
+            : 0.0;
         final contribuicao = taxa > 0 ? taxa : gorjeta;
-        debugPrint('[SAQUE] pedido taxa_motoboy=$taxa gorjeta=$gorjeta contrib=$contribuicao');
+        debugPrint(
+            '[SAQUE] pedido dist=$distancia retorno=$comRetorno taxa=$taxa gorjeta=$gorjeta contrib=$contribuicao');
         totalGanho += contribuicao;
       }
 
@@ -82,7 +94,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
           0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
       final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
 
-      debugPrint('[SAQUE] totalGanho=$totalGanho totalPago=$totalPago saldo=$saldo');
+      debugPrint(
+          '[SAQUE] totalGanho=$totalGanho totalPago=$totalPago saldo=$saldo');
 
       if (mounted) {
         setState(() {
@@ -101,7 +114,9 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
   }
 
   double _calcularTaxa(double valorBruto) =>
-      valorBruto < 100 ? 5.0 : double.parse((valorBruto * 0.05).toStringAsFixed(2));
+      valorBruto < 100
+          ? 5.0
+          : double.parse((valorBruto * 0.05).toStringAsFixed(2));
 
   Future<void> _solicitarSaque() async {
     final valorStr = _valorController.text.trim().replaceAll(',', '.');
@@ -114,6 +129,12 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
       return;
     }
 
+    if (valorBruto < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saque mínimo é R\$ 10,00')),
+      );
+      return;
+    }
     if (valorBruto > _saldoSemana) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Valor maior que o saldo disponível')),
@@ -122,28 +143,42 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
 
     final taxa = _calcularTaxa(valorBruto);
-    final valorLiquido = double.parse((valorBruto - taxa).toStringAsFixed(2));
+    final valorLiquido =
+        double.parse((valorBruto - taxa).toStringAsFixed(2));
 
-    // Mostra resumo antes de confirmar
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF161820),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Confirmar saque', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirmar saque',
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          _linhaResumo('Valor solicitado', 'R\$ ${valorBruto.toStringAsFixed(2)}', Colors.white),
+          _linhaResumo('Valor solicitado',
+              'R\$ ${valorBruto.toStringAsFixed(2)}', Colors.white),
           const SizedBox(height: 8),
-          _linhaResumo('Taxa', '- R\$ ${taxa.toStringAsFixed(2)}', const Color(0xFFef4444)),
+          _linhaResumo('Taxa', '- R\$ ${taxa.toStringAsFixed(2)}',
+              const Color(0xFFef4444)),
           const Divider(color: Color(0xFF2A2D35), height: 24),
-          _linhaResumo('Você recebe', 'R\$ ${valorLiquido.toStringAsFixed(2)}', const Color(0xFF10b981)),
+          _linhaResumo('Você recebe',
+              'R\$ ${valorLiquido.toStringAsFixed(2)}',
+              const Color(0xFF10b981)),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A56DB), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-            child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A56DB),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            child: const Text('Confirmar',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -152,15 +187,17 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
     setState(() => _processando = true);
     try {
-      // Chama função PostgreSQL que valida saldo atomicamente antes de inserir
       await _supabase.rpc('solicitar_saque', params: {
-        'p_entregador_id':   _uid,
-        'p_valor_bruto':     valorBruto,
-        'p_chave_pix':       _chavePix ?? '',
-        'p_tipo_chave_pix':  _tipoChavePix ?? '',
-        'p_banco':           _banco ?? '',
+        'p_entregador_id': _uid,
+        'p_valor_bruto': valorBruto,
+        'p_chave_pix': _chavePix ?? '',
+        'p_tipo_chave_pix': _tipoChavePix ?? '',
+        'p_banco': _banco ?? '',
       });
-      if (mounted) setState(() { _processando = false; _sucesso = true; });
+      if (mounted) setState(() {
+        _processando = false;
+        _sucesso = true;
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
@@ -171,19 +208,27 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
                 ? 'Informe um valor válido.'
                 : 'Erro ao solicitar saque. Tente novamente.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(exibir), backgroundColor: const Color(0xFFef4444)),
+          SnackBar(
+              content: Text(exibir),
+              backgroundColor: const Color(0xFFef4444)),
         );
       }
     }
   }
 
   Widget _linhaResumo(String label, String valor, Color corValor) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-      Text(valor, style: TextStyle(color: corValor, fontWeight: FontWeight.bold, fontSize: 14)),
-    ],
-  );
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style:
+                  const TextStyle(color: Colors.white70, fontSize: 14)),
+          Text(valor,
+              style: TextStyle(
+                  color: corValor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14)),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -202,8 +247,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
       ),
       body: _carregando
           ? const Center(
-              child:
-                  CircularProgressIndicator(color: Color(0xFF1A56DB)))
+              child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
           : _sucesso
               ? _buildSucesso()
               : _buildFormulario(),
@@ -211,11 +255,9 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
   }
 
   Widget _buildFormulario() {
-    final temPix =
-        _chavePix != null && _chavePix!.isNotEmpty;
+    final temPix = _chavePix != null && _chavePix!.isNotEmpty;
     return SingleChildScrollView(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -245,43 +287,36 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
           ),
           const SizedBox(height: 20),
           const Text('Valor do saque',
-              style:
-                  TextStyle(color: Colors.white70, fontSize: 13)),
+              style: TextStyle(color: Colors.white70, fontSize: 13)),
           const SizedBox(height: 8),
           TextField(
             controller: _valorController,
-            keyboardType: const TextInputType.numberWithOptions(
-                decimal: true),
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FilteringTextInputFormatter.allow(
-                  RegExp(r'[0-9,.]'))
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]'))
             ],
-            style: const TextStyle(
-                color: Colors.white, fontSize: 18),
+            style: const TextStyle(color: Colors.white, fontSize: 18),
             decoration: InputDecoration(
               prefixText: 'R\$ ',
-              prefixStyle: const TextStyle(
-                  color: Colors.white54, fontSize: 18),
+              prefixStyle:
+                  const TextStyle(color: Colors.white54, fontSize: 18),
               hintText: '0,00',
-              hintStyle:
-                  const TextStyle(color: Colors.white24),
+              hintStyle: const TextStyle(color: Colors.white24),
               filled: true,
               fillColor: const Color(0xFF161820),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: Color(0xFF2A2D35)),
-              ),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF2A2D35))),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: Color(0xFF2A2D35)),
-              ),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF2A2D35))),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: Color(0xFF1A56DB)),
-              ),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF1A56DB))),
             ),
           ),
           const SizedBox(height: 20),
@@ -292,56 +327,44 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF161820),
                 borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: const Color(0xFF2A2D35)),
+                border: Border.all(color: const Color(0xFF2A2D35)),
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Chave PIX de destino',
                         style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13)),
+                            color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 10),
                     Row(children: [
                       Container(
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A56DB)
-                              .withOpacity(0.15),
-                          borderRadius:
-                              BorderRadius.circular(8),
+                          color: const Color(0xFF1A56DB).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.pix,
-                            color: Color(0xFF1A56DB),
-                            size: 20),
+                            color: Color(0xFF1A56DB), size: 20),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                _chavePix!,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight:
-                                        FontWeight.bold,
-                                    fontSize: 14),
-                              ),
+                              Text(_chavePix!,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14)),
                               if (_tipoChavePix != null &&
                                   _tipoChavePix!.isNotEmpty)
-                                Text(
-                                    'Tipo: $_tipoChavePix',
+                                Text('Tipo: $_tipoChavePix',
                                     style: const TextStyle(
                                         color: Colors.white54,
                                         fontSize: 12)),
-                              if (_banco != null &&
-                                  _banco!.isNotEmpty)
-                                Text(
-                                    _banco!,
+                              if (_banco != null && _banco!.isNotEmpty)
+                                Text(_banco!,
                                     style: const TextStyle(
                                         color: Colors.white38,
                                         fontSize: 12)),
@@ -358,19 +381,16 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
                 color: const Color(0xFF2D1B00),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: const Color(0xFFD97706)
-                        .withOpacity(0.4)),
+                    color: const Color(0xFFD97706).withOpacity(0.4)),
               ),
               child: const Row(children: [
                 Icon(Icons.warning_amber_rounded,
                     color: Color(0xFFD97706), size: 20),
                 SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                      'Cadastre sua chave PIX em Minha Conta',
+                  child: Text('Cadastre sua chave PIX em Minha Conta',
                       style: TextStyle(
-                          color: Color(0xFFD97706),
-                          fontSize: 13)),
+                          color: Color(0xFFD97706), fontSize: 13)),
                 ),
               ]),
             ),
@@ -382,8 +402,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF1F3A5F),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: const Color(0xFF2A5298)),
+              border: Border.all(color: const Color(0xFF2A5298)),
             ),
             child: const Row(children: [
               Icon(Icons.info_outline,
@@ -392,9 +411,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
               Expanded(
                 child: Text(
                     'O valor será depositado em até 1 dia útil após aprovação.',
-                    style: TextStyle(
-                        color: Color(0xFF6B9FE4),
-                        fontSize: 12)),
+                    style:
+                        TextStyle(color: Color(0xFF6B9FE4), fontSize: 12)),
               ),
             ]),
           ),
@@ -407,8 +425,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
                   (!temPix || _processando) ? null : _solicitarSaque,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1A56DB),
-                disabledBackgroundColor:
-                    const Color(0xFF2A2D35),
+                disabledBackgroundColor: const Color(0xFF2A2D35),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
@@ -418,8 +435,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5))
+                          color: Colors.white, strokeWidth: 2.5))
                   : const Text('Solicitar Saque',
                       style: TextStyle(
                           color: Colors.white,
@@ -435,8 +451,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
   Widget _buildSucesso() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 20, vertical: 24),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -446,8 +462,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF1A3A2A),
               shape: BoxShape.circle,
-              border: Border.all(
-                  color: const Color(0xFF22C55E), width: 2),
+              border:
+                  Border.all(color: const Color(0xFF22C55E), width: 2),
             ),
             child: const Icon(Icons.check,
                 color: Color(0xFF22C55E), size: 48),
@@ -463,9 +479,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
               'Aguarde aprovação.\nO valor será depositado via PIX em até 1 dia útil.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.5)),
+                  color: Colors.white70, fontSize: 14, height: 1.5)),
           const SizedBox(height: 40),
           SizedBox(
             width: double.infinity,

@@ -131,7 +131,6 @@ class _State extends State<PedidosDisponiveisScreen> {
               (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
 
-      // Toca som apenas para pedidos que ainda não estavam na lista
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
       if (novos.isNotEmpty) {
@@ -204,7 +203,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             final novo = payload.newRecord;
             final status = novo['status']?.toString() ?? '';
             if (status == 'pronto') {
-              // Novo pedido disponível → busca completa para ter dados de lojas
               _buscar();
             }
           },
@@ -222,13 +220,11 @@ class _State extends State<PedidosDisponiveisScreen> {
 
             if (novoStatus == 'pronto' &&
                 (motoboyId == null || motoboyId.isEmpty)) {
-              // Pedido continua/voltou a estar disponível
               _buscar();
             } else if (novoStatus != 'pronto' ||
                 (motoboyId != null &&
                     motoboyId.isNotEmpty &&
                     motoboyId != uid)) {
-              // Aceito por outro motoboy ou mudou de status → remove imediatamente
               if (mounted && id.isNotEmpty) {
                 setState(() => _pedidos.removeWhere((p) => p['id'] == id));
               }
@@ -528,12 +524,12 @@ class _State extends State<PedidosDisponiveisScreen> {
 
             const SizedBox(height: 12),
 
-            // Linha 5: distância percurso + valor
+            // Linha 5: distância percurso + valor — COR CORRIGIDA
             Row(children: [
-              const Icon(Icons.route_outlined, color: Colors.white, size: 16),
+              const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
               const SizedBox(width: 4),
               Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
               const Spacer(),
               if (temBonus) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',

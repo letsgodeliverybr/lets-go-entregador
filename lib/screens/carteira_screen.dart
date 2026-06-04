@@ -59,31 +59,46 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   }
 
   Future<void> _carregarSaldo() async {
-    if (_uid.isEmpty) { if (mounted) setState(() => _carregandoSaldo = false); return; }
+    if (_uid.isEmpty) {
+      if (mounted) setState(() => _carregandoSaldo = false);
+      return;
+    }
     setState(() => _carregandoSaldo = true);
     try {
       final results = await Future.wait<dynamic>([
-        _supabase.from('pedidos')
-            .select('taxa_entrega_motoboy, gorjeta')
+        // ✅ CORRIGIDO: inclui taxa_entrega no select
+        _supabase
+            .from('pedidos')
+            .select('taxa_entrega, taxa_entrega_motoboy, gorjeta')
             .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
             .eq('status', 'finalizado'),
-        _supabase.from('saques')
+        _supabase
+            .from('saques')
             .select('valor')
             .eq('entregador_id', _uid)
             .inFilter('status', ['pago', 'pendente']),
       ]);
       final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
-      final saques  = List<Map<String, dynamic>>.from(results[1] as List);
+      final saques = List<Map<String, dynamic>>.from(results[1] as List);
 
       double totalGanho = 0;
       for (final p in pedidos) {
-        final taxa   = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0;
+        // ✅ CORRIGIDO: prioriza taxa_entrega (sempre preenchido)
+        final taxa = double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
+        final taxaMotoboy = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0;
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
-        totalGanho += taxa > 0 ? taxa : gorjeta;
+        totalGanho += taxa > 0 ? taxa : (taxaMotoboy > 0 ? taxaMotoboy : gorjeta);
       }
+
       final totalDescontado = saques.fold<double>(
           0, (s, sq) => s + ((sq['valor'] as num?)?.toDouble() ?? 0));
-      if (mounted) setState(() { _saldo = (totalGanho - totalDescontado).clamp(0, double.infinity); _carregandoSaldo = false; });
+
+      if (mounted) {
+        setState(() {
+          _saldo = (totalGanho - totalDescontado).clamp(0, double.infinity);
+          _carregandoSaldo = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _carregandoSaldo = false);
     }
@@ -96,7 +111,8 @@ class _CarteiraScreenState extends State<CarteiraScreen>
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0F14),
         foregroundColor: Colors.white,
-        title: const Text('Carteira', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Carteira',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: const Color(0xFF1A56DB),
@@ -114,7 +130,8 @@ class _CarteiraScreenState extends State<CarteiraScreen>
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               color: Color(0xFF161820),
-              border: Border(bottom: BorderSide(color: Color(0xFF2A2D35))),
+              border:
+                  Border(bottom: BorderSide(color: Color(0xFF2A2D35))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -122,19 +139,38 @@ class _CarteiraScreenState extends State<CarteiraScreen>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Saldo disponível', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const Text('Saldo disponível',
+                        style:
+                            TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 4),
                     _carregandoSaldo
-                        ? const SizedBox(height: 34, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Color(0xFF10b981), strokeWidth: 2))))
+                        ? const SizedBox(
+                            height: 34,
+                            child: Center(
+                                child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        color: Color(0xFF10b981),
+                                        strokeWidth: 2))))
                         : Text(
-                            _saldoVisivel ? 'R\$ ${_saldo.toStringAsFixed(2)}' : '••••••',
-                            style: const TextStyle(color: Color(0xFF10b981), fontSize: 28, fontWeight: FontWeight.bold)),
+                            _saldoVisivel
+                                ? 'R\$ ${_saldo.toStringAsFixed(2)}'
+                                : '••••••',
+                            style: const TextStyle(
+                                color: Color(0xFF10b981),
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold)),
                   ],
                 ),
                 IconButton(
-                  icon: Icon(_saldoVisivel ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                    color: Colors.white70),
-                  onPressed: () => setState(() => _saldoVisivel = !_saldoVisivel),
+                  icon: Icon(
+                      _saldoVisivel
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: Colors.white70),
+                  onPressed: () =>
+                      setState(() => _saldoVisivel = !_saldoVisivel),
                 ),
               ],
             ),
@@ -157,15 +193,23 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Últimas movimentações', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        const Text('Últimas movimentações',
+            style: TextStyle(color: Colors.white70, fontSize: 13)),
         const SizedBox(height: 12),
-        _extratoItem(Icons.arrow_downward, 'Entrega #4819', 'Hoje, 14:22', '+ R\$ 7,00', Colors.green),
-        _extratoItem(Icons.arrow_downward, 'Entrega #4815', 'Hoje, 13:10', '+ R\$ 12,50', Colors.green),
-        _extratoItem(Icons.arrow_upward, 'Saque', 'Ontem, 19:00', '- R\$ 100,00', Colors.redAccent),
-        _extratoItem(Icons.arrow_downward, 'Entrega #4810', 'Ontem, 16:44', '+ R\$ 9,00', Colors.green),
-        _extratoItem(Icons.star, 'Bônus feriado', '25/05, 08:00', '+ R\$ 25,00', Colors.amber),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4819', 'Hoje, 14:22',
+            '+ R\$ 7,00', Colors.green),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4815', 'Hoje, 13:10',
+            '+ R\$ 12,50', Colors.green),
+        _extratoItem(Icons.arrow_upward, 'Saque', 'Ontem, 19:00',
+            '- R\$ 100,00', Colors.redAccent),
+        _extratoItem(Icons.arrow_downward, 'Entrega #4810', 'Ontem, 16:44',
+            '+ R\$ 9,00', Colors.green),
+        _extratoItem(Icons.star, 'Bônus feriado', '25/05, 08:00',
+            '+ R\$ 25,00', Colors.amber),
         const SizedBox(height: 16),
-        const Center(child: Text('Nenhuma outra movimentação.', style: TextStyle(color: Colors.white70, fontSize: 13))),
+        const Center(
+            child: Text('Nenhuma outra movimentação.',
+                style: TextStyle(color: Colors.white70, fontSize: 13))),
       ],
     );
   }
@@ -174,7 +218,8 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Histórico por semana', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        const Text('Histórico por semana',
+            style: TextStyle(color: Colors.white70, fontSize: 13)),
         const SizedBox(height: 12),
         _historicoItem('Semana 19–25/05', '42 entregas', 'R\$ 543,00'),
         _historicoItem('Semana 12–18/05', '38 entregas', 'R\$ 472,00'),
@@ -184,7 +229,8 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     );
   }
 
-  Widget _extratoItem(IconData icon, String title, String date, String value, Color color) {
+  Widget _extratoItem(IconData icon, String title, String date, String value,
+      Color color) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -195,17 +241,27 @@ class _CarteiraScreenState extends State<CarteiraScreen>
       ),
       child: Row(
         children: [
-          CircleAvatar(radius: 18, backgroundColor: color.withOpacity(0.15),
-            child: Icon(icon, color: color, size: 16)),
+          CircleAvatar(
+              radius: 18,
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(icon, color: color, size: 16)),
           const SizedBox(width: 12),
-          Expanded(child: Column(
+          Expanded(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
-              Text(date, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(title,
+                  style: const TextStyle(color: Colors.white, fontSize: 14)),
+              Text(date,
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 12)),
             ],
           )),
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(value,
+              style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14)),
         ],
       ),
     );
@@ -222,17 +278,27 @@ class _CarteiraScreenState extends State<CarteiraScreen>
       ),
       child: Row(
         children: [
-          const CircleAvatar(radius: 18, backgroundColor: Color(0xFF1A56DB),
-            child: Icon(Icons.moped, color: Colors.white, size: 16)),
+          const CircleAvatar(
+              radius: 18,
+              backgroundColor: Color(0xFF1A56DB),
+              child: Icon(Icons.moped, color: Colors.white, size: 16)),
           const SizedBox(width: 12),
-          Expanded(child: Column(
+          Expanded(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(semana, style: const TextStyle(color: Colors.white, fontSize: 14)),
-              Text(entregas, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(semana,
+                  style: const TextStyle(color: Colors.white, fontSize: 14)),
+              Text(entregas,
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 12)),
             ],
           )),
-          Text(total, style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(total,
+              style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14)),
         ],
       ),
     );
