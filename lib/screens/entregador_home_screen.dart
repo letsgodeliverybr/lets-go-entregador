@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -39,6 +40,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   // Pedidos em andamento para pins no mapa
   List<Map<String, dynamic>> _pedidosEmAndamento = [];
+  List<Map<String, dynamic>> _lojasAtivas = [];
 
   // Rota disponível
   Map<String, dynamic>? _rotaAtual;
@@ -91,13 +93,30 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     try {
       final data = await _supabase
           .from('pedidos')
-          .select('id, status, latitude, longitude, endereco, numero')
+          .select('id, status, latitude, longitude, endereco, numero, loja_id, lojas(nome, latitude, longitude)')
           .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota']);
-      final lista = List<Map<String, dynamic>>.from(data)
-          .where((p) => p['latitude'] != null && p['longitude'] != null)
-          .toList();
-      if (mounted) setState(() => _pedidosEmAndamento = lista);
+      final lista = List<Map<String, dynamic>>.from(data);
+
+      // Extrai lojas únicas com coordenadas
+      final lojasMap = <String, Map<String, dynamic>>{};
+      for (final p in lista) {
+        final loja = p['lojas'] as Map<String, dynamic>?;
+        final lojaId = p['loja_id']?.toString();
+        if (loja != null && lojaId != null &&
+            loja['latitude'] != null && loja['longitude'] != null) {
+          lojasMap[lojaId] = loja;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _pedidosEmAndamento = lista
+              .where((p) => p['latitude'] != null && p['longitude'] != null)
+              .toList();
+          _lojasAtivas = lojasMap.values.toList();
+        });
+      }
     } catch (_) {}
   }
 
@@ -314,44 +333,77 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       subdomains: const ['a', 'b', 'c', 'd'],
                     ),
 
-                    // Pins dos pedidos em andamento
+                    // Pins das lojas (azul com ícone de loja)
+                    if (_lojasAtivas.isNotEmpty)
+                      MarkerLayer(
+                        markers: _lojasAtivas.map((loja) {
+                          final lat = (loja['latitude'] as num).toDouble();
+                          final lng = (loja['longitude'] as num).toDouble();
+                          final nome = (loja['nome']?.toString() ?? 'Loja').split(' ').first;
+                          return Marker(
+                            point: LatLng(lat, lng),
+                            width: 64, height: 68,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 40, height: 40,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1A56DB),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2.5),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 8)],
+                                  ),
+                                  child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1A56DB),
+                                    borderRadius: BorderRadius.circular(4),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 4)],
+                                  ),
+                                  child: Text(nome,
+                                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                    // Cards de pedido (vermelho com número — endereço de entrega)
                     if (_pedidosEmAndamento.isNotEmpty)
                       MarkerLayer(
-                        markers: _pedidosEmAndamento
-                            .where((p) => p['latitude'] != null && p['longitude'] != null)
-                            .map((p) {
-                              final lat = (p['latitude'] as num).toDouble();
-                              final lng = (p['longitude'] as num).toDouble();
-                              final numero = p['numero']?.toString() ?? '—';
-                              return Marker(
-                                point: LatLng(lat, lng),
-                                width: 56, height: 60,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 36, height: 36,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1A56DB),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
-                                      ),
-                                      child: const Icon(Icons.location_on, color: Colors.white, size: 18),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1A56DB),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text('#$numero',
-                                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
-                                    ),
-                                  ],
+                        markers: _pedidosEmAndamento.map((p) {
+                          final lat = (p['latitude'] as num).toDouble();
+                          final lng = (p['longitude'] as num).toDouble();
+                          final numero = p['numero']?.toString() ?? '—';
+                          return Marker(
+                            point: LatLng(lat, lng),
+                            width: 56, height: 64,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+                                  ),
+                                  child: Text('#$numero',
+                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
                                 ),
-                              );
-                            }).toList(),
+                                const CustomPaint(
+                                  size: Size(12, 8),
+                                  painter: _TrianglePainter(Color(0xFFEF4444)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                       ),
 
                     // Pin do motoboy
@@ -627,4 +679,24 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       ),
     );
   }
+}
+
+// Triângulo apontado para baixo — base do card de pedido no mapa
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+  const _TrianglePainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = ui.Paint()..color = color;
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_TrianglePainter old) => old.color != color;
 }
