@@ -42,15 +42,31 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
     if (_uid.isEmpty) return;
     setState(() => _verificando = true);
     try {
-      final e = await _supabase
+      final lista = await _supabase
           .from('entregadores')
-          .select('aprovado, status_cadastro')
+          .select('aprovado, status_cadastro, status')
           .eq('id', _uid)
-          .single();
+          .limit(1);
 
       if (!mounted) return;
 
-      if (e['aprovado'] == true) {
+      if (lista.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cadastro não encontrado. Contate o suporte.'),
+            backgroundColor: Color(0xFFef4444),
+          ),
+        );
+        return;
+      }
+
+      final e = lista.first;
+      final aprovado = e['aprovado'] == true;
+      final status = e['status']?.toString() ?? '';
+      final statusCadastro = e['status_cadastro']?.toString() ?? '';
+
+      // aprovado pelo campo booleano OU pelo status
+      if (aprovado || status == 'ativo' || statusCadastro == 'aprovado') {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -66,12 +82,13 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DEBUG] Erro ao verificar status: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erro ao verificar status.'),
-            backgroundColor: Color(0xFFef4444),
+          SnackBar(
+            content: Text('Erro ao verificar status: $e'),
+            backgroundColor: const Color(0xFFef4444),
           ),
         );
       }
@@ -101,7 +118,6 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Ícone animado
               AnimatedBuilder(
                 animation: _pulseAnim,
                 builder: (_, child) =>
