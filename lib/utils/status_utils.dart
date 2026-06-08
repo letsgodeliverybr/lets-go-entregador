@@ -8,7 +8,7 @@ Color statusColor(String? status) {
     case 'chegou_local':  return const Color(0xFF38BDF8);
     case 'no_local':      return const Color(0xFF38BDF8);
     case 'em_rota':       return const Color(0xFF1A56DB);
-    case 'chegou_destino':return const Color(0xFF7C3AED);
+    case 'chegou_destino':return const Color(0xFF1A56DB);
     case 'retornando':    return const Color(0xFF10B981);
     case 'finalizado':    return const Color(0xFF10B981);
     case 'entregue':      return const Color(0xFF10B981);
@@ -25,7 +25,7 @@ String statusLabel(String? status) {
     case 'chegou_local':   return 'Chegou no local';
     case 'no_local':       return 'No local';
     case 'em_rota':        return 'Em rota';
-    case 'chegou_destino': return 'Chegou no destino';
+    case 'chegou_destino': return 'Cheguei no local';
     case 'retornando':     return 'Retornando';
     case 'finalizado':     return 'Finalizado';
     case 'entregue':       return 'Entregue';

@@ -15,7 +15,9 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   double _saldo = 0;
   bool _carregandoSaldo = true;
   RealtimeChannel? _realtimeChannel;
+  String? _entregadorId;
 
+  // entregadores.id = auth.uid() (tabela não tem coluna user_id separada)
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
   @override
@@ -23,8 +25,41 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addObserver(this);
+    _inicializar();
+  }
+
+  Future<void> _inicializar() async {
+    await _buscarEntregadorId();
     _carregarSaldo();
     _iniciarRealtime();
+  }
+
+  Future<void> _buscarEntregadorId() async {
+    final authId = _supabase.auth.currentUser?.id;
+    if (authId == null) return;
+    try {
+      // Tenta user_id primeiro; se coluna não existir, cai no catch
+      final byUserId = await _supabase
+          .from('entregadores')
+          .select('id')
+          .eq('user_id', authId)
+          .maybeSingle();
+      if (byUserId != null) {
+        _entregadorId = byUserId['id'] as String?;
+      } else {
+        // Fallback: entregadores.id pode ser o próprio auth.uid
+        final byId = await _supabase
+            .from('entregadores')
+            .select('id')
+            .eq('id', authId)
+            .maybeSingle();
+        _entregadorId = (byId?['id'] as String?) ?? authId;
+      }
+    } catch (_) {
+      // Coluna user_id não existe — entregadores.id = auth.uid
+      _entregadorId = authId;
+    }
+    debugPrint('[UID] auth.uid: $authId, entregador.id: $_entregadorId, match: ${authId == _entregadorId}');
   }
 
   @override
@@ -33,9 +68,10 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   }
 
   void _iniciarRealtime() {
-    if (_uid.isEmpty) return;
+    final id = _entregadorId ?? _uid;
+    if (id.isEmpty) return;
     _realtimeChannel = _supabase
-        .channel('carteira-pedidos-$_uid')
+        .channel('carteira-pedidos-$id')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -59,43 +95,66 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   }
 
   Future<void> _carregarSaldo() async {
-    if (_uid.isEmpty) {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    debugPrint('[CARTEIRA] auth uid: $uid');
+    if (uid == null || uid.isEmpty) {
+      debugPrint('[CARTEIRA] UID nulo! Abortando.');
+      if (mounted) setState(() => _carregandoSaldo = false);
+      return;
+    }
+    final id = _entregadorId ?? uid;
+    if (id.isEmpty) {
       if (mounted) setState(() => _carregandoSaldo = false);
       return;
     }
     setState(() => _carregandoSaldo = true);
     try {
+      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      final diasDesdeSegunda = agora.weekday - 1;
+      final inicioSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 1)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
+      final fimSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda + 6, 23, 59)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
+
       final results = await Future.wait<dynamic>([
-        // ✅ CORRIGIDO: inclui taxa_entrega no select
         _supabase
             .from('pedidos')
-            .select('taxa_entrega, taxa_entrega_motoboy, gorjeta')
-            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
-            .eq('status', 'finalizado'),
+            .select('taxa_motoboy,gorjeta')
+            .eq('motoboy_id', id)
+            .eq('status', 'finalizado')
+            .gte('finalizado_em', inicioSemana)
+            .lte('finalizado_em', fimSemana),
         _supabase
             .from('saques')
             .select('valor')
-            .eq('entregador_id', _uid)
-            .inFilter('status', ['pago', 'pendente']),
+            .eq('entregador_id', id)
+            .gte('created_at', inicioSemana)
+            .lte('created_at', fimSemana),
       ]);
+
       final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
       final saques = List<Map<String, dynamic>>.from(results[1] as List);
 
+      debugPrint('[CARTEIRA] buscando pedidos para uid: $id, total encontrado: ${pedidos.length}');
+
       double totalGanho = 0;
       for (final p in pedidos) {
-        // ✅ CORRIGIDO: prioriza taxa_entrega (sempre preenchido)
-        final taxa = double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0;
-        final taxaMotoboy = (p['taxa_entrega_motoboy'] as num?)?.toDouble() ?? 0;
+        final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
-        totalGanho += taxa > 0 ? taxa : (taxaMotoboy > 0 ? taxaMotoboy : gorjeta);
+        totalGanho += taxa + gorjeta;
       }
+      final totalSaques = saques.fold<double>(0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
+      final saldoDisponivel = totalGanho - totalSaques;
 
-      final totalDescontado = saques.fold<double>(
-          0, (s, sq) => s + ((sq['valor'] as num?)?.toDouble() ?? 0));
+      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: ${totalGanho - totalSaques}');
 
       if (mounted) {
         setState(() {
-          _saldo = (totalGanho - totalDescontado).clamp(0, double.infinity);
+          _saldo = saldoDisponivel;
           _carregandoSaldo = false;
         });
       }

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/taxa_helper.dart' as th;
 import 'confirmar_saque_screen.dart';
 import 'mapa_calor_screen.dart';
 import 'drawer_screen.dart';
@@ -32,20 +31,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _refreshing = false;
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
+  String? _entregadorId;
+  String get _eid => _entregadorId ?? _uid;
 
   double _calcTaxaMotoboy(Map<String, dynamic> p) {
-    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final comRetorno = p['com_retorno'] == true;
-    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    return th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
+    final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
+    final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+    return taxa + gorjeta;
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _inicializar();
+  }
+
+  Future<void> _inicializar() async {
+    await _buscarEntregadorId();
     _carregarDados();
     _iniciarRealtime();
+  }
+
+  Future<void> _buscarEntregadorId() async {
+    final authId = _supabase.auth.currentUser?.id;
+    if (authId == null) return;
+    try {
+      final byUserId = await _supabase
+          .from('entregadores')
+          .select('id')
+          .eq('user_id', authId)
+          .maybeSingle();
+      if (byUserId != null) {
+        _entregadorId = byUserId['id'] as String?;
+      } else {
+        final byId = await _supabase
+            .from('entregadores')
+            .select('id')
+            .eq('id', authId)
+            .maybeSingle();
+        _entregadorId = (byId?['id'] as String?) ?? authId;
+      }
+    } catch (_) {
+      _entregadorId = authId;
+    }
+    debugPrint('[UID] auth.uid: $authId, entregador.id: $_entregadorId, match: ${authId == _entregadorId}');
   }
 
   @override
@@ -62,9 +92,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _iniciarRealtime() {
-    if (_uid.isEmpty) return;
+    if (_eid.isEmpty) return;
     _canal = _supabase
-        .channel('home_saldo_$_uid')
+        .channel('home_saldo_$_eid')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -72,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'entregador_id',
-            value: _uid,
+            value: _eid,
           ),
           callback: (_) => _agendarRecarregar(),
         )
@@ -83,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'motoboy_id',
-            value: _uid,
+            value: _eid,
           ),
           callback: (_) => _agendarRecarregar(),
         )
@@ -94,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'entregador_id',
-            value: _uid,
+            value: _eid,
           ),
           callback: (_) => _agendarRecarregar(),
         )
@@ -110,50 +140,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _carregarDados({bool silencioso = false}) async {
-    if (_uid.isEmpty || _refreshing) return;
+    if (_eid.isEmpty || _refreshing) return;
     _refreshing = true;
     if (!silencioso) setState(() => _loadingStats = true);
     try {
-      final agora = DateTime.now();
-      final inicioDia = DateTime(agora.year, agora.month, agora.day);
-
-      await th.carregarFaixas();
+      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      final inicioDia = DateTime(agora.year, agora.month, agora.day)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
+      final diasDesdeSegunda = agora.weekday - 1;
+      final inicioSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 1)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
+      final fimSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda + 6, 23, 59)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
 
       final r = await Future.wait<dynamic>([
-        _supabase.from('entregadores').select('nome').eq('id', _uid).single(),
-        // Todos os pedidos finalizados — usados para saldo total e filtro de hoje
+        _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
+        // Pedidos finalizados de hoje — para saldo do dia
         _supabase
             .from('pedidos')
-            .select('taxa_entrega_motoboy, distancia_km, com_retorno, gorjeta, updated_at')
-            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
+            .select('taxa_motoboy,taxa_entrega,gorjeta,updated_at')
+            .or('entregador_id.eq.$_eid,motoboy_id.eq.$_eid')
             .eq('status', 'finalizado'),
-        // Saques já pagos para subtrair do saldo
+        // Pedidos da semana (seg 00:01 a dom 23:59, horário Brasília) — para saldo disponível
+        _supabase
+            .from('pedidos')
+            .select('taxa_motoboy,taxa_entrega,gorjeta')
+            .or('entregador_id.eq.$_eid,motoboy_id.eq.$_eid')
+            .eq('status', 'finalizado')
+            .gte('finalizado_em', inicioSemana)
+            .lte('finalizado_em', fimSemana),
+        // Saques da semana (qualquer status) — para descontar do saldo disponível
         _supabase
             .from('saques')
             .select('valor')
-            .eq('entregador_id', _uid)
-            .inFilter('status', ['pago', 'pendente']),
+            .eq('entregador_id', _eid)
+            .gte('created_at', inicioSemana)
+            .lte('created_at', fimSemana),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
       final todosPedidos = List<Map<String, dynamic>>.from(r[1] as List);
-      final saquesDescontados = List<Map<String, dynamic>>.from(r[2] as List);
+      final pedidosSemana = List<Map<String, dynamic>>.from(r[2] as List);
+      final saquesSemana = List<Map<String, dynamic>>.from(r[3] as List);
 
       // Pedidos de hoje para o card "Saldo do dia"
       final listaDia = todosPedidos.where((p) {
         final dt = DateTime.tryParse(p['updated_at']?.toString() ?? '');
-        return dt != null && dt.isAfter(inicioDia);
+        return dt != null && dt.isAfter(DateTime.parse(inicioDia));
       }).toList();
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      // Saldo disponível = mesma lógica do saldoDia (faixas + gorjeta) − saques pago/pendente
-      final totalGanho = todosPedidos.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
-      final totalPago = saquesDescontados.fold<double>(
-          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
-      final saldoDisponivel = (totalGanho - totalPago).clamp(0.0, double.infinity);
+      // Saldo da semana: segunda 00:01 a domingo 23:59, horário Brasília
+      final totalGanho = pedidosSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+      final totalSaques = saquesSemana.fold<double>(0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
+      final saldoDisponivel = totalGanho - totalSaques;
 
-      debugPrint('[HOME] UID=$_uid pedidos=${todosPedidos.length} totalGanho=$totalGanho totalPago=$totalPago saldo=$saldoDisponivel');
+      debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia pedidosSemana=${pedidosSemana.length} totalGanho=$totalGanho totalSaques=$totalSaques saldoDisponivel=$saldoDisponivel');
+      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: ${totalGanho - totalSaques}');
 
       if (mounted) {
         setState(() {

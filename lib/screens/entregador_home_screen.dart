@@ -124,14 +124,22 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final hoje = DateTime.now();
-      final inicioDia = DateTime(hoje.year, hoje.month, hoje.day).toIso8601String();
+      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      final inicioDia = DateTime(agora.year, agora.month, agora.day, 0, 1)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
+      final fimDia = DateTime(agora.year, agora.month, agora.day, 23, 59)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
       final pedidos = await _supabase
           .from('pedidos')
           .select('distancia_km, com_retorno, gorjeta')
           .eq('entregador_id', user.id)
           .eq('status', 'finalizado')
-          .gte('updated_at', inicioDia);
+          .gte('finalizado_em', inicioDia)
+          .lte('finalizado_em', fimDia);
       final lista = List<Map<String, dynamic>>.from(pedidos);
       double total = 0;
       for (final p in lista) {

@@ -8,7 +8,6 @@ import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
-import 'screens/cadastro_aprovacao_screen.dart';
 import 'services/notification_service.dart';
 
 const _firebaseOptions = FirebaseOptions(
@@ -105,37 +104,26 @@ class _AuthGateState extends State<AuthGate> {
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
-          .select('disponivel, status_cadastro, aprovado, status, nome')
+          .select('disponivel, status_cadastro, aprovado, status')
           .eq('id', session.user.id)
           .single();
 
       final statusCadastro = e['status_cadastro']?.toString() ?? '';
       final aprovado = e['aprovado'] == true;
       final status = e['status']?.toString() ?? '';
-      final nome = e['nome']?.toString() ?? '';
-
-      // Pendente ou em análise → aguardo aprovação
-      if (statusCadastro == 'pendente' || statusCadastro == 'em_analise') {
-        return const AguardoAprovacaoScreen();
-      }
-
-      // Tem cadastro mas não preencheu os dados ainda
-      if (!aprovado && status != 'ativo' && statusCadastro != 'aprovado' && nome.isEmpty) {
-        return const CadastroAprovacaoScreen();
-      }
-
-      // Aprovado mas não aprovado ainda → aguardo
-      if (!aprovado && status != 'ativo' && statusCadastro != 'aprovado') {
-        return const AguardoAprovacaoScreen();
-      }
 
       // Aprovado → home normal
-      if (e['disponivel'] == true) return const EntregadorHomeScreen();
-      return const HomeScreen();
+      if (aprovado || status == 'ativo' || statusCadastro == 'aprovado') {
+        if (e['disponivel'] == true) return const EntregadorHomeScreen();
+        return const HomeScreen();
+      }
+
+      // Qualquer outro status → aguardo aprovação
+      return const AguardoAprovacaoScreen();
 
     } catch (_) {
-      // Não tem registro na tabela entregadores → preencher cadastro
-      return const CadastroAprovacaoScreen();
+      // Sem registro → login
+      return const LoginScreen();
     }
   }
 

@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/location_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'pedidos_aceitos_screen.dart';
 
@@ -30,6 +33,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
   double? _lojaLat;
   double? _lojaLng;
   double _precoDinamico = 0.0;
+  StreamSubscription<Position>? _subProximidade;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -50,9 +54,20 @@ class _EntregaScreenState extends State<EntregaScreen> {
     if (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento) {
       _iniciarPollingPagamento();
     }
+    if (_etapa == EtapaEntrega.emRota) {
+      _iniciarVerificacaoProximidade();
+    }
     _obterPosicao();
     _buscarInfoLoja();
     _buscarPrecoDinamico();
+  }
+
+  Future<void> _abrirMaps(String endereco) async {
+    final encoded = Uri.encodeComponent(endereco);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _buscarPrecoDinamico() async {
@@ -146,8 +161,35 @@ class _EntregaScreenState extends State<EntregaScreen> {
     });
   }
 
+  void _iniciarVerificacaoProximidade() {
+    final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
+    final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
+    if (clienteLat == null || clienteLng == null) return;
+
+    _subProximidade = LocationService.getPositionStream().listen((pos) {
+      final distM = _calcularDistancia(
+        pos.latitude, pos.longitude,
+        clienteLat.toDouble(), clienteLng.toDouble(),
+      ) * 1000;
+      if (distM < 35) {
+        _subProximidade?.cancel();
+        _subProximidade = null;
+        if (mounted && _etapa == EtapaEntrega.emRota) _avancar();
+      }
+    }, onError: (e) {
+      debugPrint('[EntregaScreen] ⚠ Stream proximidade falhou: $e — reiniciando em 5s');
+      _subProximidade?.cancel();
+      _subProximidade = null;
+      if (!mounted || _etapa != EtapaEntrega.emRota) return;
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _etapa == EtapaEntrega.emRota) _iniciarVerificacaoProximidade();
+      });
+    }, cancelOnError: true);
+  }
+
   @override
   void dispose() {
+    _subProximidade?.cancel();
     _codigoCtrl.dispose();
     super.dispose();
   }
@@ -156,9 +198,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     setState(() { _carregando = true; _erro = null; });
     try {
       switch (_etapa) {
-
         case EtapaEntrega.aceito:
-          debugPrint('[EntregaScreen] _lojaLat=$_lojaLat, _lojaLng=$_lojaLng');
           if (_lojaLat == null || _lojaLng == null) {
             setState(() => _carregando = false);
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -172,7 +212,6 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
-            debugPrint('[EntregaScreen] distância da loja (cheguei): ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -193,7 +232,6 @@ class _EntregaScreenState extends State<EntregaScreen> {
           break;
 
         case EtapaEntrega.chegouLocal:
-          debugPrint('[EntregaScreen] _lojaLat=$_lojaLat, _lojaLng=$_lojaLng');
           if (_lojaLat == null || _lojaLng == null) {
             setState(() => _carregando = false);
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -207,7 +245,6 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
-            debugPrint('[EntregaScreen] distância da loja (saindo): ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -225,13 +262,13 @@ class _EntregaScreenState extends State<EntregaScreen> {
             'updated_at': DateTime.now().toIso8601String(),
           }).eq('id', _pedidoId);
           setState(() => _etapa = EtapaEntrega.emRota);
+          _iniciarVerificacaoProximidade();
           HapticFeedback.mediumImpact();
           break;
 
         case EtapaEntrega.emRota:
           final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
           final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
-          debugPrint('[EntregaScreen] clienteLat=$clienteLat, clienteLng=$clienteLng');
           if (clienteLat == null || clienteLng == null) {
             setState(() => _carregando = false);
             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -245,7 +282,6 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, clienteLat.toDouble(), clienteLng.toDouble()) * 1000;
-            debugPrint('[EntregaScreen] distância do cliente: ${distM.toStringAsFixed(1)}m');
             if (distM > 35) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -355,8 +391,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF7C3AED),
-                    side: const BorderSide(color: Color(0xFF7C3AED)),
+                    foregroundColor: const Color(0xFF1A56DB),
+                    side: const BorderSide(color: Color(0xFF1A56DB)),
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -424,6 +460,26 @@ class _EntregaScreenState extends State<EntregaScreen> {
     return _buildCardTela2(numero);
   }
 
+  Widget _buildEnderecoClicavel(String endereco, {Color iconColor = const Color(0xFF1A56DB)}) {
+    return GestureDetector(
+      onTap: () => _abrirMaps(endereco),
+      child: Row(children: [
+        Icon(Icons.location_on, color: iconColor, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Text(
+          endereco,
+          style: const TextStyle(
+            color: Color(0xFF60a5fa),
+            fontSize: 14,
+            decoration: TextDecoration.underline,
+            decorationColor: Color(0xFF60a5fa),
+          ),
+        )),
+        const Icon(Icons.open_in_new, color: Color(0xFF60a5fa), size: 14),
+      ]),
+    );
+  }
+
   Widget _buildCardTela1(dynamic numero) {
     final loja = widget.pedido['lojas'];
     final nomeLoja = _nomeLoja ?? loja?['nome']?.toString() ?? widget.pedido['nome_loja']?.toString() ?? 'Loja';
@@ -453,11 +509,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
         const SizedBox(height: 10),
         const Text('Endereço de coleta:', style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 0.5)),
         const SizedBox(height: 4),
-        Row(children: [
-          const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text(enderecoColeta, style: const TextStyle(color: Colors.white, fontSize: 14))),
-        ]),
+        _buildEnderecoClicavel(enderecoColeta),
         if (_distanciaLojaKm != null) ...[
           const SizedBox(height: 8),
           Row(children: [
@@ -504,25 +556,16 @@ class _EntregaScreenState extends State<EntregaScreen> {
         ]),
         const Divider(color: Color(0xFF2A2D35), height: 20),
 
-        // Endereço de coleta
         if (enderecoColeta.isNotEmpty) ...[
           const Text('COLETA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
           const SizedBox(height: 4),
-          Row(children: [
-            const Icon(Icons.store, color: Color(0xFF1A56DB), size: 16),
-            const SizedBox(width: 6),
-            Expanded(child: Text(enderecoColeta, style: const TextStyle(color: Colors.white70, fontSize: 13))),
-          ]),
+          _buildEnderecoClicavel(enderecoColeta),
           const SizedBox(height: 10),
         ],
 
         const Text('ENDEREÇO DE ENTREGA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
         const SizedBox(height: 8),
-        Row(children: [
-          const Icon(Icons.location_on, color: Color(0xFF1A56DB), size: 18),
-          const SizedBox(width: 6),
-          Expanded(child: Text(endereco, style: const TextStyle(color: Colors.white, fontSize: 15))),
-        ]),
+        _buildEnderecoClicavel(endereco),
         if (complemento.isNotEmpty) ...[
           const SizedBox(height: 6),
           Row(children: [
@@ -574,7 +617,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
       EtapaEntrega.aceito:      (Icons.store_outlined,        'Vá buscar o pedido',       'Dirija-se ao estabelecimento',      const Color(0xFF1A56DB)),
       EtapaEntrega.chegouLocal: (Icons.inventory_2_outlined,  'Chegou no local?',         'Pegue o pedido e confirme',         const Color(0xFF1A56DB)),
       EtapaEntrega.emRota:      (Icons.directions_bike,        'A caminho do cliente',     'Confirme a chegada ao destino',     const Color(0xFF1A56DB)),
-      EtapaEntrega.chegouDestino: (Icons.location_on,          'Chegou no destino!',       'Peça o código de confirmação',      const Color(0xFF7C3AED)),
+      EtapaEntrega.chegouDestino: (Icons.location_on,          'Chegou no destino!',       'Peça o código de confirmação',      const Color(0xFF1A56DB)),
     };
     final entry = config[_etapa];
     if (entry == null) return const SizedBox.shrink();
@@ -617,7 +660,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
       EtapaEntrega.aceito:         (const Color(0xFF1A56DB), 'Cheguei no local',    Icons.store),
       EtapaEntrega.chegouLocal:    (const Color(0xFF1A56DB), 'Saí para entregar',   Icons.moped),
       EtapaEntrega.emRota:         (const Color(0xFF1A56DB), 'Cheguei no destino',  Icons.location_on),
-      EtapaEntrega.chegouDestino:  (const Color(0xFF7C3AED), 'Finalizar entrega',   Icons.check_circle),
+      EtapaEntrega.chegouDestino:  (const Color(0xFF1A56DB), 'Finalizar entrega',   Icons.check_circle),
       EtapaEntrega.finalizado:     (const Color(0xFF1A56DB), 'Voltar para pedidos', Icons.list_alt),
     };
     final (cor, label, icon) = config[_etapa] ?? (const Color(0xFF1A56DB), 'Voltar', Icons.list_alt);
@@ -669,7 +712,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   Widget _buildFinalizado() {
     final gorjeta = (widget.pedido['gorjeta'] as num?)?.toDouble() ?? 0;
-    final taxa = (widget.pedido['taxa_entrega'] as num?)?.toDouble() ?? 0;
+    final taxa = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? (widget.pedido['taxa_entrega'] as num?)?.toDouble() ?? 0;
     final totalMotoboy = taxa + gorjeta + _precoDinamico;
 
     return Column(children: [

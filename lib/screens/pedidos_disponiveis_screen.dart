@@ -115,7 +115,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       final results = await Future.wait([
         _supabase
             .from('pedidos')
-            .select('*, lojas(nome, latitude, longitude)')
+            .select('*, lojas(nome, endereco, latitude, longitude)')
             .inFilter('status', ['pronto'])
             .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
             .order('pronto_em', ascending: true),
@@ -462,7 +462,6 @@ class _State extends State<PedidosDisponiveisScreen> {
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Linha 1: ícone loja + nome + número
             Row(children: [
               Container(
                 width: 42,
@@ -489,7 +488,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 10),
 
-            // Linha 2: distância até a loja
             Row(children: [
               const Icon(Icons.location_on, color: Colors.white, size: 16),
               const SizedBox(width: 6),
@@ -502,7 +500,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 8),
 
-            // Linha 3: pontos
             Row(children: [
               const Icon(Icons.star_border, color: Colors.white, size: 16),
               const SizedBox(width: 6),
@@ -511,7 +508,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 8),
 
-            // Linha 4: tag Bag térmica
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -524,7 +520,6 @@ class _State extends State<PedidosDisponiveisScreen> {
 
             const SizedBox(height: 12),
 
-            // Linha 5: distância percurso + valor — COR CORRIGIDA
             Row(children: [
               const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
               const SizedBox(width: 4),

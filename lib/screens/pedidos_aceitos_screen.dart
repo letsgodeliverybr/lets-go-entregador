@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../widgets/pedido_card_widget.dart';
 import '../utils/status_utils.dart' as su;
@@ -65,7 +66,15 @@ class _State extends State<PedidosAceitosScreen> {
             .from('pedidos')
             .select('*, lojas(nome, endereco, latitude, longitude)')
             .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
-            .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota', 'chegou_destino', 'retornando'])
+            .inFilter('status', [
+              'aceito',
+              'no_local',
+              'chegou_local',
+              'chegou_no_local',
+              'em_rota',
+              'chegou_destino',
+              'retornando',
+            ])
             .order('aceito_em', ascending: false),
         _supabase
             .from('configuracoes')
@@ -93,23 +102,62 @@ class _State extends State<PedidosAceitosScreen> {
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
   }
 
-  // Borda sempre azul independente do status
+  // Pega pedidos em_rota e abre itinerário no Google Maps
+  Future<void> _otimizarRota() async {
+    final emRota = _pedidos.where((p) {
+      final s = p['status_detalhado'] ?? p['status'] ?? '';
+      return s == 'em_rota';
+    }).toList();
+
+    if (emRota.isEmpty) return;
+
+    final enderecos = emRota
+        .map((p) => p['endereco']?.toString() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (enderecos.isEmpty) return;
+
+    // Origem: posição atual do entregador
+    String url;
+    if (_posicaoAtual != null) {
+      final origem = '${_posicaoAtual!.latitude},${_posicaoAtual!.longitude}';
+      final destinos = enderecos.map(Uri.encodeComponent).join('/');
+      url = 'https://www.google.com/maps/dir/$origem/$destinos';
+    } else {
+      final destinos = enderecos.map(Uri.encodeComponent).join('/');
+      url = 'https://www.google.com/maps/dir/$destinos';
+    }
+
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Color _cor(String s) => su.statusColor(s);
 
   String _label(String s) {
     switch (s) {
-      case 'aceito':       return 'Aceito';
+      case 'aceito':          return 'Aceito';
       case 'no_local':
-      case 'chegou_local': return 'No local';
+      case 'chegou_local':
+      case 'chegou_no_local': return 'No local';
       case 'em_rota':         return 'Em rota';
-      case 'chegou_destino':  return 'Chegou no destino';
+      case 'chegou_destino':  return 'Cheguei no local';
       case 'retornando':      return 'Retornando';
-      default:             return s;
+      default:                return s;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Conta pedidos em_rota para mostrar botão
+    final qtdEmRota = _pedidos.where((p) {
+      final s = p['status_detalhado'] ?? p['status'] ?? '';
+      return s == 'em_rota';
+    }).length;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 2),
@@ -142,42 +190,71 @@ class _State extends State<PedidosAceitosScreen> {
                   const Text('Aceite um pedido na aba Disponíveis',
                       style: TextStyle(color: Color(0xFF555), fontSize: 13)),
                 ]))
-              : RefreshIndicator(
-                  onRefresh: _buscar,
-                  color: const Color(0xFF1A56DB),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _pedidos.length,
-                    itemBuilder: (_, i) {
-                      final p = _pedidos[i];
-                      final status = p['status_detalhado'] ?? p['status'] ?? 'aceito';
-                      final isRetornando = status == 'retornando';
-                      final isChegouDestino = status == 'chegou_destino';
-                      double? distMotoboyLoja;
-                      if (_posicaoAtual != null) {
-                        final loja = p['lojas'];
-                        final lat = (loja?['lat'] ?? loja?['latitude']) as num?;
-                        final lng = (loja?['lng'] ?? loja?['longitude']) as num?;
-                        if (lat != null && lng != null) {
-                          distMotoboyLoja = _calcularDistancia(
-                            _posicaoAtual!.latitude, _posicaoAtual!.longitude,
-                            lat.toDouble(), lng.toDouble(),
-                          );
-                        }
-                      }
-                      return PedidoCardWidget(
-                        pedido: p,
-                        statusLabel: _label(status),
-                        statusCor: _cor(status),
-                        botaoCor: _cor(status),
-                        isRetornando: isRetornando,
-                        isChegouDestino: isChegouDestino,
-                        distMotoboyLojaKm: distMotoboyLoja,
-                        precoDinamico: _precoDinamico,
-                        onTap: () => _abrirEntrega(p),
-                      );
-                    },
-                  ),
+              : Column(
+                  children: [
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _buscar,
+                        color: const Color(0xFF1A56DB),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _pedidos.length,
+                          itemBuilder: (_, i) {
+                            final p = _pedidos[i];
+                            final status = p['status_detalhado'] ?? p['status'] ?? 'aceito';
+                            final isRetornando = status == 'retornando';
+                            final isChegouDestino = status == 'chegou_destino';
+                            double? distMotoboyLoja;
+                            if (_posicaoAtual != null) {
+                              final loja = p['lojas'];
+                              final lat = (loja?['lat'] ?? loja?['latitude']) as num?;
+                              final lng = (loja?['lng'] ?? loja?['longitude']) as num?;
+                              if (lat != null && lng != null) {
+                                distMotoboyLoja = _calcularDistancia(
+                                  _posicaoAtual!.latitude, _posicaoAtual!.longitude,
+                                  lat.toDouble(), lng.toDouble(),
+                                );
+                              }
+                            }
+                            return PedidoCardWidget(
+                              pedido: p,
+                              statusLabel: _label(status),
+                              statusCor: _cor(status),
+                              botaoCor: _cor(status),
+                              isRetornando: isRetornando,
+                              isChegouDestino: isChegouDestino,
+                              distMotoboyLojaKm: distMotoboyLoja,
+                              precoDinamico: _precoDinamico,
+                              onTap: () => _abrirEntrega(p),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    // Botão otimizar rota — aparece quando tem 2+ pedidos em_rota
+                    if (qtdEmRota >= 2)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1A56DB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            onPressed: _otimizarRota,
+                            icon: const Icon(Icons.route, size: 20),
+                            label: Text(
+                              'Otimizar rota ($qtdEmRota entregas)',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
     );
   }

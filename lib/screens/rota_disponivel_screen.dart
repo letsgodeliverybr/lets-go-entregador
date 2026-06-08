@@ -6,8 +6,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
-import '../utils/status_utils.dart' as su;
 import '../utils/taxa_helper.dart' as th;
+import '../utils/status_utils.dart' as su;
 import 'entrega_screen.dart';
 import 'pedidos_disponiveis_screen.dart';
 
@@ -138,27 +138,25 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
     final numero = _pedido['numero']?.toString() ?? _pedido['id']?.toString().substring(0, 4) ?? '—';
+    final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Loja').toString();
+    final nomeLabel = nomeLoja.length > 12 ? nomeLoja.substring(0, 12) : nomeLoja;
 
-    // Marcador do entregador — igual à home (círculo azul + 🛵)
+    // Capacete SVG azul
     if (_posicaoEntregador != null) {
       markers.add(Marker(
         point: _posicaoEntregador!,
-        width: 64, height: 80,
+        width: 64, height: 90,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A56DB),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 8)],
+            SizedBox(
+              width: 48, height: 48,
+              child: SvgPicture.string(
+                su.svgHelmet('#1A56DB', '#0E3A99'),
+                fit: BoxFit.contain,
               ),
-              child: const Center(child: Text('🛵', style: TextStyle(fontSize: 22))),
             ),
-            const SizedBox(height: 2),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -173,61 +171,53 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
       ));
     }
 
-    // Pin da loja SVG igual à home
+    // Loja — círculo azul + store icon
     if (_lojaLat != null && _lojaLng != null) {
-      final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Loja').toString();
       markers.add(Marker(
         point: LatLng(_lojaLat!, _lojaLng!),
-        width: 56, height: 60,
+        width: 64, height: 80,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 44, height: 44,
-              child: SvgPicture.string(su.svgPinLoja, fit: BoxFit.contain),
-            ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              width: 44, height: 44,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A56DB),
-                borderRadius: BorderRadius.circular(4),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 8)],
               ),
-              child: Text(
-                nomeLoja.length > 8 ? nomeLoja.substring(0, 8) : nomeLoja,
-                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
-              ),
+              child: const Icon(Icons.store, color: Colors.white, size: 22),
             ),
           ],
         ),
       ));
     }
 
-    // Marcador do pedido — círculo AZUL com número igual à home
+    // Pedido — card azul com seta igual à home
     if (_clienteLat != null && _clienteLng != null) {
       markers.add(Marker(
         point: LatLng(_clienteLat!, _clienteLng!),
-        width: 56, height: 60,
+        width: 80, height: 40,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 36, height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFF1A56DB),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 6)],
-              ),
-              child: const Icon(Icons.location_on, color: Colors.white, size: 18),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A56DB),
-                borderRadius: BorderRadius.circular(4),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 4)],
               ),
               child: Text('#$numero',
-                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+            CustomPaint(
+              size: const Size(10, 6),
+              painter: _TrianglePainter(const Color(0xFF1A56DB)),
             ),
           ],
         ),
@@ -243,6 +233,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final centerLng = _lojaLng ?? _clienteLng ?? -47.8103;
     final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Estabelecimento').toString();
     final endCliente = (_pedido['endereco'] ?? '—').toString();
+    final endLoja = (_pedido['lojas']?['endereco'] ?? '—').toString();
     final km = double.tryParse(_pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = _pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
@@ -299,28 +290,27 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
               const SizedBox(width: 10),
               Expanded(child: Text(nomeLoja,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  maxLines: 2, overflow: TextOverflow.ellipsis)),
               const SizedBox(width: 8),
-              Text('#$numero', style: const TextStyle(color: Colors.white54, fontSize: 13)),
+              Text('#$numero', style: const TextStyle(color: Colors.white, fontSize: 13)),
             ]),
             const SizedBox(height: 10),
 
-            // Linha 2: km de onde você está
+            // Endereço de coleta
             Row(children: [
-              const Icon(Icons.location_on, color: Colors.white, size: 16),
+              const Icon(Icons.store, color: Colors.white, size: 14),
               const SizedBox(width: 6),
-              Text(
-                _distMotoboyLoja > 0
-                    ? '${_distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
-                    : '— km de onde você está',
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
+              Expanded(child: Text(endLoja,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
             ]),
             const SizedBox(height: 8),
 
+
+
             // Linha 3: endereço entrega
             Row(children: [
-              const Icon(Icons.location_pin, color: Color(0xFFec4899), size: 16),
+              const Icon(Icons.location_pin, color: Colors.white, size: 16),
               const SizedBox(width: 6),
               Expanded(child: Text(endCliente, style: const TextStyle(color: Colors.white, fontSize: 13))),
             ]),
@@ -334,14 +324,17 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             ]),
             const SizedBox(height: 8),
 
-            // Linha 5: bag térmica
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white),
+            // Linha 5: bag térmica à esquerda
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white),
+                ),
+                child: const Text('Bag térmica', style: TextStyle(color: Colors.white, fontSize: 12)),
               ),
-              child: const Text('Bag térmica', style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
             const SizedBox(height: 12),
 

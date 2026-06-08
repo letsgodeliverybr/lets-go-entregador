@@ -2,12 +2,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'location_service.dart';
 
 class TrackingService {
   static final _supabase = Supabase.instance.client;
   static StreamSubscription<Position>? _sub;
-  static Timer? _timer;
   static bool _ativo = false;
   static Position? _ultimaPosicao;
   static String? _entregadorId;
@@ -19,6 +19,8 @@ class TrackingService {
 
     debugPrint('[TrackingService] ▶ Iniciando rastreamento para $entregadorId');
 
+    WakelockPlus.enable();
+
     // 1. Posição inicial imediata
     final posInicial = await LocationService.getCurrentPosition();
     if (posInicial != null) {
@@ -27,28 +29,44 @@ class TrackingService {
     }
 
     // 2. Stream do GPS — recebe atualizações quando há movimento
+    _assinarStream(entregadorId);
+    debugPrint('[TrackingService] Stream GPS assinado: $_sub');
+
+    // 3. Loop resiliente: busca posição a cada 8s, se autoreinicia após erro
+    _loopEnvio(entregadorId);
+  }
+
+  static Future<void> _loopEnvio(String entregadorId) async {
+    await Future.delayed(const Duration(seconds: 8));
+    if (!_ativo) return;
+    final pos = await LocationService.getCurrentPosition();
+    if (pos != null) {
+      _ultimaPosicao = pos;
+      await _enviar(entregadorId, pos);
+    } else if (_ultimaPosicao != null) {
+      await _enviar(entregadorId, _ultimaPosicao!);
+    }
+    if (_ativo) _loopEnvio(entregadorId);
+  }
+
+  static void _assinarStream(String entregadorId) {
+    _sub?.cancel();
     _sub = LocationService.getPositionStream().listen(
       (pos) {
         _ultimaPosicao = pos;
         _enviar(entregadorId, pos);
       },
-      onError: (e) => debugPrint('[TrackingService] ⚠ Erro no stream: $e'),
-      cancelOnError: false,
+      onError: (e) {
+        debugPrint('[TrackingService] ⚠ Erro no stream: $e — reiniciando em 10s');
+        _sub?.cancel();
+        _sub = null;
+        if (!_ativo) return;
+        Future.delayed(const Duration(seconds: 10), () {
+          if (_ativo) _assinarStream(entregadorId);
+        });
+      },
+      cancelOnError: true,
     );
-    debugPrint('[TrackingService] Stream GPS assinado: $_sub');
-
-    // 3. Timer independente: busca posição atual a cada 5s e envia
-    //    Garante envio contínuo mesmo que o stream não dispare (dispositivo parado)
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      final pos = await LocationService.getCurrentPosition();
-      if (pos != null) {
-        _ultimaPosicao = pos;
-        await _enviar(entregadorId, pos);
-      } else if (_ultimaPosicao != null) {
-        // Se getCurrentPosition falhar, reenvia a última posição conhecida
-        await _enviar(entregadorId, _ultimaPosicao!);
-      }
-    });
   }
 
   static Future<void> _enviar(String entregadorId, Position pos) async {
@@ -68,12 +86,11 @@ class TrackingService {
 
   static Future<void> parar(String entregadorId) async {
     _ativo = false;
-    _timer?.cancel();
-    _timer = null;
     await _sub?.cancel();
     _sub = null;
     _ultimaPosicao = null;
     _entregadorId = null;
+    WakelockPlus.disable();
     debugPrint('[TrackingService] ■ Rastreamento parado');
     try {
       await _supabase.from('entregadores').update({
