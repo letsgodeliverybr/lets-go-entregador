@@ -56,7 +56,8 @@ class _MinhaContaScreenState extends State<MinhaContaScreen> {
       if (!mounted) return;
       setState(() {
         _dadosEditados  = e['dados_editados'] == true;
-        _nomeCtrl.text       = e['nome'] ?? '';
+        final nomeRaw = e['nome']?.toString() ?? '';
+        _nomeCtrl.text       = nomeRaw.contains('@') ? '' : nomeRaw;
         _telefoneCtrl.text   = e['telefone'] ?? '';
         _cpfCtrl.text        = e['cpf'] ?? '';
         _rgCtrl.text         = e['rg'] ?? '';

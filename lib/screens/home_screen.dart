@@ -207,7 +207,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (mounted) {
         setState(() {
-          _nome = entregador['nome'] ?? '';
+          final nomeRaw = entregador['nome']?.toString() ?? '';
+          _nome = nomeRaw.contains('@') ? '' : nomeRaw;
           _saldoDia = totalDia;
           _entregasHoje = listaDia.length;
           _saldoSemana = saldoDisponivel;

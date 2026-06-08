@@ -311,7 +311,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final nomeCompleto = _entregador?['nome']?.toString() ?? '';
-    final nome = nomeCompleto.isNotEmpty ? nomeCompleto.split(' ').first : 'Motoboy';
+    final nome = (nomeCompleto.isNotEmpty && !nomeCompleto.contains('@'))
+        ? nomeCompleto.split(' ').first
+        : 'Motoboy';
     final pos = _posicaoAtual ?? const LatLng(-21.1775, -47.8103);
 
     return Scaffold(

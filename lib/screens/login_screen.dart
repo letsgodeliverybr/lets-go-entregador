@@ -37,13 +37,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         await supabase.from('entregadores').upsert({
           'id': user.id,
-          'nome': user.email ?? 'Entregador',
           'status': 'ativo',
           'disponivel': false,
           'lat': -21.1775,
           'lng': -47.8103,
           'updated_at': DateTime.now().toIso8601String(),
-        });
+        }, ignoreDuplicates: false);
         await NotificationService.saveFcmToken(user.id);
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
