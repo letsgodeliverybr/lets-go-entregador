@@ -36,6 +36,9 @@ class PedidoCardWidget extends StatelessWidget {
     final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final taxaFinal = taxaMotoboy + gorjeta + precoDinamico;
+    final taxaSemRetorno = comRetorno
+        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + gorjeta + precoDinamico
+        : 0.0;
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final loja = pedido['lojas'];
@@ -107,15 +110,31 @@ class PedidoCardWidget extends StatelessWidget {
               ]),
               const SizedBox(height: 8),
 
-              // Linha 4: tag "Bag térmica"
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white),
-                ),
-                child: const Text('Bag térmica',
-                    style: TextStyle(color: Colors.white, fontSize: 12)),
+              // Linha 4: tags "Bag térmica" + "RETORNO"
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white),
+                    ),
+                    child: const Text('Bag térmica',
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                  if (comRetorno)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white),
+                      ),
+                      child: const Text('RETORNO',
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                ],
               ),
               const SizedBox(height: 12),
 
@@ -126,18 +145,27 @@ class PedidoCardWidget extends StatelessWidget {
                 Text('${distanciaKm.toStringAsFixed(2)} km',
                     style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 const Spacer(),
-                if (gorjeta > 0 || precoDinamico > 0) ...[
-                  Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
+                if (comRetorno) ...[
+                  Text('R\$${taxaSemRetorno.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.red, fontSize: 13,
                         decoration: TextDecoration.lineThrough,
                         decorationColor: Colors.red,
                       )),
                   const SizedBox(width: 8),
+                ] else if (gorjeta > 0 || precoDinamico > 0) ...[
+                  Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.white38, fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.white38,
+                      )),
+                  const SizedBox(width: 8),
                 ],
                 Text('R\$${taxaFinal.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                    style: TextStyle(
+                        color: precoDinamico > 0 ? Colors.red : Colors.white,
+                        fontSize: 15, fontWeight: FontWeight.w700)),
               ]),
 
               // Chegou no destino indicator
