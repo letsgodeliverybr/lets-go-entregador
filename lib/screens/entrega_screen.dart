@@ -167,11 +167,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
     if (clienteLat == null || clienteLng == null) return;
 
     _subProximidade = LocationService.getPositionStream().listen((pos) {
-      final distM = _calcularDistancia(
+      final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude,
         clienteLat.toDouble(), clienteLng.toDouble(),
-      ) * 1000;
-      if (distM < 35) {
+      );
+      if (distM <= 100) {
         _subProximidade?.cancel();
         _subProximidade = null;
         if (mounted && _etapa == EtapaEntrega.emRota) _avancar();

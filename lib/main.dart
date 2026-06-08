@@ -1,14 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/entregador_home_screen.dart';
+import 'screens/entrega_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
+import 'widgets/pedido_card_widget.dart';
+import 'utils/taxa_helper.dart' as th;
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 const _firebaseOptions = FirebaseOptions(
   apiKey: 'AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10',
@@ -47,12 +54,128 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _supabase = Supabase.instance.client;
+  StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
+  StreamSubscription<AuthState>? _authSub;
+  OverlayEntry? _overlayEntry;
+  Timer? _overlayTimer;
+  Set<String> _idsConhecidos = {};
+  bool _primeiraEmissao = true;
+
+  @override
+  void initState() {
+    super.initState();
+    th.carregarFaixas();
+
+    _authSub = _supabase.auth.onAuthStateChange.listen((data) {
+      if (data.session != null) {
+        _iniciarStream();
+      } else {
+        _cancelarStream();
+        _fecharOverlay();
+      }
+    });
+
+    if (_supabase.auth.currentSession != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _iniciarStream());
+    }
+  }
+
+  void _iniciarStream() {
+    _cancelarStream();
+    _primeiraEmissao = true;
+    _idsConhecidos = {};
+    _streamSub = _supabase
+        .from('pedidos')
+        .stream(primaryKey: ['id'])
+        .eq('status', 'pronto')
+        .listen(_onPedidosUpdate);
+  }
+
+  void _cancelarStream() {
+    _streamSub?.cancel();
+    _streamSub = null;
+  }
+
+  Future<void> _onPedidosUpdate(List<Map<String, dynamic>> lista) async {
+    // Filter motoboy_id is null in Dart
+    final disponiveis = lista
+        .where((p) => (p['motoboy_id']?.toString() ?? '').isEmpty)
+        .toList();
+
+    final idsAtuais = disponiveis.map((p) => p['id'].toString()).toSet();
+
+    if (_primeiraEmissao) {
+      _idsConhecidos = idsAtuais;
+      _primeiraEmissao = false;
+      return;
+    }
+
+    final novosIds = idsAtuais.difference(_idsConhecidos);
+    _idsConhecidos = idsAtuais;
+
+    if (novosIds.isEmpty) return;
+
+    // Fetch the first new pedido with lojas join
+    try {
+      final data = await _supabase
+          .from('pedidos')
+          .select('*, lojas(nome, endereco, latitude, longitude)')
+          .eq('id', novosIds.first)
+          .eq('status', 'pronto')
+          .maybeSingle();
+      if (data == null) return;
+      _mostrarOverlay(data);
+    } catch (_) {}
+  }
+
+  void _mostrarOverlay(Map<String, dynamic> pedido) {
+    _fecharOverlay();
+    final overlay = navigatorKey.currentState?.overlay;
+    if (overlay == null) return;
+
+    _overlayEntry = OverlayEntry(
+      builder: (_) => _PedidoOverlay(
+        pedido: pedido,
+        onRejeitar: _fecharOverlay,
+        onAceitar: (pedidoAceito) {
+          _fecharOverlay();
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedidoAceito)),
+          );
+        },
+      ),
+    );
+    overlay.insert(_overlayEntry!);
+    _overlayTimer = Timer(const Duration(seconds: 30), _fecharOverlay);
+  }
+
+  void _fecharOverlay() {
+    _overlayTimer?.cancel();
+    _overlayTimer = null;
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _cancelarStream();
+    _fecharOverlay();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Lets Go Delivery',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -71,6 +194,245 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+// ─── Overlay Widget ───────────────────────────────────────────────────────────
+
+class _PedidoOverlay extends StatefulWidget {
+  final Map<String, dynamic> pedido;
+  final VoidCallback onRejeitar;
+  final void Function(Map<String, dynamic>) onAceitar;
+
+  const _PedidoOverlay({
+    required this.pedido,
+    required this.onRejeitar,
+    required this.onAceitar,
+  });
+
+  @override
+  State<_PedidoOverlay> createState() => _PedidoOverlayState();
+}
+
+class _PedidoOverlayState extends State<_PedidoOverlay> {
+  final _supabase = Supabase.instance.client;
+  double? _distMotoboyLojaKm;
+  double _precoDinamico = 0;
+  bool _aceitando = false;
+  int _segundos = 30;
+  Timer? _countdown;
+
+  @override
+  void initState() {
+    super.initState();
+    _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _segundos = (_segundos - 1).clamp(0, 30));
+    });
+    _carregarDados();
+  }
+
+  @override
+  void dispose() {
+    _countdown?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _carregarDados() async {
+    // Position for distance to store
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium);
+      final loja = widget.pedido['lojas'];
+      if (loja != null &&
+          loja['latitude'] != null &&
+          loja['longitude'] != null) {
+        final distM = Geolocator.distanceBetween(
+          pos.latitude,
+          pos.longitude,
+          (loja['latitude'] as num).toDouble(),
+          (loja['longitude'] as num).toDouble(),
+        );
+        if (mounted) setState(() => _distMotoboyLojaKm = distM / 1000);
+      }
+    } catch (_) {}
+
+    // Dynamic price
+    try {
+      final data = await _supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'preco_dinamico_motoboy')
+          .maybeSingle();
+      final v =
+          double.tryParse((data as Map?)?['valor']?.toString() ?? '0') ?? 0;
+      if (mounted) setState(() => _precoDinamico = v);
+    } catch (_) {}
+  }
+
+  Future<void> _aceitar() async {
+    if (_aceitando) return;
+    setState(() => _aceitando = true);
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      widget.onRejeitar();
+      return;
+    }
+    try {
+      final result = await _supabase
+          .from('pedidos')
+          .update({
+            'status': 'aceito',
+            'status_detalhado': 'aceito',
+            'aceito_em': DateTime.now().toIso8601String(),
+            'motoboy_id': user.id,
+            'entregador_id': user.id,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('status', 'pronto')
+          .eq('id', widget.pedido['id'])
+          .select('*, lojas(nome, endereco, latitude, longitude)');
+
+      if (result.isEmpty) {
+        // Pedido already taken by another driver
+        if (mounted) setState(() => _aceitando = false);
+        widget.onRejeitar();
+        return;
+      }
+      widget.onAceitar(Map<String, dynamic>.from(result[0] as Map));
+    } catch (_) {
+      if (mounted) setState(() => _aceitando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D0F14),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF1A56DB), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.6),
+                    blurRadius: 24,
+                    offset: const Offset(0, -6),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header: label + countdown
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1A56DB),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(18),
+                        topRight: Radius.circular(18),
+                      ),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.notifications_active,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Novo Pedido Disponível!',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Text('${_segundos}s',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ]),
+                  ),
+
+                  // PedidoCardWidget — identical to tela disponíveis
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: PedidoCardWidget(
+                      pedido: widget.pedido,
+                      distMotoboyLojaKm: _distMotoboyLojaKm,
+                      precoDinamico: _precoDinamico,
+                    ),
+                  ),
+
+                  // Rejeitar / Aceitar buttons
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                    child: Row(children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: widget.onRejeitar,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white54,
+                            side: const BorderSide(color: Colors.white24),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text('Rejeitar',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: _aceitando ? null : _aceitar,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A56DB),
+                            foregroundColor: Colors.white,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          child: _aceitando
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Text('Aceitar',
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── AuthGate ─────────────────────────────────────────────────────────────────
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -112,17 +474,13 @@ class _AuthGateState extends State<AuthGate> {
       final aprovado = e['aprovado'] == true;
       final status = e['status']?.toString() ?? '';
 
-      // Aprovado → home normal
       if (aprovado || status == 'ativo' || statusCadastro == 'aprovado') {
         if (e['disponivel'] == true) return const EntregadorHomeScreen();
         return const HomeScreen();
       }
 
-      // Qualquer outro status → aguardo aprovação
       return const AguardoAprovacaoScreen();
-
     } catch (_) {
-      // Sem registro → login
       return const LoginScreen();
     }
   }

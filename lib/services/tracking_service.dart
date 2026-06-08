@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'location_service.dart';
+import 'foreground_service.dart';
 
 class TrackingService {
   static final _supabase = Supabase.instance.client;
@@ -20,6 +21,7 @@ class TrackingService {
     debugPrint('[TrackingService] ▶ Iniciando rastreamento para $entregadorId');
 
     WakelockPlus.enable();
+    await ForegroundService.iniciar(entregadorId);
 
     // 1. Posição inicial imediata
     final posInicial = await LocationService.getCurrentPosition();
@@ -91,6 +93,7 @@ class TrackingService {
     _ultimaPosicao = null;
     _entregadorId = null;
     WakelockPlus.disable();
+    await ForegroundService.parar();
     debugPrint('[TrackingService] ■ Rastreamento parado');
     try {
       await _supabase.from('entregadores').update({

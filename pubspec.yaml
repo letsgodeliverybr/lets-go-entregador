@@ -26,6 +26,7 @@ dependencies:
   firebase_messaging: any
   workmanager: ^0.5.2
   wakelock_plus: ^1.1.4
+  flutter_foreground_task: ^8.0.0
 
 dev_dependencies:
   flutter_test:
