@@ -37,8 +37,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final temRetorno = pedido['com_retorno'] == true || pedido['retorno'] == true;
     double base = th.calcularTaxaMotoboy(km, temRetorno, th.faixasGlobais);
-    if (_precoDinamico > 0) base += 1.60;
-    return base + gorjeta;
+    return base + _precoDinamico + gorjeta;
   }
 
   @override
@@ -122,7 +121,7 @@ class _State extends State<PedidosDisponiveisScreen> {
         _supabase
             .from('configuracoes')
             .select('valor')
-            .eq('chave', 'preco_dinamico_motoboy')
+            .eq('chave', 'preco_dinamico_entregador')
             .maybeSingle(),
       ]);
 
@@ -425,13 +424,17 @@ class _State extends State<PedidosDisponiveisScreen> {
   Widget _buildCard(Map<String, dynamic> pedido) {
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final taxaFinal = _calcTaxaMotoboy(pedido);
-    final taxaBase = taxaFinal - gorjeta - (_precoDinamico > 0 ? 1.60 : 0.0);
+    final taxaBase = taxaFinal - gorjeta - _precoDinamico;
     final temBonus = gorjeta > 0 || _precoDinamico > 0;
 
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final pontos = pedido['pontos'] ?? 4;
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
+    final comRetorno = pedido['com_retorno'] == true;
+    final taxaSemRetorno = comRetorno
+        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + _precoDinamico + gorjeta
+        : 0.0;
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
 
@@ -508,14 +511,34 @@ class _State extends State<PedidosDisponiveisScreen> {
             ]),
             const SizedBox(height: 8),
 
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white),
-              ),
-              child: const Text('Bag térmica',
-                  style: TextStyle(color: Colors.white, fontSize: 12)),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white),
+                  ),
+                  child: const Text('Bag térmica',
+                      style: TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+                if (comRetorno)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: const Color(0xFF1A56DB).withOpacity(0.18),
+                      border: Border.all(color: const Color(0xFF1A56DB)),
+                    ),
+                    child: const Text('RETORNO',
+                        style: TextStyle(
+                            color: Color(0xFF1A56DB),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ],
             ),
 
             const SizedBox(height: 12),
@@ -526,8 +549,8 @@ class _State extends State<PedidosDisponiveisScreen> {
               Text('${distanciaKm.toStringAsFixed(2)} km',
                   style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
               const Spacer(),
-              if (temBonus) ...[
-                Text('R\$${taxaBase.toStringAsFixed(2)}',
+              if (comRetorno) ...[
+                Text('R\$${taxaSemRetorno.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: Colors.red,
                       fontSize: 13,
@@ -535,10 +558,23 @@ class _State extends State<PedidosDisponiveisScreen> {
                       decorationColor: Colors.red,
                     )),
                 const SizedBox(width: 8),
+              ] else if (temBonus) ...[
+                Text('R\$${taxaBase.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 13,
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Colors.white38,
+                    )),
+                const SizedBox(width: 8),
               ],
               Text('R\$${taxaFinal.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: comRetorno
+                          ? const Color(0xFF10b981)
+                          : _precoDinamico > 0
+                              ? Colors.red
+                              : Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold)),
             ]),
