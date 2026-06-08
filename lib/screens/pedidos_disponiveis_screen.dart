@@ -529,14 +529,10 @@ class _State extends State<PedidosDisponiveisScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
-                      color: const Color(0xFF1A56DB).withOpacity(0.18),
-                      border: Border.all(color: const Color(0xFF1A56DB)),
+                      border: Border.all(color: Colors.white),
                     ),
                     child: const Text('RETORNO',
-                        style: TextStyle(
-                            color: Color(0xFF1A56DB),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold)),
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                   ),
               ],
             ),
@@ -570,11 +566,7 @@ class _State extends State<PedidosDisponiveisScreen> {
               ],
               Text('R\$${taxaFinal.toStringAsFixed(2)}',
                   style: TextStyle(
-                      color: comRetorno
-                          ? const Color(0xFF10b981)
-                          : _precoDinamico > 0
-                              ? Colors.red
-                              : Colors.white,
+                      color: _precoDinamico > 0 ? Colors.red : Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold)),
             ]),
