@@ -420,34 +420,18 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                         markers: _lojasAtivas.map((loja) {
                           final lat = (loja['latitude'] as num).toDouble();
                           final lng = (loja['longitude'] as num).toDouble();
-                          final nome = (loja['nome']?.toString() ?? 'Loja').split(' ').first;
                           return Marker(
                             point: LatLng(lat, lng),
-                            width: 64, height: 68,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 40, height: 40,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1A56DB),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2.5),
-                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 8)],
-                                  ),
-                                  child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1A56DB),
-                                    borderRadius: BorderRadius.circular(4),
-                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 4)],
-                                  ),
-                                  child: Text(nome,
-                                      style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
-                                ),
-                              ],
+                            width: 44, height: 44,
+                            child: Container(
+                              width: 40, height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A56DB),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2.5),
+                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.5), blurRadius: 8)],
+                              ),
+                              child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 20),
                             ),
                           );
                         }).toList(),
