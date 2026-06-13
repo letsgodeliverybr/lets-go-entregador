@@ -393,7 +393,7 @@ class _State extends State<AceitarPedidoScreen> {
                                 ? 'R\$ ${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
                                 : 'R\$ ${taxaTotal.toStringAsFixed(2)}',
                             style: const TextStyle(
-                                color: Color(0xFF10b981),
+                                color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold),
                           ),

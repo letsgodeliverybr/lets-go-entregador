@@ -386,7 +386,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
                 precoDinamico > 0
                     ? 'R\$ ${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
                     : 'R\$ ${taxaTotal.toStringAsFixed(2)}',
-                style: const TextStyle(color: Color(0xFF10b981), fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ]),
 

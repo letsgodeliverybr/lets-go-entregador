@@ -270,7 +270,7 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
       final data = await _supabase
           .from('configuracoes')
           .select('valor')
-          .eq('chave', 'preco_dinamico_motoboy')
+          .eq('chave', 'preco_dinamico_entregador')
           .maybeSingle();
       final v =
           double.tryParse((data as Map?)?['valor']?.toString() ?? '0') ?? 0;
