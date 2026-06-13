@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,8 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/entregador_home_screen.dart';
-import 'screens/entrega_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
+import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
@@ -62,6 +63,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _supabase = Supabase.instance.client;
+  final _audioPlayer = AudioPlayer();
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
   OverlayEntry? _overlayEntry;
@@ -145,16 +147,28 @@ class _MyAppState extends State<MyApp> {
       builder: (_) => _PedidoOverlay(
         pedido: pedido,
         onRejeitar: _fecharOverlay,
-        onAceitar: (pedidoAceito) {
-          _fecharOverlay();
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => EntregaScreen(pedido: pedidoAceito)),
-          );
-        },
       ),
     );
     overlay.insert(_overlayEntry!);
     _overlayTimer = Timer(const Duration(seconds: 30), _fecharOverlay);
+    _tocarSom();
+  }
+
+  Future<void> _tocarSom() async {
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setAudioSource(
+        ConcatenatingAudioSource(
+          children: List.generate(
+            2,
+            (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
+          ),
+        ),
+      );
+      await _audioPlayer.play();
+    } catch (e) {
+      debugPrint('[Overlay] Áudio falhou: $e');
+    }
   }
 
   void _fecharOverlay() {
@@ -162,6 +176,7 @@ class _MyAppState extends State<MyApp> {
     _overlayTimer = null;
     _overlayEntry?.remove();
     _overlayEntry = null;
+    _audioPlayer.stop();
   }
 
   @override
@@ -169,6 +184,7 @@ class _MyAppState extends State<MyApp> {
     _authSub?.cancel();
     _cancelarStream();
     _fecharOverlay();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -200,12 +216,10 @@ class _MyAppState extends State<MyApp> {
 class _PedidoOverlay extends StatefulWidget {
   final Map<String, dynamic> pedido;
   final VoidCallback onRejeitar;
-  final void Function(Map<String, dynamic>) onAceitar;
 
   const _PedidoOverlay({
     required this.pedido,
     required this.onRejeitar,
-    required this.onAceitar,
   });
 
   @override
@@ -216,7 +230,6 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
   final _supabase = Supabase.instance.client;
   double? _distMotoboyLojaKm;
   double _precoDinamico = 0;
-  bool _aceitando = false;
   int _segundos = 30;
   Timer? _countdown;
 
@@ -236,7 +249,6 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
   }
 
   Future<void> _carregarDados() async {
-    // Position for distance to store
     try {
       final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.medium);
@@ -254,7 +266,6 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
       }
     } catch (_) {}
 
-    // Dynamic price
     try {
       final data = await _supabase
           .from('configuracoes')
@@ -267,39 +278,13 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
     } catch (_) {}
   }
 
-  Future<void> _aceitar() async {
-    if (_aceitando) return;
-    setState(() => _aceitando = true);
-    final user = _supabase.auth.currentUser;
-    if (user == null) {
-      widget.onRejeitar();
-      return;
-    }
-    try {
-      final result = await _supabase
-          .from('pedidos')
-          .update({
-            'status': 'aceito',
-            'status_detalhado': 'aceito',
-            'aceito_em': DateTime.now().toIso8601String(),
-            'motoboy_id': user.id,
-            'entregador_id': user.id,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('status', 'pronto')
-          .eq('id', widget.pedido['id'])
-          .select('*, lojas(nome, endereco, latitude, longitude)');
-
-      if (result.isEmpty) {
-        // Pedido already taken by another driver
-        if (mounted) setState(() => _aceitando = false);
-        widget.onRejeitar();
-        return;
-      }
-      widget.onAceitar(Map<String, dynamic>.from(result[0] as Map));
-    } catch (_) {
-      if (mounted) setState(() => _aceitando = false);
-    }
+  void _abrirDetalhes() {
+    widget.onRejeitar();
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => RotaDisponivelScreen(pedido: widget.pedido),
+      ),
+    );
   }
 
   @override
@@ -364,63 +349,15 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
                     ]),
                   ),
 
-                  // PedidoCardWidget — identical to tela disponíveis
+                  // PedidoCardWidget — toque navega para detalhes
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
                     child: PedidoCardWidget(
                       pedido: widget.pedido,
                       distMotoboyLojaKm: _distMotoboyLojaKm,
                       precoDinamico: _precoDinamico,
+                      onTap: _abrirDetalhes,
                     ),
-                  ),
-
-                  // Rejeitar / Aceitar buttons
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-                    child: Row(children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: widget.onRejeitar,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white54,
-                            side: const BorderSide(color: Colors.white24),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                          child: const Text('Rejeitar',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: _aceitando ? null : _aceitar,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1A56DB),
-                            foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            elevation: 0,
-                          ),
-                          child: _aceitando
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                              : const Text('Aceitar',
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ]),
                   ),
                 ],
               ),

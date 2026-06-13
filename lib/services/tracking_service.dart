@@ -41,12 +41,17 @@ class TrackingService {
   static Future<void> _loopEnvio(String entregadorId) async {
     await Future.delayed(const Duration(seconds: 8));
     if (!_ativo) return;
-    final pos = await LocationService.getCurrentPosition();
-    if (pos != null) {
-      _ultimaPosicao = pos;
-      await _enviar(entregadorId, pos);
-    } else if (_ultimaPosicao != null) {
-      await _enviar(entregadorId, _ultimaPosicao!);
+    try {
+      final pos = await LocationService.getCurrentPosition();
+      if (pos != null) {
+        _ultimaPosicao = pos;
+        await _enviar(entregadorId, pos);
+      } else if (_ultimaPosicao != null) {
+        await _enviar(entregadorId, _ultimaPosicao!);
+      }
+    } catch (e) {
+      debugPrint('[TrackingService] ⚠ Erro no loop: $e — reiniciando em 5s');
+      await Future.delayed(const Duration(seconds: 5));
     }
     if (_ativo) _loopEnvio(entregadorId);
   }

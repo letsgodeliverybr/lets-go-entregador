@@ -199,11 +199,9 @@ class _State extends State<PedidosDisponiveisScreen> {
           schema: 'public',
           table: 'pedidos',
           callback: (payload) {
-            final novo = payload.newRecord;
-            final status = novo['status']?.toString() ?? '';
-            if (status == 'pronto') {
-              _buscar();
-            }
+            final status = payload.newRecord['status']?.toString() ?? '';
+            // Novo pedido pronto: todos os motoboys atualizam a lista
+            if (status == 'pronto') _buscar();
           },
         )
         .onPostgresChanges(
@@ -214,17 +212,15 @@ class _State extends State<PedidosDisponiveisScreen> {
             final novo = payload.newRecord;
             final novoStatus = novo['status']?.toString() ?? '';
             final id = novo['id']?.toString() ?? '';
-            final motoboyId = novo['motoboy_id']?.toString();
-            final uid = _supabase.auth.currentUser?.id;
+            if (id.isEmpty) return;
 
-            if (novoStatus == 'pronto' &&
-                (motoboyId == null || motoboyId.isEmpty)) {
+            if (novoStatus == 'pronto') {
+              // Pedido voltou/chegou a pronto: atualiza minha lista
+              // (pode ser novo pedido disponível para mim — som dispara em _buscar())
               _buscar();
-            } else if (novoStatus != 'pronto' ||
-                (motoboyId != null &&
-                    motoboyId.isNotEmpty &&
-                    motoboyId != uid)) {
-              if (mounted && id.isNotEmpty) {
+            } else {
+              // Pedido aceito por outro motoboy ou cancelado: remove imediatamente
+              if (mounted) {
                 setState(() => _pedidos.removeWhere((p) => p['id'] == id));
               }
             }
@@ -554,7 +550,16 @@ class _State extends State<PedidosDisponiveisScreen> {
                       decorationColor: Colors.red,
                     )),
                 const SizedBox(width: 8),
-              ] else if (temBonus) ...[
+              ] else if (_precoDinamico > 0) ...[
+                Text('R\$${taxaBase.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 13,
+                      decoration: TextDecoration.lineThrough,
+                      decorationColor: Colors.red,
+                    )),
+                const SizedBox(width: 8),
+              ] else if (gorjeta > 0) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: Colors.white38,
@@ -564,11 +569,15 @@ class _State extends State<PedidosDisponiveisScreen> {
                     )),
                 const SizedBox(width: 8),
               ],
-              Text('R\$${taxaFinal.toStringAsFixed(2)}',
-                  style: TextStyle(
-                      color: _precoDinamico > 0 ? Colors.red : Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold)),
+              Text(
+                _precoDinamico > 0
+                    ? 'R\$${(taxaBase + _precoDinamico).toStringAsFixed(2)}'
+                    : 'R\$${taxaFinal.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
+              ),
             ]),
           ],
           ),

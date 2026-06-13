@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/taxa_helper.dart' as th;
 
 class ExtratoScreen extends StatefulWidget {
   const ExtratoScreen({super.key});
@@ -17,7 +16,6 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
   @override
   void initState() {
     super.initState();
-    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _carregar();
   }
 
@@ -48,8 +46,8 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
 
       final raw = await _supabase
           .from('pedidos')
-          .select('id, numero, distancia_km, com_retorno, gorjeta, updated_at, loja_id, lojas(nome)')
-          .eq('entregador_id', uid)
+          .select('id, numero, taxa_motoboy, gorjeta, distancia_km, updated_at, loja_id, lojas(nome)')
+          .eq('motoboy_id', _supabase.auth.currentUser!.id)
           .eq('status', 'finalizado')
           .gte('updated_at', _inicio.toIso8601String())
           .order('updated_at', ascending: false);
@@ -64,10 +62,9 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
   }
 
   double _valor(Map<String, dynamic> p) {
-    final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-    final comRetorno = p['com_retorno'] == true;
-    final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-    return th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
+    final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
+    final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+    return taxa + gorjeta;
   }
 
   double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));

@@ -18,7 +18,6 @@ import 'aguardo_aprovacao_screen.dart';
 import 'rota_disponivel_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/status_utils.dart' as su;
-import '../utils/taxa_helper.dart' as th;
 
 class EntregadorHomeScreen extends StatefulWidget {
   const EntregadorHomeScreen({super.key});
@@ -50,7 +49,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   @override
   void initState() {
     super.initState();
-    th.carregarFaixas();
     _carregarEntregador();
     _carregarStats();
     _carregarPedidosEmAndamento();
@@ -125,29 +123,22 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (user == null) return;
     try {
       final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final inicioDia = DateTime(agora.year, agora.month, agora.day, 0, 1)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
-      final fimDia = DateTime(agora.year, agora.month, agora.day, 23, 59)
+      final inicioDia = DateTime(agora.year, agora.month, agora.day)
           .toUtc()
           .add(const Duration(hours: 3))
           .toIso8601String();
       final pedidos = await _supabase
           .from('pedidos')
-          .select('distancia_km, com_retorno, gorjeta')
-          .eq('entregador_id', user.id)
+          .select('taxa_motoboy, gorjeta')
+          .eq('motoboy_id', _supabase.auth.currentUser!.id)
           .eq('status', 'finalizado')
-          .gte('finalizado_em', inicioDia)
-          .lte('finalizado_em', fimDia);
+          .gte('finalizado_em', inicioDia);
       final lista = List<Map<String, dynamic>>.from(pedidos);
-      double total = 0;
-      for (final p in lista) {
-        final km = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0;
-        final comRetorno = p['com_retorno'] == true;
-        final gorjeta = double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0;
-        total += th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais) + gorjeta;
-      }
+      final total = lista.fold<double>(0, (s, p) {
+        final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+        return s + taxa + gorjeta;
+      });
       if (mounted) setState(() { _saldoDia = total; _entregasHoje = lista.length; });
     } catch (e) {
       debugPrint('EntregadorHomeScreen _carregarStats error: $e');

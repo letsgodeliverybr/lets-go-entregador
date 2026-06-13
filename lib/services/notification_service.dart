@@ -16,6 +16,10 @@ class NotificationService {
   static const String _channelRotaName = 'Nova Rota';
   static const String _channelRotaDesc = 'Alerta de rota com múltiplas entregas';
 
+  static const String _channelDestinoId = 'letsgo_chegou_destino';
+  static const String _channelDestinoName = 'Chegou ao Destino';
+  static const String _channelDestinoDesc = 'Alerta de chegada ao endereço de entrega';
+
   static bool _initialized = false;
 
   // ── Notificações locais ─────────────────────────────────────────────────
@@ -64,6 +68,16 @@ class NotificationService {
         importance: Importance.max,
         playSound: true,
         sound: RawResourceAndroidNotificationSound('letsgo'),
+        enableVibration: true,
+        enableLights: true,
+      ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelDestinoId,
+        _channelDestinoName,
+        description: _channelDestinoDesc,
+        importance: Importance.high,
+        playSound: true,
         enableVibration: true,
         enableLights: true,
       ));
@@ -129,6 +143,37 @@ class NotificationService {
     } catch (e) {
       debugPrint('[FCM] erro ao salvar token: $e');
     }
+  }
+
+  // ── Notificação local: chegou ao destino ───────────────────────────────
+  static Future<void> showChegouDestinoLocal() async {
+    if (!_initialized) await initLocal();
+
+    const androidDetails = AndroidNotificationDetails(
+      _channelDestinoId,
+      _channelDestinoName,
+      channelDescription: _channelDestinoDesc,
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+      ticker: 'Você chegou ao destino',
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      2001,
+      '📍 Chegou ao destino!',
+      'Peça o código de confirmação ao cliente.',
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+    );
   }
 
   // ── Notificação local: novo pedido ──────────────────────────────────────

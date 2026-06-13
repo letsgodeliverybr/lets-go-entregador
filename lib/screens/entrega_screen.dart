@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/foreground_service.dart';
 import '../services/location_service.dart';
+import '../services/notification_service.dart';
+import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'pedidos_aceitos_screen.dart';
 
@@ -34,6 +39,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
   double? _lojaLng;
   double _precoDinamico = 0.0;
   StreamSubscription<Position>? _subProximidade;
+  RealtimeChannel? _subPedido;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -54,12 +60,15 @@ class _EntregaScreenState extends State<EntregaScreen> {
     if (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento) {
       _iniciarPollingPagamento();
     }
-    if (_etapa == EtapaEntrega.emRota) {
+    if (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando) {
       _iniciarVerificacaoProximidade();
     }
     _obterPosicao();
     _buscarInfoLoja();
     _buscarPrecoDinamico();
+    _assinarResetPedido();
+    _configurarComunicacaoForeground();
+    _solicitarExcecaoBateria();
   }
 
   Future<void> _abrirMaps(String endereco) async {
@@ -80,6 +89,75 @@ class _EntregaScreenState extends State<EntregaScreen> {
       final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
       if (mounted) setState(() => _precoDinamico = valor);
     } catch (_) {}
+  }
+
+  void _configurarComunicacaoForeground() {
+    FlutterForegroundTask.initCommunicationPort();
+    FlutterForegroundTask.addTaskDataCallback(_onDadosForeground);
+    if (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando) {
+      _ativarProximidadeForeground();
+    }
+  }
+
+  void _onDadosForeground(Object data) {
+    if (data is! String) return;
+    if (data.startsWith('chegou_destino:')) {
+      final pedidoIdRecebido = data.split(':').last;
+      if (pedidoIdRecebido == _pedidoId &&
+          (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+        debugPrint('[EntregaScreen] ForegroundTask detectou chegada — atualizando UI');
+        if (mounted) setState(() => _etapa = EtapaEntrega.chegouDestino);
+        NotificationService.showChegouDestinoLocal();
+      }
+    }
+  }
+
+  Future<void> _solicitarExcecaoBateria() async {
+    try {
+      final isIgnoring = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+      if (!isIgnoring) {
+        debugPrint('[EntregaScreen] Solicitando exceção de otimização de bateria...');
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      }
+    } catch (e) {
+      debugPrint('[EntregaScreen] Erro ao solicitar exceção de bateria: $e');
+    }
+  }
+
+  void _ativarProximidadeForeground() {
+    final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
+    final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
+    if (clienteLat != null && clienteLng != null) {
+      ForegroundService.ativarProximidade(
+        _pedidoId,
+        clienteLat.toDouble(),
+        clienteLng.toDouble(),
+      );
+    } else {
+      debugPrint('[EntregaScreen] Coordenadas do cliente ausentes — proximidade foreground não ativada');
+    }
+  }
+
+  Future<void> _marcarChegouDestinoAutomatico() async {
+    _subProximidade?.cancel();
+    _subProximidade = null;
+    if (!mounted) return;
+    if (_etapa != EtapaEntrega.emRota && _etapa != EtapaEntrega.retornando) return;
+    debugPrint('[EntregaScreen] Atualizando status para chegou_destino...');
+    try {
+      await _supabase.from('pedidos').update({
+        'status': 'chegou_destino',
+        'status_detalhado': 'chegou_destino',
+        'chegou_destino_em': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', _pedidoId);
+      if (mounted) setState(() => _etapa = EtapaEntrega.chegouDestino);
+      await NotificationService.showChegouDestinoLocal();
+      ForegroundService.desativarProximidade();
+      HapticFeedback.heavyImpact();
+    } catch (e) {
+      debugPrint('[EntregaScreen] Erro ao marcar chegou_destino automático: $e');
+    }
   }
 
   Future<void> _buscarInfoLoja() async {
@@ -164,32 +242,104 @@ class _EntregaScreenState extends State<EntregaScreen> {
   void _iniciarVerificacaoProximidade() {
     final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
     final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
-    if (clienteLat == null || clienteLng == null) return;
+    if (clienteLat == null || clienteLng == null) {
+      debugPrint('[PROX] Coordenadas do cliente ausentes — stream não iniciado');
+      return;
+    }
+    debugPrint('[PROX] Iniciando stream (UI). Destino: lat=$clienteLat lng=$clienteLng, etapa: $_etapa');
 
-    _subProximidade = LocationService.getPositionStream().listen((pos) {
+    // Sem ForegroundNotificationConfig: o ForegroundTaskService já mantém GPS ativo
+    // em background. Esta stream é fallback para quando o app está em foreground.
+    final LocationSettings settings = Platform.isAndroid
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+            intervalDuration: const Duration(seconds: 5),
+          )
+        : const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          );
+
+    _subProximidade = Geolocator.getPositionStream(locationSettings: settings).listen((pos) {
       final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude,
         clienteLat.toDouble(), clienteLng.toDouble(),
       );
-      if (distM <= 100) {
-        _subProximidade?.cancel();
-        _subProximidade = null;
-        if (mounted && _etapa == EtapaEntrega.emRota) _avancar();
+      debugPrint('[PROX] lat: ${pos.latitude.toStringAsFixed(6)}, lng: ${pos.longitude.toStringAsFixed(6)}, dist: ${distM.toStringAsFixed(0)}m, status: $_etapa');
+      if (distM <= 100 && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+        debugPrint('[PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m');
+        _marcarChegouDestinoAutomatico();
       }
     }, onError: (e) {
-      debugPrint('[EntregaScreen] ⚠ Stream proximidade falhou: $e — reiniciando em 5s');
+      debugPrint('[PROX] ⚠ Stream falhou: $e — reiniciando em 3s');
       _subProximidade?.cancel();
       _subProximidade = null;
-      if (!mounted || _etapa != EtapaEntrega.emRota) return;
-      Future.delayed(const Duration(seconds: 5), () {
-        if (mounted && _etapa == EtapaEntrega.emRota) _iniciarVerificacaoProximidade();
+      if (!mounted) return;
+      final etapaAtual = _etapa;
+      if (etapaAtual != EtapaEntrega.emRota && etapaAtual != EtapaEntrega.retornando) return;
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+          _iniciarVerificacaoProximidade();
+        }
       });
     }, cancelOnError: true);
+  }
+
+  void _assinarResetPedido() {
+    _subPedido = _supabase
+        .channel('pedido_reset_$_pedidoId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'pedidos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: _pedidoId,
+          ),
+          callback: (payload) {
+            final novo = payload.newRecord;
+            final status = novo['status']?.toString() ?? '';
+            final motoboyId = novo['motoboy_id'];
+            if (status == 'recebido' || status == 'pronto' || motoboyId == null) {
+              _handleResetPedido();
+            } else if (status == 'chegou_destino' &&
+                (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+              debugPrint('[EntregaScreen] Realtime: status=chegou_destino — atualizando UI');
+              if (mounted) setState(() => _etapa = EtapaEntrega.chegouDestino);
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _handleResetPedido() async {
+    if (!mounted) return;
+    _subProximidade?.cancel();
+    _subProximidade = null;
+    if (_subPedido != null) {
+      await _supabase.removeChannel(_subPedido!);
+      _subPedido = null;
+    }
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId != null) await TrackingService.parar(userId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Este pedido foi cancelado pelo administrador'),
+      backgroundColor: Colors.red,
+      behavior: SnackBarBehavior.floating,
+      duration: Duration(seconds: 4),
+    ));
+    Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
   }
 
   @override
   void dispose() {
     _subProximidade?.cancel();
+    if (_subPedido != null) _supabase.removeChannel(_subPedido!);
+    FlutterForegroundTask.removeTaskDataCallback(_onDadosForeground);
+    ForegroundService.desativarProximidade();
     _codigoCtrl.dispose();
     super.dispose();
   }
@@ -263,6 +413,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
           }).eq('id', _pedidoId);
           setState(() => _etapa = EtapaEntrega.emRota);
           _iniciarVerificacaoProximidade();
+          _ativarProximidadeForeground();
           HapticFeedback.mediumImpact();
           break;
 
@@ -344,6 +495,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
       setState(() => _etapa = EtapaEntrega.retornando);
       HapticFeedback.mediumImpact();
       _iniciarPollingPagamento();
+      _iniciarVerificacaoProximidade();
+      _ativarProximidadeForeground();
     } catch (e) {
       setState(() => _erro = 'Erro ao marcar retorno.');
     } finally {

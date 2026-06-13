@@ -153,7 +153,15 @@ class PedidoCardWidget extends StatelessWidget {
                         decorationColor: Colors.red,
                       )),
                   const SizedBox(width: 8),
-                ] else if (gorjeta > 0 || precoDinamico > 0) ...[
+                ] else if (precoDinamico > 0) ...[
+                  Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.red, fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.red,
+                      )),
+                  const SizedBox(width: 8),
+                ] else if (gorjeta > 0) ...[
                   Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.white38, fontSize: 13,
@@ -162,10 +170,14 @@ class PedidoCardWidget extends StatelessWidget {
                       )),
                   const SizedBox(width: 8),
                 ],
-                Text('R\$${taxaFinal.toStringAsFixed(2)}',
-                    style: TextStyle(
-                        color: precoDinamico > 0 ? Colors.red : Colors.white,
-                        fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(
+                  precoDinamico > 0
+                      ? 'R\$${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
+                      : 'R\$${taxaFinal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
               ]),
 
               // Chegou no destino indicator

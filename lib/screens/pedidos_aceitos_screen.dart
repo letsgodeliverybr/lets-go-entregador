@@ -216,6 +216,14 @@ class _State extends State<PedidosAceitosScreen> {
                                 );
                               }
                             }
+                            // Usa PD salvo no pedido (fixo no momento da criação),
+                            // não o PD ao vivo de configuracoes — pedidos históricos
+                            // sempre mostram o indicador se foram criados com PD ativo.
+                            final distanciaKm = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0.0;
+                            final comRetorno = p['com_retorno'] == true;
+                            final taxaMotoboySalvo = double.tryParse(p['taxa_motoboy']?.toString() ?? '0') ?? 0.0;
+                            final taxaBase = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
+                            final pdSalvo = (taxaMotoboySalvo - taxaBase).clamp(0.0, double.infinity);
                             return PedidoCardWidget(
                               pedido: p,
                               statusLabel: _label(status),
@@ -224,7 +232,7 @@ class _State extends State<PedidosAceitosScreen> {
                               isRetornando: isRetornando,
                               isChegouDestino: isChegouDestino,
                               distMotoboyLojaKm: distMotoboyLoja,
-                              precoDinamico: _precoDinamico,
+                              precoDinamico: pdSalvo,
                               onTap: () => _abrirEntrega(p),
                             );
                           },

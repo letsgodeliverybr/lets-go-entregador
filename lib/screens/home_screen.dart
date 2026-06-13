@@ -101,17 +101,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           table: 'pedidos',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
-            column: 'entregador_id',
-            value: _eid,
-          ),
-          callback: (_) => _agendarRecarregar(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'pedidos',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
             column: 'motoboy_id',
             value: _eid,
           ),
@@ -165,13 +154,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _supabase
             .from('pedidos')
             .select('taxa_motoboy,taxa_entrega,gorjeta,updated_at')
-            .or('entregador_id.eq.$_eid,motoboy_id.eq.$_eid')
+            .eq('motoboy_id', _supabase.auth.currentUser!.id)
             .eq('status', 'finalizado'),
         // Pedidos da semana (seg 00:01 a dom 23:59, horário Brasília) — para saldo disponível
         _supabase
             .from('pedidos')
             .select('taxa_motoboy,taxa_entrega,gorjeta')
-            .or('entregador_id.eq.$_eid,motoboy_id.eq.$_eid')
+            .eq('motoboy_id', _supabase.auth.currentUser!.id)
             .eq('status', 'finalizado')
             .gte('finalizado_em', inicioSemana)
             .lte('finalizado_em', fimSemana),
@@ -179,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _supabase
             .from('saques')
             .select('valor')
-            .eq('entregador_id', _eid)
+            .eq('entregador_id', _supabase.auth.currentUser!.id)
             .gte('created_at', inicioSemana)
             .lte('created_at', fimSemana),
       ]);

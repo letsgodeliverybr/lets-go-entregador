@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'vagas_screen.dart';
 import 'login_screen.dart';
 import 'extrato_screen.dart';
@@ -13,6 +14,26 @@ class DrawerScreen extends StatefulWidget {
 }
 
 class _DrawerScreenState extends State<DrawerScreen> {
+  final _supabase = Supabase.instance.client;
+  String? _nome;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarNome();
+  }
+
+  Future<void> _carregarNome() async {
+    try {
+      final data = await _supabase
+          .from('entregadores')
+          .select('nome')
+          .eq('id', _supabase.auth.currentUser!.id)
+          .single();
+      if (mounted) setState(() => _nome = data['nome']?.toString());
+    } catch (_) {}
+  }
+
   bool _contaExpanded = false;
   bool _sobreExpanded = false;
   bool _oportunidadesExpanded = false;
@@ -30,21 +51,19 @@ class _DrawerScreenState extends State<DrawerScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               color: const Color(0xFF161820),
-              child: const Row(
+              child: Row(
                 children: [
-                  CircleAvatar(
+                  const CircleAvatar(
                     radius: 32,
                     backgroundColor: Color(0xFF1A56DB),
                     child: Icon(Icons.person, color: Colors.white, size: 32),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Gabriel Eliziario', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                        SizedBox(height: 2),
-                        Text('ID: #00482', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 12, fontWeight: FontWeight.w400)),
+                        Text(_nome ?? '...', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),

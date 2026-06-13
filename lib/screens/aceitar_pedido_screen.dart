@@ -21,12 +21,26 @@ class _State extends State<AceitarPedidoScreen> {
   bool _aceitando = false;
   Position? _posicaoAtual;
   double _distMotoboyLoja = 0;
+  double _precoDinamico = 0.0;
 
   @override
   void initState() {
     super.initState();
     th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _obterPosicao();
+    _buscarPrecoDinamico();
+  }
+
+  Future<void> _buscarPrecoDinamico() async {
+    try {
+      final data = await _supabase
+          .from('configuracoes')
+          .select('valor')
+          .eq('chave', 'preco_dinamico_entregador')
+          .maybeSingle();
+      final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
+      if (mounted) setState(() => _precoDinamico = valor);
+    } catch (_) {}
   }
 
   Future<void> _obterPosicao() async {
@@ -134,7 +148,8 @@ class _State extends State<AceitarPedidoScreen> {
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = widget.pedido['pontos'] ?? 4;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final taxaTotal = taxaMotoboy + gorjeta;
+    final precoDinamico = _precoDinamico;
+    final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final loja = widget.pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
     final clienteLatLng = _latLngCliente;
@@ -351,11 +366,37 @@ class _State extends State<AceitarPedidoScreen> {
                           Text('${km.toStringAsFixed(2)} km',
                               style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
                           const Spacer(),
-                          Text('R\$ ${taxaTotal.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  color: Color(0xFF10b981),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
+                          if (comRetorno) ...[
+                            Text('R\$ ${(th.calcularTaxaMotoboy(km, false, th.faixasGlobais) + precoDinamico + gorjeta).toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    color: Colors.red, fontSize: 14,
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: Colors.red)),
+                            const SizedBox(width: 8),
+                          ] else if (precoDinamico > 0) ...[
+                            Text('R\$ ${taxaMotoboy.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    color: Colors.red, fontSize: 14,
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: Colors.red)),
+                            const SizedBox(width: 8),
+                          ] else if (gorjeta > 0) ...[
+                            Text('R\$ ${taxaMotoboy.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 14,
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: Colors.white38)),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            precoDinamico > 0
+                                ? 'R\$ ${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
+                                : 'R\$ ${taxaTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                                color: Color(0xFF10b981),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold),
+                          ),
                         ]),
 
                         // Gorjeta

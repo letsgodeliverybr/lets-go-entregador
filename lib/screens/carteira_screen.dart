@@ -15,51 +15,14 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   double _saldo = 0;
   bool _carregandoSaldo = true;
   RealtimeChannel? _realtimeChannel;
-  String? _entregadorId;
-
-  // entregadores.id = auth.uid() (tabela não tem coluna user_id separada)
-  String get _uid => _supabase.auth.currentUser?.id ?? '';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addObserver(this);
-    _inicializar();
-  }
-
-  Future<void> _inicializar() async {
-    await _buscarEntregadorId();
     _carregarSaldo();
     _iniciarRealtime();
-  }
-
-  Future<void> _buscarEntregadorId() async {
-    final authId = _supabase.auth.currentUser?.id;
-    if (authId == null) return;
-    try {
-      // Tenta user_id primeiro; se coluna não existir, cai no catch
-      final byUserId = await _supabase
-          .from('entregadores')
-          .select('id')
-          .eq('user_id', authId)
-          .maybeSingle();
-      if (byUserId != null) {
-        _entregadorId = byUserId['id'] as String?;
-      } else {
-        // Fallback: entregadores.id pode ser o próprio auth.uid
-        final byId = await _supabase
-            .from('entregadores')
-            .select('id')
-            .eq('id', authId)
-            .maybeSingle();
-        _entregadorId = (byId?['id'] as String?) ?? authId;
-      }
-    } catch (_) {
-      // Coluna user_id não existe — entregadores.id = auth.uid
-      _entregadorId = authId;
-    }
-    debugPrint('[UID] auth.uid: $authId, entregador.id: $_entregadorId, match: ${authId == _entregadorId}');
   }
 
   @override
@@ -68,10 +31,10 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   }
 
   void _iniciarRealtime() {
-    final id = _entregadorId ?? _uid;
-    if (id.isEmpty) return;
+    final uid = _supabase.auth.currentUser?.id ?? '';
+    if (uid.isEmpty) return;
     _realtimeChannel = _supabase
-        .channel('carteira-pedidos-$id')
+        .channel('carteira-pedidos-$uid')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -95,15 +58,10 @@ class _CarteiraScreenState extends State<CarteiraScreen>
   }
 
   Future<void> _carregarSaldo() async {
-    final uid = Supabase.instance.client.auth.currentUser?.id;
+    final uid = _supabase.auth.currentUser?.id;
     debugPrint('[CARTEIRA] auth uid: $uid');
     if (uid == null || uid.isEmpty) {
       debugPrint('[CARTEIRA] UID nulo! Abortando.');
-      if (mounted) setState(() => _carregandoSaldo = false);
-      return;
-    }
-    final id = _entregadorId ?? uid;
-    if (id.isEmpty) {
       if (mounted) setState(() => _carregandoSaldo = false);
       return;
     }
@@ -123,15 +81,15 @@ class _CarteiraScreenState extends State<CarteiraScreen>
       final results = await Future.wait<dynamic>([
         _supabase
             .from('pedidos')
-            .select('taxa_motoboy,gorjeta')
-            .eq('motoboy_id', id)
+            .select('taxa_motoboy,taxa_entrega,gorjeta')
+            .eq('motoboy_id', _supabase.auth.currentUser!.id)
             .eq('status', 'finalizado')
             .gte('finalizado_em', inicioSemana)
             .lte('finalizado_em', fimSemana),
         _supabase
             .from('saques')
             .select('valor')
-            .eq('entregador_id', id)
+            .eq('entregador_id', _supabase.auth.currentUser!.id)
             .gte('created_at', inicioSemana)
             .lte('created_at', fimSemana),
       ]);
@@ -139,18 +97,16 @@ class _CarteiraScreenState extends State<CarteiraScreen>
       final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
       final saques = List<Map<String, dynamic>>.from(results[1] as List);
 
-      debugPrint('[CARTEIRA] buscando pedidos para uid: $id, total encontrado: ${pedidos.length}');
-
-      double totalGanho = 0;
-      for (final p in pedidos) {
+      final totalGanho = pedidos.fold<double>(0, (s, p) {
         final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
         final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
-        totalGanho += taxa + gorjeta;
-      }
+        return s + taxa + gorjeta;
+      });
       final totalSaques = saques.fold<double>(0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
       final saldoDisponivel = totalGanho - totalSaques;
 
-      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: ${totalGanho - totalSaques}');
+      debugPrint('[CARTEIRA] uid: ${_supabase.auth.currentUser?.id}, pedidos encontrados: ${pedidos.length}, total: $totalGanho');
+      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: $saldoDisponivel');
 
       if (mounted) {
         setState(() {
