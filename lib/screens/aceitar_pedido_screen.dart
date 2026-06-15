@@ -142,8 +142,9 @@ class _State extends State<AceitarPedidoScreen> {
     final comRetorno = widget.pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = widget.pedido['pontos'] ?? 4;
-    final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
+    final taxaMotoboy = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
     final precoDinamico = (widget.pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
+    debugPrint('[ACEITAR] pedido=${widget.pedido['numero']} preco_dinamico=${widget.pedido['preco_dinamico']} taxa_motoboy=${widget.pedido['taxa_motoboy']}');
     final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final loja = widget.pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
