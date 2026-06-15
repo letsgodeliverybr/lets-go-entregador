@@ -418,6 +418,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Widget _buildCard(Map<String, dynamic> pedido) {
+    print('[DISPONIVEL] pedido=${pedido['numero']} lat_coleta=${pedido['latitude_coleta']}');
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pdSalvo = (pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
     final distanciaKm =

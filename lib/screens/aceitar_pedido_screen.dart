@@ -136,6 +136,7 @@ class _State extends State<AceitarPedidoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('[ACEITAR_COLETA] lat=${widget.pedido['latitude_coleta']} lng=${widget.pedido['longitude_coleta']}');
     final numero = widget.pedido['numero'] ?? widget.pedido['id'].toString().substring(0, 6);
     final endereco = widget.pedido['endereco'] ?? '—';
     final km = double.tryParse(widget.pedido['distancia_km']?.toString() ?? '0') ?? 0;
@@ -354,7 +355,7 @@ class _State extends State<AceitarPedidoScreen> {
                         // Linha 3: coleta (se houver) e entrega
                         if (endColeta.isNotEmpty) ...[
                           Row(children: [
-                            const Text('📦', style: TextStyle(fontSize: 14)),
+                            const Text('📦', style: TextStyle(fontSize: 14, color: Colors.white)),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(endColeta,

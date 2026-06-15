@@ -42,6 +42,9 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   double? get _clienteLat => (_pedido['latitude'] as num?)?.toDouble();
   double? get _clienteLng => (_pedido['longitude'] as num?)?.toDouble();
 
+  double? get _coletaLat => (_pedido['latitude_coleta'] as num?)?.toDouble();
+  double? get _coletaLng => (_pedido['longitude_coleta'] as num?)?.toDouble();
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +93,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final pontos = <LatLng>[];
     if (_posicaoEntregador != null) pontos.add(_posicaoEntregador!);
     if (_lojaLat != null && _lojaLng != null) pontos.add(LatLng(_lojaLat!, _lojaLng!));
+    if (_coletaLat != null && _coletaLng != null) pontos.add(LatLng(_coletaLat!, _coletaLng!));
     if (_clienteLat != null && _clienteLng != null) pontos.add(LatLng(_clienteLat!, _clienteLng!));
     if (pontos.length < 2) {
       if (pontos.isNotEmpty) {
@@ -209,6 +213,32 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
       ));
     }
 
+    // Ponto de coleta — card preto com seta
+    if (_coletaLat != null && _coletaLng != null) {
+      markers.add(Marker(
+        point: LatLng(_coletaLat!, _coletaLng!),
+        width: 80, height: 40,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+              ),
+              child: Text('#$numero',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+            const CustomPaint(size: Size(10, 6), painter: _TrianglePainter(Colors.black)),
+          ],
+        ),
+      ));
+    }
+
     // Pedido — card azul com seta igual à home
     if (_clienteLat != null && _clienteLng != null) {
       markers.add(Marker(
@@ -248,6 +278,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final nomeLoja = (_pedido['lojas']?['nome'] ?? 'Estabelecimento').toString();
     final endCliente = (_pedido['endereco'] ?? '—').toString();
     final endLoja = (_pedido['lojas']?['endereco'] ?? '—').toString();
+    final endColeta = (_pedido['endereco_coleta'] ?? '').toString();
     final km = double.tryParse(_pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = _pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
@@ -312,7 +343,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             ]),
             const SizedBox(height: 10),
 
-            // Endereço de coleta
+            // Endereço da loja (coleta padrão)
             Row(children: [
               const Icon(Icons.store, color: Colors.white, size: 14),
               const SizedBox(width: 6),
@@ -320,9 +351,17 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                   maxLines: 1, overflow: TextOverflow.ellipsis)),
             ]),
+            if (endColeta.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(children: [
+                const Text('📦', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(endColeta,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    maxLines: 2, overflow: TextOverflow.ellipsis)),
+              ]),
+            ],
             const SizedBox(height: 8),
-
-
 
             // Linha 3: endereço entrega
             Row(children: [
