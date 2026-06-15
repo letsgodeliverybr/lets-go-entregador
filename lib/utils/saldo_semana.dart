@@ -2,24 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<double> calcularSaldoSemana(SupabaseClient supabase, String uid) async {
-  final now = DateTime.now();
-  final diasDesdeSegunda = now.weekday == 1 ? 0 : now.weekday - 1;
-  final inicioSemanaLocal = DateTime(now.year, now.month, now.day - diasDesdeSegunda);
-  debugPrint('[SEMANA] inicio_local=${inicioSemanaLocal.toIso8601String()} weekday=${now.weekday}');
+  // Horário atual convertido para Brasília (UTC-3)
+  final nowUtc = DateTime.now().toUtc();
+  final nowBrasilia = nowUtc.subtract(const Duration(hours: 3));
+
+  // Segunda-feira da semana atual às 00:01 no horário de Brasília
+  final diasDesdeSegunda = nowBrasilia.weekday == 1 ? 0 : nowBrasilia.weekday - 1;
+  final segundaBrasilia = DateTime(
+    nowBrasilia.year, nowBrasilia.month, nowBrasilia.day - diasDesdeSegunda,
+    0, 1,
+  );
+
+  // Domingo da mesma semana às 23:59 no horário de Brasília
+  final domingoBrasilia = DateTime(
+    segundaBrasilia.year, segundaBrasilia.month, segundaBrasilia.day + 6,
+    23, 59,
+  );
+
+  // Conversão para UTC (+3h): segunda 00:01 Brasília = segunda 03:01 UTC
+  //                            domingo 23:59 Brasília = próxima segunda 02:59 UTC
+  final inicioUtc = segundaBrasilia.add(const Duration(hours: 3));
+  final fimUtc = domingoBrasilia.add(const Duration(hours: 3));
+
+  debugPrint('[SEMANA] inicio_utc=${inicioUtc.toIso8601String()} fim_utc=${fimUtc.toIso8601String()}');
 
   final results = await Future.wait<dynamic>([
     supabase
         .from('pedidos')
-        .select('id,taxa_motoboy,gorjeta,updated_at')
+        .select('id,taxa_motoboy,gorjeta,finalizado_em')
         .eq('motoboy_id', uid)
         .eq('status', 'finalizado')
-        .gte('updated_at', inicioSemanaLocal.toIso8601String()),
+        .gte('finalizado_em', inicioUtc.toIso8601String())
+        .lte('finalizado_em', fimUtc.toIso8601String()),
     supabase
         .from('saques')
         .select('valor')
         .eq('entregador_id', uid)
         .neq('status', 'cancelado')
-        .gte('created_at', inicioSemanaLocal.toIso8601String()),
+        .gte('created_at', inicioUtc.toIso8601String())
+        .lte('created_at', fimUtc.toIso8601String()),
   ]);
 
   final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
@@ -27,7 +48,7 @@ Future<double> calcularSaldoSemana(SupabaseClient supabase, String uid) async {
 
   debugPrint('[SEMANA] pedidos_encontrados=${pedidos.length}');
   for (final p in pedidos) {
-    debugPrint('[SEMANA] pedido id=${p['id']} updated_at=${p['updated_at']} taxa_motoboy=${p['taxa_motoboy']}');
+    debugPrint('[SEMANA] pedido id=${p['id']} finalizado_em=${p['finalizado_em']} taxa_motoboy=${p['taxa_motoboy']}');
   }
 
   final totalGanho = pedidos.fold<double>(0, (s, p) {
