@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/login_screen.dart';
+import 'screens/permissoes_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
@@ -395,8 +396,14 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<Widget> _resolverTela() async {
+    final locPerm = await Geolocator.checkPermission();
+    final precisaPermissoes = locPerm == LocationPermission.denied;
+
     final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) return const LoginScreen();
+    if (session == null) {
+      if (precisaPermissoes) return PermissoesScreen(next: const LoginScreen());
+      return const LoginScreen();
+    }
 
     await NotificationService.saveFcmToken(session.user.id);
 

@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'registro_screen.dart';
@@ -19,30 +16,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _senhaController = TextEditingController();
   bool _senhaVisivel = false;
   bool _carregando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _solicitarPermissoes();
-  }
-
-  Future<void> _solicitarPermissoes() async {
-    // Localização (foreground)
-    LocationPermission loc = await Geolocator.checkPermission();
-    if (loc == LocationPermission.denied) {
-      loc = await Geolocator.requestPermission();
-    }
-    // Localização sempre ativa (background)
-    if (loc == LocationPermission.whileInUse) {
-      await Geolocator.requestPermission();
-    }
-    // Notificações (Android 13+)
-    await FlutterLocalNotificationsPlugin()
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    // Ignorar otimização de bateria
-    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-  }
 
   @override
   void dispose() {
