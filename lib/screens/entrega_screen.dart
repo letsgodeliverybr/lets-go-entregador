@@ -132,6 +132,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
         _pedidoId,
         clienteLat.toDouble(),
         clienteLng.toDouble(),
+        status: 'em_rota',
       );
     } else {
       debugPrint('[EntregaScreen] Coordenadas do cliente ausentes — proximidade foreground não ativada');
@@ -266,8 +267,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
         pos.latitude, pos.longitude,
         clienteLat.toDouble(), clienteLng.toDouble(),
       );
-      debugPrint('[PROX] lat: ${pos.latitude.toStringAsFixed(6)}, lng: ${pos.longitude.toStringAsFixed(6)}, dist: ${distM.toStringAsFixed(0)}m, status: $_etapa');
-      if (distM <= 100 && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+      debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m status=$_etapa');
+      if (distM <= 50 && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
         debugPrint('[PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m');
         _marcarChegouDestinoAutomatico();
       }
@@ -362,10 +363,10 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
-            if (distM > 35) {
+            if (distM > 50) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 35 metros da loja (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 50 metros da loja (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
@@ -395,10 +396,10 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
-            if (distM > 35) {
+            if (distM > 50) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 35 metros da loja para sair (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 50 metros da loja para sair (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
@@ -433,10 +434,10 @@ class _EntregaScreenState extends State<EntregaScreen> {
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, clienteLat.toDouble(), clienteLng.toDouble()) * 1000;
-            if (distM > 35) {
+            if (distM > 50) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 35 metros do cliente (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 50 metros do cliente (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
@@ -636,7 +637,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
   Widget _buildCardTela1(dynamic numero) {
     final loja = widget.pedido['lojas'];
     final nomeLoja = _nomeLoja ?? loja?['nome']?.toString() ?? widget.pedido['nome_loja']?.toString() ?? 'Loja';
-    final enderecoColeta = _enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '—';
+    final _endColeta = widget.pedido['endereco_coleta']?.toString() ?? '';
+    final enderecoColeta = _endColeta.isNotEmpty ? _endColeta : (_enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? '—');
     final observacao = widget.pedido['descricao']?.toString() ?? '';
 
     return Container(
@@ -691,7 +693,8 @@ class _EntregaScreenState extends State<EntregaScreen> {
     final zero800 = widget.pedido['telefone_0800']?.toString() ?? widget.pedido['zero_oitocentos']?.toString() ?? '';
     final observacao = widget.pedido['descricao']?.toString() ?? '';
     final distKm = widget.pedido['distancia_km'];
-    final enderecoColeta = _enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? widget.pedido['endereco_coleta']?.toString() ?? '';
+    final endColeta2 = widget.pedido['endereco_coleta']?.toString() ?? '';
+    final enderecoColeta = endColeta2.isNotEmpty ? endColeta2 : (_enderecoLoja ?? widget.pedido['endereco_loja']?.toString() ?? '');
 
     return Container(
       width: double.infinity,

@@ -18,6 +18,7 @@ class LocationTaskHandler extends TaskHandler {
   String? _pedidoId;
   double? _clienteLat;
   double? _clienteLng;
+  String _statusAtual = '';
   bool _chegadaDetectada = false;
   StreamSubscription<Position>? _posStream;
 
@@ -101,9 +102,9 @@ class LocationTaskHandler extends TaskHandler {
       pos.latitude, pos.longitude,
       _clienteLat!, _clienteLng!,
     );
-    debugPrint('[ForegroundTask|PROX] lat:${pos.latitude.toStringAsFixed(6)}, lng:${pos.longitude.toStringAsFixed(6)}, dist:${distM.toStringAsFixed(0)}m, pedido:$_pedidoId');
+    debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m status=$_statusAtual');
 
-    if (distM <= 100) {
+    if (distM <= 50) {
       _chegadaDetectada = true;
       debugPrint('[ForegroundTask|PROX] ✓ Chegou ao destino! Atualizando Supabase...');
       try {
@@ -148,8 +149,9 @@ class LocationTaskHandler extends TaskHandler {
         _pedidoId = map['pedido_id'] as String?;
         _clienteLat = (map['lat'] as num?)?.toDouble();
         _clienteLng = (map['lng'] as num?)?.toDouble();
+        _statusAtual = (map['status'] as String?) ?? 'em_rota';
         _chegadaDetectada = false;
-        debugPrint('[ForegroundTask] Proximidade ativada: pedido=$_pedidoId lat=$_clienteLat lng=$_clienteLng');
+        debugPrint('[ForegroundTask] Proximidade ativada: pedido=$_pedidoId lat=$_clienteLat lng=$_clienteLng status=$_statusAtual');
       } else if (cmd == 'desativar_proximidade') {
         _pedidoId = null;
         _clienteLat = null;
@@ -205,7 +207,7 @@ class ForegroundService {
     );
   }
 
-  static Future<void> ativarProximidade(String pedidoId, double lat, double lng) async {
+  static Future<void> ativarProximidade(String pedidoId, double lat, double lng, {String status = 'em_rota'}) async {
     await FlutterForegroundTask.saveData(key: 'pedido_id', value: pedidoId);
     await FlutterForegroundTask.saveData(key: 'cliente_lat', value: lat.toString());
     await FlutterForegroundTask.saveData(key: 'cliente_lng', value: lng.toString());
@@ -214,8 +216,9 @@ class ForegroundService {
       'pedido_id': pedidoId,
       'lat': lat,
       'lng': lng,
+      'status': status,
     }));
-    debugPrint('[ForegroundService] Proximidade ativada: pedido=$pedidoId lat=$lat lng=$lng');
+    debugPrint('[ForegroundService] Proximidade ativada: pedido=$pedidoId lat=$lat lng=$lng status=$status');
   }
 
   static Future<void> desativarProximidade() async {

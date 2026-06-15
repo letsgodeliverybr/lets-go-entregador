@@ -64,7 +64,7 @@ class _State extends State<PedidosAceitosScreen> {
       final results = await Future.wait([
         _supabase
             .from('pedidos')
-            .select('*, lojas(nome, endereco, latitude, longitude)')
+            .select('*, endereco_coleta, lojas(nome, endereco, latitude, longitude)')
             .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
             .inFilter('status', [
               'aceito',

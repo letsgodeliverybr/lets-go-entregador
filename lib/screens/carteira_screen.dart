@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/saldo_semana.dart';
 
 class CarteiraScreen extends StatefulWidget {
   const CarteiraScreen({super.key});
@@ -68,8 +67,45 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     }
     setState(() => _carregandoSaldo = true);
     try {
-      final saldoDisponivel = await calcularSaldoSemana(_supabase, uid);
-      debugPrint('[CARTEIRA] uid: $uid saldo: $saldoDisponivel');
+      final now = DateTime.now();
+      final diasDesdeSegunda = now.weekday == 1 ? 0 : now.weekday - 1;
+      final inicioSemanaLocal = DateTime(now.year, now.month, now.day - diasDesdeSegunda);
+      debugPrint('[SEMANA] inicio_local=${inicioSemanaLocal.toIso8601String()} weekday=${now.weekday}');
+
+      final results = await Future.wait<dynamic>([
+        _supabase
+            .from('pedidos')
+            .select('id,taxa_motoboy,gorjeta,updated_at')
+            .eq('motoboy_id', uid)
+            .eq('status', 'finalizado')
+            .gte('updated_at', inicioSemanaLocal.toIso8601String()),
+        _supabase
+            .from('saques')
+            .select('valor')
+            .eq('entregador_id', uid)
+            .neq('status', 'cancelado')
+            .gte('created_at', inicioSemanaLocal.toIso8601String()),
+      ]);
+
+      final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
+      final saques = List<Map<String, dynamic>>.from(results[1] as List);
+
+      debugPrint('[SEMANA] pedidos_encontrados=${pedidos.length}');
+      for (final p in pedidos) {
+        debugPrint('[SEMANA] pedido id=${p['id']} updated_at=${p['updated_at']} taxa_motoboy=${p['taxa_motoboy']}');
+      }
+
+      final totalGanho = pedidos.fold<double>(0, (s, p) {
+        final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+        return s + taxa + gorjeta;
+      });
+      final totalSaques = saques.fold<double>(
+          0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
+      final saldoDisponivel = (totalGanho - totalSaques).clamp(0.0, double.infinity);
+
+      debugPrint('[CARTEIRA] uid: $uid ganhos=$totalGanho saques=$totalSaques saldo=$saldoDisponivel');
+
       if (mounted) {
         setState(() {
           _saldo = saldoDisponivel;

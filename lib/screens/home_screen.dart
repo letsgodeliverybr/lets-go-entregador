@@ -8,7 +8,6 @@ import 'entregador_home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
 import '../services/tracking_service.dart';
-import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -134,11 +133,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshing = true;
     if (!silencioso) setState(() => _loadingStats = true);
     try {
-      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final inicioDia = DateTime.utc(agora.year, agora.month, agora.day)
-          .add(const Duration(hours: 3))
-          .toIso8601String();
+      final now = DateTime.now();
+      final inicioDia = DateTime(now.year, now.month, now.day).toIso8601String();
       final uid = _supabase.auth.currentUser!.id;
+
+      // Mesmo cálculo do extrato_screen: segunda-feira local, filtra por updated_at
+      final diasDesdeSegunda = now.weekday == 1 ? 0 : now.weekday - 1;
+      final inicioSemanaLocal = DateTime(now.year, now.month, now.day - diasDesdeSegunda);
+      debugPrint('[SEMANA] inicio_local=${inicioSemanaLocal.toIso8601String()} weekday=${now.weekday}');
 
       final r = await Future.wait<dynamic>([
         _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
@@ -147,12 +149,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .select('taxa_motoboy,taxa_entrega,gorjeta,updated_at')
             .eq('motoboy_id', uid)
             .eq('status', 'finalizado'),
-        calcularSaldoSemana(_supabase, uid),
+        _supabase
+            .from('pedidos')
+            .select('id,taxa_motoboy,gorjeta,updated_at')
+            .eq('motoboy_id', uid)
+            .eq('status', 'finalizado')
+            .gte('updated_at', inicioSemanaLocal.toIso8601String()),
+        _supabase
+            .from('saques')
+            .select('valor')
+            .eq('entregador_id', uid)
+            .neq('status', 'cancelado')
+            .gte('created_at', inicioSemanaLocal.toIso8601String()),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
       final todosPedidos = List<Map<String, dynamic>>.from(r[1] as List);
-      final saldoDisponivel = r[2] as double;
+      final pedidosSemana = List<Map<String, dynamic>>.from(r[2] as List);
+      final saquesSemana = List<Map<String, dynamic>>.from(r[3] as List);
 
       final listaDia = todosPedidos.where((p) {
         final dt = DateTime.tryParse(p['updated_at']?.toString() ?? '');
@@ -161,7 +175,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia saldoDisponivel=$saldoDisponivel');
+      debugPrint('[SEMANA] pedidos_encontrados=${pedidosSemana.length}');
+      for (final p in pedidosSemana) {
+        debugPrint('[SEMANA] pedido id=${p['id']} updated_at=${p['updated_at']} taxa_motoboy=${p['taxa_motoboy']}');
+      }
+
+      final totalGanho = pedidosSemana.fold<double>(0, (s, p) {
+        final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
+        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
+        return s + taxa + gorjeta;
+      });
+      final totalSaques = saquesSemana.fold<double>(
+          0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
+      final saldoDisponivel = (totalGanho - totalSaques).clamp(0.0, double.infinity);
+
+      debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia ganhos=$totalGanho saques=$totalSaques saldoDisponivel=$saldoDisponivel');
 
       if (mounted) {
         setState(() {
