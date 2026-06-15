@@ -8,6 +8,7 @@ import 'entregador_home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
 import '../services/tracking_service.dart';
+import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -134,51 +135,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!silencioso) setState(() => _loadingStats = true);
     try {
       final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final inicioDia = DateTime(agora.year, agora.month, agora.day)
-          .toUtc()
+      final inicioDia = DateTime.utc(agora.year, agora.month, agora.day)
           .add(const Duration(hours: 3))
           .toIso8601String();
-      final diasDesdeSegunda = agora.weekday - 1;
-      final inicioSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 1)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
-      final fimSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda + 6, 23, 59)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
+      final uid = _supabase.auth.currentUser!.id;
 
       final r = await Future.wait<dynamic>([
         _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
-        // Pedidos finalizados de hoje — para saldo do dia
         _supabase
             .from('pedidos')
             .select('taxa_motoboy,taxa_entrega,gorjeta,updated_at')
-            .eq('motoboy_id', _supabase.auth.currentUser!.id)
+            .eq('motoboy_id', uid)
             .eq('status', 'finalizado'),
-        // Pedidos da semana (seg 00:01 a dom 23:59, horário Brasília) — para saldo disponível
-        _supabase
-            .from('pedidos')
-            .select('taxa_motoboy,taxa_entrega,gorjeta')
-            .eq('motoboy_id', _supabase.auth.currentUser!.id)
-            .eq('status', 'finalizado')
-            .gte('finalizado_em', inicioSemana)
-            .lte('finalizado_em', fimSemana),
-        // Saques da semana (qualquer status) — para descontar do saldo disponível
-        _supabase
-            .from('saques')
-            .select('valor')
-            .eq('entregador_id', _supabase.auth.currentUser!.id)
-            .gte('created_at', inicioSemana)
-            .lte('created_at', fimSemana),
+        calcularSaldoSemana(_supabase, uid),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
       final todosPedidos = List<Map<String, dynamic>>.from(r[1] as List);
-      final pedidosSemana = List<Map<String, dynamic>>.from(r[2] as List);
-      final saquesSemana = List<Map<String, dynamic>>.from(r[3] as List);
+      final saldoDisponivel = r[2] as double;
 
-      // Pedidos de hoje para o card "Saldo do dia"
       final listaDia = todosPedidos.where((p) {
         final dt = DateTime.tryParse(p['updated_at']?.toString() ?? '');
         return dt != null && dt.isAfter(DateTime.parse(inicioDia));
@@ -186,13 +161,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
 
-      // Saldo da semana: segunda 00:01 a domingo 23:59, horário Brasília
-      final totalGanho = pedidosSemana.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
-      final totalSaques = saquesSemana.fold<double>(0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
-      final saldoDisponivel = totalGanho - totalSaques;
-
-      debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia pedidosSemana=${pedidosSemana.length} totalGanho=$totalGanho totalSaques=$totalSaques saldoDisponivel=$saldoDisponivel');
-      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: ${totalGanho - totalSaques}');
+      debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia saldoDisponivel=$saldoDisponivel');
 
       if (mounted) {
         setState(() {

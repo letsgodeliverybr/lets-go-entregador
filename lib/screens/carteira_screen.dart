@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/saldo_semana.dart';
 
 class CarteiraScreen extends StatefulWidget {
   const CarteiraScreen({super.key});
@@ -67,47 +68,8 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     }
     setState(() => _carregandoSaldo = true);
     try {
-      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final diasDesdeSegunda = agora.weekday - 1;
-      final inicioSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda, 0, 1)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
-      final fimSemana = DateTime(agora.year, agora.month, agora.day - diasDesdeSegunda + 6, 23, 59)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
-
-      final results = await Future.wait<dynamic>([
-        _supabase
-            .from('pedidos')
-            .select('taxa_motoboy,taxa_entrega,gorjeta')
-            .eq('motoboy_id', _supabase.auth.currentUser!.id)
-            .eq('status', 'finalizado')
-            .gte('finalizado_em', inicioSemana)
-            .lte('finalizado_em', fimSemana),
-        _supabase
-            .from('saques')
-            .select('valor')
-            .eq('entregador_id', _supabase.auth.currentUser!.id)
-            .gte('created_at', inicioSemana)
-            .lte('created_at', fimSemana),
-      ]);
-
-      final pedidos = List<Map<String, dynamic>>.from(results[0] as List);
-      final saques = List<Map<String, dynamic>>.from(results[1] as List);
-
-      final totalGanho = pedidos.fold<double>(0, (s, p) {
-        final taxa = (p['taxa_motoboy'] as num?)?.toDouble() ?? 0;
-        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0;
-        return s + taxa + gorjeta;
-      });
-      final totalSaques = saques.fold<double>(0, (s, p) => s + ((p['valor'] as num?)?.toDouble() ?? 0));
-      final saldoDisponivel = totalGanho - totalSaques;
-
-      debugPrint('[CARTEIRA] uid: ${_supabase.auth.currentUser?.id}, pedidos encontrados: ${pedidos.length}, total: $totalGanho');
-      debugPrint('[SALDO] ganhos: $totalGanho, saques: $totalSaques, resultado: $saldoDisponivel');
-
+      final saldoDisponivel = await calcularSaldoSemana(_supabase, uid);
+      debugPrint('[CARTEIRA] uid: $uid saldo: $saldoDisponivel');
       if (mounted) {
         setState(() {
           _saldo = saldoDisponivel;

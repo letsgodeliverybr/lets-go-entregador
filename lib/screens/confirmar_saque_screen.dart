@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/taxa_helper.dart';
+import '../utils/saldo_semana.dart';
 
 class ConfirmarSaqueScreen extends StatefulWidget {
   const ConfirmarSaqueScreen({Key? key}) : super(key: key);
@@ -44,58 +44,19 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
     setState(() => _carregando = true);
     try {
-      // Garante que as faixas de preço estão carregadas
-      await carregarFaixas();
-
       final results = await Future.wait<dynamic>([
         _supabase
             .from('entregadores')
             .select('chave_pix, tipo_chave_pix, banco')
             .eq('id', _uid)
             .single(),
-        // ✅ Busca distancia_km e com_retorno para calcular igual ao home_screen
-        _supabase
-            .from('pedidos')
-            .select('distancia_km, com_retorno, gorjeta')
-            .or('entregador_id.eq.$_uid,motoboy_id.eq.$_uid')
-            .eq('status', 'finalizado'),
-        _supabase
-            .from('saques')
-            .select('valor')
-            .eq('entregador_id', _uid)
-            .inFilter('status', ['pago', 'pendente']),
+        calcularSaldoSemana(_supabase, _uid),
       ]);
 
       final entregador = results[0] as Map<String, dynamic>;
-      final pedidos = List<Map<String, dynamic>>.from(results[1] as List);
-      final saquesDescontados =
-          List<Map<String, dynamic>>.from(results[2] as List);
+      final saldo = results[1] as double;
 
-      debugPrint('[SAQUE] pedidos encontrados: ${pedidos.length}');
-      debugPrint('[SAQUE] saques descontados: ${saquesDescontados.length}');
-
-      // ✅ Mesmo cálculo do home_screen usando calcularTaxaMotoboy por faixas
-      double totalGanho = 0;
-      for (final p in pedidos) {
-        final distancia = (p['distancia_km'] as num?)?.toDouble() ?? 0.0;
-        final comRetorno = p['com_retorno'] == true;
-        final gorjeta = (p['gorjeta'] as num?)?.toDouble() ?? 0.0;
-
-        final taxa = faixasGlobais.isNotEmpty
-            ? calcularTaxaMotoboy(distancia, comRetorno, faixasGlobais)
-            : 0.0;
-        final contribuicao = taxa > 0 ? taxa : gorjeta;
-        debugPrint(
-            '[SAQUE] pedido dist=$distancia retorno=$comRetorno taxa=$taxa gorjeta=$gorjeta contrib=$contribuicao');
-        totalGanho += contribuicao;
-      }
-
-      final totalPago = saquesDescontados.fold<double>(
-          0, (s, s2) => s + ((s2['valor'] as num?)?.toDouble() ?? 0.0));
-      final saldo = (totalGanho - totalPago).clamp(0.0, double.infinity);
-
-      debugPrint(
-          '[SAQUE] totalGanho=$totalGanho totalPago=$totalPago saldo=$saldo');
+      debugPrint('[SAQUE] saldo disponível: $saldo');
 
       if (mounted) {
         setState(() {
@@ -194,10 +155,12 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
         'p_tipo_chave_pix': _tipoChavePix ?? '',
         'p_banco': _banco ?? '',
       });
-      if (mounted) setState(() {
-        _processando = false;
-        _sucesso = true;
-      });
+      if (mounted) {
+        setState(() {
+          _processando = false;
+          _sucesso = true;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
