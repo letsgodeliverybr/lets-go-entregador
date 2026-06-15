@@ -205,9 +205,13 @@ class _EntregaScreenState extends State<EntregaScreen> {
         final lat = (loja['lat'] ?? loja['latitude']) as num?;
         final lng = (loja['lng'] ?? loja['longitude']) as num?;
         if (lat != null && lng != null) {
-          final dist = _calcularDistancia(pos.latitude, pos.longitude, lat.toDouble(), lng.toDouble());
+          final coletaLat = (widget.pedido['latitude_coleta'] as num?)?.toDouble();
+          final coletaLng = (widget.pedido['longitude_coleta'] as num?)?.toDouble();
+          final distColeta = (coletaLat != null && coletaLng != null)
+              ? _calcularDistancia(pos.latitude, pos.longitude, coletaLat, coletaLng)
+              : _calcularDistancia(pos.latitude, pos.longitude, lat.toDouble(), lng.toDouble());
           if (mounted) setState(() {
-            _distanciaLojaKm = dist;
+            _distanciaLojaKm = distColeta;
             _lojaLat = lat.toDouble();
             _lojaLng = lng.toDouble();
           });
@@ -362,7 +366,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
           }
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-            final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
+            final coletaLat1 = (widget.pedido['latitude_coleta'] as num?)?.toDouble();
+            final coletaLng1 = (widget.pedido['longitude_coleta'] as num?)?.toDouble();
+            final targetLat1 = coletaLat1 ?? _lojaLat!;
+            final targetLng1 = coletaLng1 ?? _lojaLng!;
+            final distM = _calcularDistancia(pos.latitude, pos.longitude, targetLat1, targetLng1) * 1000;
             if (distM > 50) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -395,7 +403,11 @@ class _EntregaScreenState extends State<EntregaScreen> {
           }
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-            final distM = _calcularDistancia(pos.latitude, pos.longitude, _lojaLat!, _lojaLng!) * 1000;
+            final coletaLat2 = (widget.pedido['latitude_coleta'] as num?)?.toDouble();
+            final coletaLng2 = (widget.pedido['longitude_coleta'] as num?)?.toDouble();
+            final targetLat2 = coletaLat2 ?? _lojaLat!;
+            final targetLng2 = coletaLng2 ?? _lojaLng!;
+            final distM = _calcularDistancia(pos.latitude, pos.longitude, targetLat2, targetLng2) * 1000;
             if (distM > 50) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(

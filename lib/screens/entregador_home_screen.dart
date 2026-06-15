@@ -91,7 +91,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     try {
       final data = await _supabase
           .from('pedidos')
-          .select('id, status, latitude, longitude, endereco, numero, loja_id, lojas(nome, latitude, longitude)')
+          .select('id, status, latitude, longitude, endereco, numero, loja_id, latitude_coleta, longitude_coleta, endereco_coleta, lojas(nome, latitude, longitude)')
           .or('motoboy_id.eq.${user.id},entregador_id.eq.${user.id}')
           .inFilter('status', ['aceito', 'no_local', 'chegou_local', 'em_rota']);
       final lista = List<Map<String, dynamic>>.from(data);
@@ -105,6 +105,10 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
             loja['latitude'] != null && loja['longitude'] != null) {
           lojasMap[lojaId] = loja;
         }
+      }
+
+      for (final p in lista) {
+        debugPrint('[MAPA] pedido #${p['numero']} lat_coleta=${p['latitude_coleta']} lng_coleta=${p['longitude_coleta']} loja_lat=${(p['lojas'] as Map?)?['latitude']} loja_lng=${(p['lojas'] as Map?)?['longitude']}');
       }
 
       if (mounted) {
@@ -428,38 +432,70 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                         }).toList(),
                       ),
 
-                    // Cards de pedido (vermelho com número — endereço de entrega)
+                    // Marcadores de pedidos em andamento
                     if (_pedidosEmAndamento.isNotEmpty)
                       MarkerLayer(
-                        markers: _pedidosEmAndamento.map((p) {
-                          final lat = (p['latitude'] as num).toDouble();
-                          final lng = (p['longitude'] as num).toDouble();
-                          final numero = p['numero']?.toString() ?? '—';
-                          return Marker(
-                            point: LatLng(lat, lng),
-                            width: 56, height: 64,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1A56DB),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.white, width: 1.5),
-                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+                        markers: [
+                          for (final p in _pedidosEmAndamento) ...[
+                            // Marcador preto — ponto de coleta (quando diferente da loja)
+                            if (p['latitude_coleta'] != null && p['longitude_coleta'] != null)
+                              Marker(
+                                point: LatLng(
+                                  (p['latitude_coleta'] as num).toDouble(),
+                                  (p['longitude_coleta'] as num).toDouble(),
+                                ),
+                                width: 56, height: 64,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.white, width: 1.5),
+                                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+                                      ),
+                                      child: Text('#${p['numero'] ?? '—'}',
+                                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                                    ),
+                                    const CustomPaint(
+                                      size: Size(12, 8),
+                                      painter: _TrianglePainter(Colors.black),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            // Marcador azul — ponto de entrega
+                            Marker(
+                              point: LatLng(
+                                (p['latitude'] as num).toDouble(),
+                                (p['longitude'] as num).toDouble(),
+                              ),
+                              width: 56, height: 64,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1A56DB),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+                                    ),
+                                    child: Text('#${p['numero'] ?? '—'}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
                                   ),
-                                  child: Text('#$numero',
-                                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                                ),
-                                const CustomPaint(
-                                  size: Size(12, 8),
-                                  painter: _TrianglePainter(Color(0xFF1A56DB)),
-                                ),
-                              ],
+                                  const CustomPaint(
+                                    size: Size(12, 8),
+                                    painter: _TrianglePainter(Color(0xFF1A56DB)),
+                                  ),
+                                ],
+                              ),
                             ),
-                          );
-                        }).toList(),
+                          ],
+                        ],
                       ),
 
                     // Pin do motoboy

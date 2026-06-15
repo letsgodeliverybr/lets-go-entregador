@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -21,26 +22,12 @@ class _State extends State<AceitarPedidoScreen> {
   bool _aceitando = false;
   Position? _posicaoAtual;
   double _distMotoboyLoja = 0;
-  double _precoDinamico = 0.0;
 
   @override
   void initState() {
     super.initState();
     th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _obterPosicao();
-    _buscarPrecoDinamico();
-  }
-
-  Future<void> _buscarPrecoDinamico() async {
-    try {
-      final data = await _supabase
-          .from('configuracoes')
-          .select('valor')
-          .eq('chave', 'preco_dinamico_entregador')
-          .maybeSingle();
-      final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
-      if (mounted) setState(() => _precoDinamico = valor);
-    } catch (_) {}
   }
 
   Future<void> _obterPosicao() async {
@@ -86,6 +73,13 @@ class _State extends State<AceitarPedidoScreen> {
     final lng = (loja?['longitude'] ?? loja?['lng']) as num?;
     if (lat == null || lng == null) return null;
     return LatLng(lat.toDouble(), lng.toDouble());
+  }
+
+  LatLng? get _latLngColeta {
+    final lat = widget.pedido['latitude_coleta'];
+    final lng = widget.pedido['longitude_coleta'];
+    if (lat == null || lng == null) return null;
+    return LatLng((lat as num).toDouble(), (lng as num).toDouble());
   }
 
   static const _centro = LatLng(-21.1775, -47.8103);
@@ -139,6 +133,7 @@ class _State extends State<AceitarPedidoScreen> {
 
   void _recusar() => Navigator.pop(context);
 
+
   @override
   Widget build(BuildContext context) {
     final numero = widget.pedido['numero'] ?? widget.pedido['id'].toString().substring(0, 6);
@@ -148,12 +143,15 @@ class _State extends State<AceitarPedidoScreen> {
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = widget.pedido['pontos'] ?? 4;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final precoDinamico = _precoDinamico;
+    final precoDinamico = (widget.pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
     final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final loja = widget.pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
+    final endColeta = widget.pedido['endereco_coleta']?.toString() ?? '';
     final clienteLatLng = _latLngCliente;
     final lojaLatLng = _latLngLoja ?? _centro;
+    final coletaLatLng = _latLngColeta;
+    debugPrint('[ACEITAR] lat_coleta=${widget.pedido['latitude_coleta']} lng_coleta=${widget.pedido['longitude_coleta']} endereco_coleta=${widget.pedido['endereco_coleta']} preco_dinamico=${widget.pedido['preco_dinamico']}');
 
     final markers = <Marker>[];
 
@@ -214,6 +212,31 @@ class _State extends State<AceitarPedidoScreen> {
               child: Text('#$numero',
                   style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
             ),
+          ],
+        ),
+      ));
+    }
+
+    // Marcador preto — ponto de coleta
+    if (coletaLatLng != null) {
+      markers.add(Marker(
+        point: coletaLatLng,
+        width: 56, height: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.45), blurRadius: 6)],
+              ),
+              child: Text('#$numero',
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+            const CustomPaint(size: Size(12, 8), painter: _TrianglePainter(Colors.black)),
           ],
         ),
       ));
@@ -327,7 +350,18 @@ class _State extends State<AceitarPedidoScreen> {
                         ]),
                         const SizedBox(height: 8),
 
-                        // Linha 3: endereço de entrega
+                        // Linha 3: coleta (se houver) e entrega
+                        if (endColeta.isNotEmpty) ...[
+                          Row(children: [
+                            const Text('📦', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(endColeta,
+                                  style: const TextStyle(color: Colors.white, fontSize: 13)),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
+                        ],
                         Row(children: [
                           const Icon(Icons.location_pin, color: Color(0xFFec4899), size: 16),
                           const SizedBox(width: 6),
@@ -470,4 +504,23 @@ class _State extends State<AceitarPedidoScreen> {
       ),
     );
   }
+}
+
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+  const _TrianglePainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = ui.Paint()..color = color;
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_TrianglePainter old) => old.color != color;
 }

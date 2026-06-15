@@ -35,9 +35,11 @@ class PedidoCardWidget extends StatelessWidget {
     final comRetorno = pedido['com_retorno'] == true;
     final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaFinal = taxaMotoboy + gorjeta + precoDinamico;
+    // Usa o PD salvo no pedido no momento da criação, não o valor ao vivo de configuracoes
+    final pdSalvo = (pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
+    final taxaFinal = taxaMotoboy + gorjeta + pdSalvo;
     final taxaSemRetorno = comRetorno
-        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + gorjeta + precoDinamico
+        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + gorjeta + pdSalvo
         : 0.0;
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
@@ -153,7 +155,7 @@ class PedidoCardWidget extends StatelessWidget {
                         decorationColor: Colors.red,
                       )),
                   const SizedBox(width: 8),
-                ] else if (precoDinamico > 0) ...[
+                ] else if (pdSalvo > 0) ...[
                   Text('R\$${taxaMotoboy.toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.red, fontSize: 13,
@@ -171,8 +173,8 @@ class PedidoCardWidget extends StatelessWidget {
                   const SizedBox(width: 8),
                 ],
                 Text(
-                  precoDinamico > 0
-                      ? 'R\$${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
+                  pdSalvo > 0
+                      ? 'R\$${(taxaMotoboy + pdSalvo).toStringAsFixed(2)}'
                       : 'R\$${taxaFinal.toStringAsFixed(2)}',
                   style: const TextStyle(
                       color: Colors.white,

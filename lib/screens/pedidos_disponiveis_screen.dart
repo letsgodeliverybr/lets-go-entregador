@@ -419,17 +419,18 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Widget _buildCard(Map<String, dynamic> pedido) {
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaFinal = _calcTaxaMotoboy(pedido);
-    final taxaBase = taxaFinal - gorjeta - _precoDinamico;
-    final temBonus = gorjeta > 0 || _precoDinamico > 0;
-
-    final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
-    final pontos = pedido['pontos'] ?? 4;
+    final pdSalvo = (pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = pedido['com_retorno'] == true;
+    final taxaBase = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
+    final taxaFinal = taxaBase + gorjeta + pdSalvo;
+    final temBonus = gorjeta > 0 || pdSalvo > 0;
+
+    final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
+    final pontos = pedido['pontos'] ?? 4;
     final taxaSemRetorno = comRetorno
-        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + _precoDinamico + gorjeta
+        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + pdSalvo + gorjeta
         : 0.0;
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
@@ -550,7 +551,7 @@ class _State extends State<PedidosDisponiveisScreen> {
                       decorationColor: Colors.red,
                     )),
                 const SizedBox(width: 8),
-              ] else if (_precoDinamico > 0) ...[
+              ] else if (pdSalvo > 0) ...[
                 Text('R\$${taxaBase.toStringAsFixed(2)}',
                     style: const TextStyle(
                       color: Colors.red,
@@ -570,8 +571,8 @@ class _State extends State<PedidosDisponiveisScreen> {
                 const SizedBox(width: 8),
               ],
               Text(
-                _precoDinamico > 0
-                    ? 'R\$${(taxaBase + _precoDinamico).toStringAsFixed(2)}'
+                pdSalvo > 0
+                    ? 'R\$${(taxaBase + pdSalvo).toStringAsFixed(2)}'
                     : 'R\$${taxaFinal.toStringAsFixed(2)}',
                 style: const TextStyle(
                     color: Colors.white,
