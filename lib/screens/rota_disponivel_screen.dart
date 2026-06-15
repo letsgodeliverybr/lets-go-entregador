@@ -354,7 +354,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             if (endColeta.isNotEmpty) ...[
               const SizedBox(height: 6),
               Row(children: [
-                const Text('📦', style: TextStyle(fontSize: 14)),
+                const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 16),
                 const SizedBox(width: 6),
                 Expanded(child: Text(endColeta,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
