@@ -355,7 +355,7 @@ class _State extends State<AceitarPedidoScreen> {
                         // Linha 3: coleta (se houver) e entrega
                         if (endColeta.isNotEmpty) ...[
                           Row(children: [
-                            const Text('📦', style: TextStyle(fontSize: 14, color: Colors.white)),
+                            const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 16),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(endColeta,
