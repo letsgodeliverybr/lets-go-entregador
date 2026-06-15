@@ -343,16 +343,16 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             ]),
             const SizedBox(height: 10),
 
-            // Endereço da loja (coleta padrão)
-            Row(children: [
-              const Icon(Icons.store, color: Colors.white, size: 14),
-              const SizedBox(width: 6),
-              Expanded(child: Text(endLoja,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ]),
-            if (endColeta.isNotEmpty) ...[
-              const SizedBox(height: 6),
+            if (endColeta.isEmpty) ...[
+              // Endereço da loja (só quando não há coleta separada)
+              Row(children: [
+                const Icon(Icons.store, color: Colors.white, size: 14),
+                const SizedBox(width: 6),
+                Expanded(child: Text(endLoja,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ]),
+            ] else ...[
               Row(children: [
                 const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 16),
                 const SizedBox(width: 6),
