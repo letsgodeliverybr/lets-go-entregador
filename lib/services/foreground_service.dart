@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,6 +22,7 @@ class LocationTaskHandler extends TaskHandler {
   String _statusAtual = '';
   bool _chegadaDetectada = false;
   StreamSubscription<Position>? _posStream;
+  FlutterLocalNotificationsPlugin? _localNotif;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -38,7 +40,16 @@ class LocationTaskHandler extends TaskHandler {
       await Supabase.initialize(url: _supabaseUrl, anonKey: _supabaseKey);
     }
 
-    debugPrint('[ForegroundTask] Iniciado: entregador=$_entregadorId, pedido=$_pedidoId, proxLat=$_clienteLat, proxLng=$_clienteLng');
+    // Inicializa plugin de notificação local dentro do isolate do foreground task
+    // para conseguir disparar popup mesmo quando o isolate da UI está morto
+    _localNotif = FlutterLocalNotificationsPlugin();
+    await _localNotif!.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+    );
+
+    debugPrint('[ForegroundTask] Iniciado: entregador=$_entregadorId pedido=$_pedidoId destino=($_clienteLat,$_clienteLng)');
     _iniciarStreamGPS();
   }
 
@@ -69,7 +80,23 @@ class LocationTaskHandler extends TaskHandler {
   Future<void> _onPosicao(Position pos) async {
     if (_entregadorId == null) return;
 
-    debugPrint('[ForegroundTask|GPS] lat:${pos.latitude.toStringAsFixed(6)}, lng:${pos.longitude.toStringAsFixed(6)}, acc:${pos.accuracy.toStringAsFixed(0)}m');
+    // Calcula distância ao destino em toda atualização — mesmo sem pedido ativo
+    double? distM;
+    if (_clienteLat != null && _clienteLng != null) {
+      distM = Geolocator.distanceBetween(
+        pos.latitude, pos.longitude,
+        _clienteLat!, _clienteLng!,
+      );
+    }
+
+    debugPrint(
+      '[ForegroundTask|GPS] '
+      'lat:${pos.latitude.toStringAsFixed(6)} '
+      'lng:${pos.longitude.toStringAsFixed(6)} '
+      'acc:${pos.accuracy.toStringAsFixed(0)}m '
+      'distancia_ate_destino:${distM != null ? '${distM.toStringAsFixed(0)}m' : 'sem_pedido'} '
+      'status_pedido:${_pedidoId != null ? (_statusAtual.isNotEmpty ? _statusAtual : 'em_rota') : 'sem_pedido_ativo'}',
+    );
 
     try {
       await Supabase.instance.client.from('entregadores').update({
@@ -83,10 +110,10 @@ class LocationTaskHandler extends TaskHandler {
       debugPrint('[ForegroundTask|GPS] Erro ao atualizar posição: $e');
     }
 
-    await _verificarProximidade(pos);
+    if (distM != null) await _verificarProximidade(distM);
   }
 
-  // onRepeatEvent agora é só watchdog: reinicia o stream se morreu silenciosamente
+  // onRepeatEvent é watchdog: reinicia o stream se morreu silenciosamente
   @override
   void onRepeatEvent(DateTime timestamp) {
     if (_posStream == null && _entregadorId != null) {
@@ -95,18 +122,12 @@ class LocationTaskHandler extends TaskHandler {
     }
   }
 
-  Future<void> _verificarProximidade(Position pos) async {
+  Future<void> _verificarProximidade(double distM) async {
     if (_pedidoId == null || _clienteLat == null || _clienteLng == null || _chegadaDetectada) return;
-
-    final distM = Geolocator.distanceBetween(
-      pos.latitude, pos.longitude,
-      _clienteLat!, _clienteLng!,
-    );
-    debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m status=$_statusAtual');
 
     if (distM <= 50) {
       _chegadaDetectada = true;
-      debugPrint('[ForegroundTask|PROX] ✓ Chegou ao destino! Atualizando Supabase...');
+      debugPrint('[ForegroundTask|PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m pedido=$_pedidoId');
       try {
         await Supabase.instance.client.from('pedidos').update({
           'status': 'chegou_destino',
@@ -115,17 +136,49 @@ class LocationTaskHandler extends TaskHandler {
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', _pedidoId!);
 
+        // Notifica o isolate da UI (funciona se o app está em background mas vivo)
         FlutterForegroundTask.sendDataToMain('chegou_destino:$_pedidoId');
 
+        // Atualiza o texto da notificação persistente do foreground service
         await FlutterForegroundTask.updateService(
           notificationTitle: "Let's Go Delivery",
           notificationText: '📍 Você chegou ao destino!',
         );
-        debugPrint('[ForegroundTask|PROX] Supabase atualizado e main notificado');
+
+        // Dispara popup de notificação local diretamente do isolate do foreground task
+        // — funciona mesmo se o isolate da UI estiver morto (app completamente em background)
+        await _mostrarNotificacaoLocal();
+
+        debugPrint('[ForegroundTask|PROX] Supabase atualizado, notificação enviada');
       } catch (e) {
         debugPrint('[ForegroundTask|PROX] Erro ao atualizar status: $e');
         _chegadaDetectada = false;
       }
+    }
+  }
+
+  Future<void> _mostrarNotificacaoLocal() async {
+    try {
+      await _localNotif?.show(
+        2001,
+        '📍 Chegou ao destino!',
+        'Peça o código de confirmação ao cliente.',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'letsgo_chegou_destino',
+            'Chegou ao Destino',
+            channelDescription: 'Alerta de chegada ao endereço de entrega',
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            enableLights: true,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[ForegroundTask|PROX] Erro ao mostrar notificação local: $e');
     }
   }
 
@@ -174,8 +227,9 @@ class ForegroundService {
         channelId: 'letsgo_location_channel',
         channelName: 'Rastreamento GPS',
         channelDescription: 'Mantém o envio de localização ativo em background',
-        channelImportance: NotificationChannelImportance.DEFAULT,
-        priority: NotificationPriority.DEFAULT,
+        // HIGH para o serviço sobreviver ao Doze mode / battery optimization
+        channelImportance: NotificationChannelImportance.HIGH,
+        priority: NotificationPriority.HIGH,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
