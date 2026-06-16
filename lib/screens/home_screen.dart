@@ -346,6 +346,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
+    debugPrint('[HOME] _buildCardPrincipal: _entregasHoje=$_entregasHoje status=offline');
+
     if (_entregasHoje > 0) {
       return _buildCardBomTrabalho();
     }
@@ -462,6 +464,85 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildCardOffline() {
+    debugPrint('[HOME] _buildCardOffline: _entregasHoje=$_entregasHoje status=offline');
+
+    if (_entregasHoje > 0) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFF161820),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF2A2D35)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              height: 120,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E2130),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: const Center(
+                child: Text('🏆', style: TextStyle(fontSize: 60)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                const Text('Bom trabalho hoje!',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                Text(
+                  'Você já fez $_entregasHoje entrega${_entregasHoje > 1 ? 's' : ''} e ganhou R\$ ${_saldoDia.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Color(0xFF6B7280), fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                GestureDetector(
+                  onTap: _carregando ? null : () => _toggleOnline(true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2130),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF2A2D35)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Text('Voltar online',
+                          style: TextStyle(
+                              color: Color(0xFF1A56DB),
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      _carregando
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF1A56DB)))
+                          : Switch(
+                              value: false,
+                              onChanged: (_) => _toggleOnline(true),
+                              activeColor: const Color(0xFF1A56DB),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
