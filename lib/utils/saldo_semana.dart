@@ -29,7 +29,7 @@ Future<double> calcularSaldoSemana() async {
   final saques = await Supabase.instance.client
       .from('saques')
       .select('valor')
-      .eq('motoboy_id', user.id)
+      .eq('entregador_id', user.id)
       .neq('status', 'cancelado')
       .gte('created_at', inicio.toIso8601String())
       .lte('created_at', fim.toIso8601String());
