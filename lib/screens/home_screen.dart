@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .select('taxa_motoboy,taxa_entrega,gorjeta,updated_at')
             .eq('motoboy_id', uid)
             .eq('status', 'finalizado'),
-        calcularSaldoSemana(_supabase, uid),
+        calcularSaldoSemana(),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;

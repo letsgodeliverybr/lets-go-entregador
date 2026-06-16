@@ -50,7 +50,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
             .select('chave_pix, tipo_chave_pix, banco')
             .eq('id', _uid)
             .single(),
-        calcularSaldoSemana(_supabase, _uid),
+        calcularSaldoSemana(),
       ]);
 
       final entregador = results[0] as Map<String, dynamic>;

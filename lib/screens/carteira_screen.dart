@@ -68,7 +68,7 @@ class _CarteiraScreenState extends State<CarteiraScreen>
     }
     setState(() => _carregandoSaldo = true);
     try {
-      final saldoDisponivel = await calcularSaldoSemana(_supabase, uid);
+      final saldoDisponivel = await calcularSaldoSemana();
       debugPrint('[CARTEIRA] uid: $uid saldo=$saldoDisponivel');
       if (mounted) {
         setState(() {
