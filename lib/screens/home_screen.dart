@@ -8,8 +8,8 @@ import 'entregador_home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
 import '../services/tracking_service.dart';
-import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/saldo_semana.dart';
+import '../widgets/app_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -134,8 +134,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshing = true;
     if (!silencioso) setState(() => _loadingStats = true);
     try {
-      final now = DateTime.now();
-      final inicioDia = DateTime(now.year, now.month, now.day).toIso8601String();
+      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      final inicioDia = DateTime.utc(agora.year, agora.month, agora.day)
+          .add(const Duration(hours: 3))
+          .toIso8601String();
       final uid = _supabase.auth.currentUser!.id;
 
       final r = await Future.wait<dynamic>([
