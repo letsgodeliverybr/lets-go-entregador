@@ -134,25 +134,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshing = true;
     if (!silencioso) setState(() => _loadingStats = true);
     try {
-      // Brasília = UTC-3
-      final now = DateTime.now().toUtc();
-      final nowBrasilia = now.subtract(const Duration(hours: 3));
-      final inicioDia = DateTime.utc(
-        nowBrasilia.year, nowBrasilia.month, nowBrasilia.day,
-      ).add(const Duration(hours: 3)); // 00:00 Brasília em UTC
-      final fimDia = inicioDia.add(
-        const Duration(hours: 23, minutes: 59, seconds: 59),
-      ); // 23:59:59 Brasília em UTC
+      final uid = _supabase.auth.currentUser?.id;
+      if (uid == null) return;
+
+      // Brasília = UTC-3 (mesma lógica do EntregadorHomeScreen._carregarStats)
+      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      final inicioDia = DateTime(agora.year, agora.month, agora.day)
+          .toUtc()
+          .add(const Duration(hours: 3))
+          .toIso8601String();
 
       final r = await Future.wait<dynamic>([
         _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
         _supabase
             .from('pedidos')
             .select('taxa_motoboy,gorjeta')
-            .eq('motoboy_id', _eid)
+            .eq('motoboy_id', uid)
             .eq('status', 'finalizado')
-            .gte('finalizado_em', inicioDia.toIso8601String())
-            .lte('finalizado_em', fimDia.toIso8601String()),
+            .gte('finalizado_em', inicioDia),
         calcularSaldoSemana(),
       ]);
 
@@ -165,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
 
       debugPrint('[HOME] total_ganhos_hoje=$totalDia qtd_pedidos_hoje=${pedidosHoje.length}');
-      debugPrint('[HOME] UID=$_uid EID=$_eid saldoDisponivel=$saldoDisponivel');
+      debugPrint('[HOME] UID=$uid EID=$_eid match=${uid == _eid} saldoDisponivel=$saldoDisponivel');
 
       if (mounted) {
         setState(() {
