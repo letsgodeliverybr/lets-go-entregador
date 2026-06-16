@@ -159,7 +159,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return dt != null && dt.isAfter(DateTime.parse(inicioDia));
       }).toList();
 
-      final totalDia = listaDia.fold<double>(0, (s, p) => s + _calcTaxaMotoboy(p));
+      final totalDia = listaDia.fold<double>(0, (s, p) =>
+          s +
+          (double.tryParse(p['taxa_motoboy']?.toString() ?? '0') ?? 0) +
+          (double.tryParse(p['gorjeta']?.toString() ?? '0') ?? 0));
 
       debugPrint('[HOME] UID=$_uid EID=$_eid pedidosDia=${listaDia.length} totalDia=$totalDia saldoDisponivel=$saldoDisponivel');
 
