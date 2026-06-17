@@ -269,9 +269,12 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = _pedido['pontos'] ?? 4;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final precoDinamico = (_pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
+    final taxaMotoboySalvo = (_pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaMotoboy;
+    final rawPd = taxaMotoboySalvo - taxaMotoboy;
+    final precoDinamico = rawPd >= 0.05 ? rawPd : 0.0;
     final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final numero = _pedido['numero']?.toString() ?? '—';
+    debugPrint('[RotaDisponivel] #$numero taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaMotoboy.toStringAsFixed(2)} pd_detectado=${precoDinamico.toStringAsFixed(2)}');
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),

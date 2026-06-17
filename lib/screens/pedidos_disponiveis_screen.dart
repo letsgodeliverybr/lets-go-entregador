@@ -420,13 +420,16 @@ class _State extends State<PedidosDisponiveisScreen> {
   Widget _buildCard(Map<String, dynamic> pedido) {
     print('[DISPONIVEL] pedido=${pedido['numero']} lat_coleta=${pedido['latitude_coleta']}');
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final pdSalvo = (pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = pedido['com_retorno'] == true;
     final taxaBase = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
+    final taxaMotoboySalvo = (pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaBase;
+    final rawPd = taxaMotoboySalvo - taxaBase;
+    final pdSalvo = rawPd >= 0.05 ? rawPd : 0.0;
     final taxaFinal = taxaBase + gorjeta + pdSalvo;
     final temBonus = gorjeta > 0 || pdSalvo > 0;
+    debugPrint('[Disponivel] #${pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaBase.toStringAsFixed(2)} pd_detectado=${pdSalvo.toStringAsFixed(2)}');
 
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final pontos = pedido['pontos'] ?? 4;

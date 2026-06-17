@@ -33,14 +33,16 @@ class PedidoCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = pedido['com_retorno'] == true;
-    final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    // Usa o PD salvo no pedido no momento da criação, não o valor ao vivo de configuracoes
-    final pdSalvo = (pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
+    final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
+    final taxaMotoboySalvo = (pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaMotoboy;
+    final rawPd = taxaMotoboySalvo - taxaMotoboy;
+    final pdSalvo = rawPd >= 0.05 ? rawPd : 0.0;
     final taxaFinal = taxaMotoboy + gorjeta + pdSalvo;
     final taxaSemRetorno = comRetorno
         ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + gorjeta + pdSalvo
         : 0.0;
+    debugPrint('[PedidoCard] #${pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaMotoboy.toStringAsFixed(2)} pd_detectado=${pdSalvo.toStringAsFixed(2)}');
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final loja = pedido['lojas'];

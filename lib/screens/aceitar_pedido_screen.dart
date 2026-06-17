@@ -143,9 +143,12 @@ class _State extends State<AceitarPedidoScreen> {
     final comRetorno = widget.pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = widget.pedido['pontos'] ?? 4;
-    final taxaMotoboy = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final precoDinamico = (widget.pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
-    debugPrint('[ACEITAR] pedido=${widget.pedido['numero']} preco_dinamico=${widget.pedido['preco_dinamico']} taxa_motoboy=${widget.pedido['taxa_motoboy']}');
+    final taxaBase = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
+    final taxaMotoboySalvo = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaBase;
+    final taxaMotoboy = taxaBase;
+    final rawPd = taxaMotoboySalvo - taxaBase;
+    final precoDinamico = rawPd >= 0.05 ? rawPd : 0.0;
+    debugPrint('[Aceitar] #${widget.pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaBase.toStringAsFixed(2)} pd_detectado=${precoDinamico.toStringAsFixed(2)}');
     final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final loja = widget.pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
