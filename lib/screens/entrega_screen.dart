@@ -354,6 +354,8 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         )
         .subscribe((status, [error]) {
           if (status == RealtimeSubscribeStatus.subscribed) {
+            _retryTimerPedido?.cancel();
+            _retryTimerPedido = null;
             _retryContPedido = 0;
             debugPrint('[EntregaScreen] Realtime subscribed OK');
           } else if (status == RealtimeSubscribeStatus.channelError ||
