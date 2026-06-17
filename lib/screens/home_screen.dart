@@ -24,6 +24,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   RealtimeChannel? _canal;
   Timer? _debounce;
+  Timer? _retryTimerCanal;
+  int _retryContCanal = 0;
 
   String _nome = '';
   double _saldoDia = 0;
@@ -87,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _retryTimerCanal?.cancel();
     _canal?.unsubscribe();
     _debounce?.cancel();
     super.dispose();
@@ -95,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _iniciarRealtime() {
     if (_eid.isEmpty) return;
     _canal = _supabase
-        .channel('home_saldo_$_eid')
+        .channel('home_saldo_${_eid}_${DateTime.now().millisecondsSinceEpoch}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -118,7 +121,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           callback: (_) => _agendarRecarregar(),
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            _retryTimerCanal?.cancel();
+            _retryTimerCanal = null;
+            _retryContCanal = 0;
+            debugPrint('[Home] Realtime subscribed OK');
+          } else if (status == RealtimeSubscribeStatus.channelError ||
+              status == RealtimeSubscribeStatus.closed ||
+              status == RealtimeSubscribeStatus.timedOut) {
+            debugPrint('[Home] Realtime queda: status=$status — reconectando...');
+            _agendarReconexaoCanal();
+          }
+        });
+  }
+
+  void _agendarReconexaoCanal() {
+    if (!mounted) return;
+    _retryTimerCanal?.cancel();
+    final delayS = _retryContCanal < 6 ? (2 << _retryContCanal).clamp(2, 30) : 30;
+    _retryContCanal++;
+    debugPrint('[Home] Reconexão Realtime em ${delayS}s (tentativa $_retryContCanal)');
+    _retryTimerCanal = Timer(Duration(seconds: delayS), () async {
+      if (!mounted) return;
+      if (_canal != null) {
+        await _supabase.removeChannel(_canal!);
+        _canal = null;
+      }
+      _iniciarRealtime();
+      // Reload dados ao reconectar — pode ter perdido eventos durante a queda
+      _agendarRecarregar();
+    });
   }
 
   void _agendarRecarregar() {

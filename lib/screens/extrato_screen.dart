@@ -162,10 +162,22 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     );
   }
 
+  // Supabase retorna timestamps sem sufixo de fuso — força UTC e converte para
+  // Brasília (UTC-3, fixo desde extinção do horário de verão em 2019).
+  DateTime? _parseBrasilia(String? raw) {
+    if (raw == null) return null;
+    var s = raw;
+    if (!s.contains('Z') && !s.contains('+') &&
+        !RegExp(r'-\d{2}:\d{2}$').hasMatch(s.length > 10 ? s.substring(10) : '')) {
+      s = '${s}Z';
+    }
+    final dt = DateTime.tryParse(s);
+    if (dt == null) return null;
+    return dt.toUtc().subtract(const Duration(hours: 3));
+  }
+
   Widget _buildItem(Map<String, dynamic> p) {
-    final data = p['updated_at'] != null
-        ? DateTime.tryParse(p['updated_at'].toString())?.toLocal()
-        : null;
+    final data = _parseBrasilia(p['updated_at']?.toString());
     final dataStr = data != null
         ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year} às ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}'
         : '—';
