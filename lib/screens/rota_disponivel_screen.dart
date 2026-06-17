@@ -25,8 +25,6 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   bool _processando = false;
   LatLng? _posicaoEntregador;
   double _distMotoboyLoja = 0;
-  double _precoDinamico = 0.0;
-
   Map<String, dynamic> get _pedido => widget.pedido;
 
   double? get _lojaLat {
@@ -51,19 +49,6 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
     _obterPosicaoEntregador();
     Future.delayed(const Duration(milliseconds: 300), _ajustarMapa);
-    _buscarPrecoDinamico();
-  }
-
-  Future<void> _buscarPrecoDinamico() async {
-    try {
-      final data = await _supabase
-          .from('configuracoes')
-          .select('valor')
-          .eq('chave', 'preco_dinamico_entregador')
-          .maybeSingle();
-      final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
-      if (mounted) setState(() => _precoDinamico = valor);
-    } catch (_) {}
   }
 
   Future<void> _obterPosicaoEntregador() async {
@@ -284,7 +269,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = _pedido['pontos'] ?? 4;
     final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final precoDinamico = _precoDinamico;
+    final precoDinamico = (_pedido['preco_dinamico'] as num?)?.toDouble() ?? 0.0;
     final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
     final numero = _pedido['numero']?.toString() ?? '—';
 
