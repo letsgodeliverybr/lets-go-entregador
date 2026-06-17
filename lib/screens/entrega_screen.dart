@@ -24,7 +24,7 @@ class EntregaScreen extends StatefulWidget {
   State<EntregaScreen> createState() => _EntregaScreenState();
 }
 
-class _EntregaScreenState extends State<EntregaScreen> {
+class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserver {
   final _supabase = Supabase.instance.client;
   final _codigoCtrl = TextEditingController();
   EtapaEntrega _etapa = EtapaEntrega.aceito;
@@ -69,6 +69,39 @@ class _EntregaScreenState extends State<EntregaScreen> {
     _assinarResetPedido();
     _configurarComunicacaoForeground();
     _solicitarExcecaoBateria();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _sincronizarStatusPedido();
+  }
+
+  // Ao voltar ao foreground, lê o status atual do banco — garante que a UI
+  // reflita mudanças que aconteceram enquanto a tela estava bloqueada e o
+  // Realtime perdeu eventos durante o lock (WebSocket cai e não replaya).
+  Future<void> _sincronizarStatusPedido() async {
+    if (!mounted) return;
+    if (_etapa != EtapaEntrega.emRota && _etapa != EtapaEntrega.retornando) return;
+    try {
+      final data = await _supabase
+          .from('pedidos')
+          .select('status, status_detalhado')
+          .eq('id', _pedidoId)
+          .single();
+      final status = (data['status_detalhado'] ?? data['status'])?.toString() ?? '';
+      debugPrint('[EntregaScreen] sincronizar ao resumir: status_banco=$status etapa_atual=$_etapa');
+      if (!mounted) return;
+      if (status == 'chegou_destino' &&
+          (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+        debugPrint('[EntregaScreen] chegou_destino detectado no resume — atualizando UI');
+        setState(() => _etapa = EtapaEntrega.chegouDestino);
+        ForegroundService.desativarProximidade();
+        NotificationService.showChegouDestinoLocal();
+      }
+    } catch (e) {
+      debugPrint('[EntregaScreen] erro ao sincronizar status no resume: $e');
+    }
   }
 
   Future<void> _abrirMaps(String endereco) async {
@@ -341,6 +374,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _subProximidade?.cancel();
     if (_subPedido != null) _supabase.removeChannel(_subPedido!);
     FlutterForegroundTask.removeTaskDataCallback(_onDadosForeground);
