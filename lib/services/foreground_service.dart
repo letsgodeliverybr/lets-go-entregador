@@ -110,7 +110,7 @@ class LocationTaskHandler extends TaskHandler {
       debugPrint('[ForegroundTask|GPS] Erro ao atualizar posição: $e');
     }
 
-    if (distM != null) await _verificarProximidade(distM);
+    if (distM != null && pos.accuracy <= 30) await _verificarProximidade(distM);
   }
 
   // onRepeatEvent é watchdog: reinicia o stream se morreu silenciosamente

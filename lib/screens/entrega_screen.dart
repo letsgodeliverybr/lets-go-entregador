@@ -40,6 +40,8 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   double _precoDinamico = 0.0;
   StreamSubscription<Position>? _subProximidade;
   RealtimeChannel? _subPedido;
+  Timer? _retryTimerPedido;
+  int _retryContPedido = 0;
 
   String get _pedidoId => widget.pedido['id'].toString();
 
@@ -304,9 +306,10 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         pos.latitude, pos.longitude,
         clienteLat.toDouble(), clienteLng.toDouble(),
       );
-      debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m status=$_etapa');
+      debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m acc=${pos.accuracy.toStringAsFixed(0)}m status=$_etapa');
+      if (pos.accuracy > 30) return;
       if (distM <= 50 && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
-        debugPrint('[PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m');
+        debugPrint('[PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m acc=${pos.accuracy.toStringAsFixed(0)}m');
         _marcarChegouDestinoAutomatico();
       }
     }, onError: (e) {
@@ -326,7 +329,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
 
   void _assinarResetPedido() {
     _subPedido = _supabase
-        .channel('pedido_reset_$_pedidoId')
+        .channel('pedido_reset_${_pedidoId}_${DateTime.now().millisecondsSinceEpoch}')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -349,11 +352,41 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
             }
           },
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            _retryContPedido = 0;
+            debugPrint('[EntregaScreen] Realtime subscribed OK');
+          } else if (status == RealtimeSubscribeStatus.channelError ||
+              status == RealtimeSubscribeStatus.closed ||
+              status == RealtimeSubscribeStatus.timedOut) {
+            debugPrint('[EntregaScreen] Realtime queda: status=$status error=$error — reconectando...');
+            _agendarReconexaoPedido();
+          }
+        });
+  }
+
+  void _agendarReconexaoPedido() {
+    if (!mounted) return;
+    _retryTimerPedido?.cancel();
+    final delayS = _retryContPedido < 6
+        ? (2 << _retryContPedido).clamp(2, 30)
+        : 30;
+    _retryContPedido++;
+    debugPrint('[EntregaScreen] Reconexão Realtime em ${delayS}s (tentativa $_retryContPedido)');
+    _retryTimerPedido = Timer(Duration(seconds: delayS), () async {
+      if (!mounted) return;
+      if (_subPedido != null) {
+        await _supabase.removeChannel(_subPedido!);
+        _subPedido = null;
+      }
+      _assinarResetPedido();
+    });
   }
 
   Future<void> _handleResetPedido() async {
     if (!mounted) return;
+    _retryTimerPedido?.cancel();
+    _retryTimerPedido = null;
     _subProximidade?.cancel();
     _subProximidade = null;
     if (_subPedido != null) {
@@ -375,6 +408,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _retryTimerPedido?.cancel();
     _subProximidade?.cancel();
     if (_subPedido != null) _supabase.removeChannel(_subPedido!);
     FlutterForegroundTask.removeTaskDataCallback(_onDadosForeground);
