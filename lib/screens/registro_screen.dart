@@ -11,6 +11,7 @@ class RegistroScreen extends StatefulWidget {
 
 class _RegistroScreenState extends State<RegistroScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nomeCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _senhaCtrl = TextEditingController();
   final _confirmarSenhaCtrl = TextEditingController();
@@ -20,6 +21,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
   @override
   void dispose() {
+    _nomeCtrl.dispose();
     _emailCtrl.dispose();
     _senhaCtrl.dispose();
     _confirmarSenhaCtrl.dispose();
@@ -75,7 +77,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
       try {
         await supabase.from('entregadores').insert({
           'id': user.id,
-          'email': email,
+          'nome': _nomeCtrl.text.trim(),
           'status': 'inativo',
           'aprovado': false,
           'status_cadastro': 'pendente',
@@ -171,6 +173,19 @@ class _RegistroScreenState extends State<RegistroScreen> {
               const Text('Crie sua conta para começar a entregar',
                   style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 14)),
               const SizedBox(height: 32),
+              _label('Nome completo'),
+              const SizedBox(height: 8),
+              _campo(
+                controller: _nomeCtrl,
+                hint: 'Seu nome completo',
+                icone: Icons.person_outline,
+                teclado: TextInputType.name,
+                validar: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Informe seu nome';
+                  if (v.trim().length < 3) return 'Nome muito curto';
+                  return null;
+                },
+              ),
               _label('E-mail'),
               const SizedBox(height: 8),
               _campo(
