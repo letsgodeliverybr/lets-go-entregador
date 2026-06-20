@@ -7,14 +7,41 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:935542418052:android:53cc725fa08ba7653eb0d1",
+        "android_client_info": {
+          "package_name": "br.com.letsgodelivery.parceiro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:935542418052:android:2e356ebfc7f8055f3eb0d1",
         "android_client_info": {
           "package_name": "com.letsgodelivery.entregador"
         }
       },
       "oauth_client": [],
-      "api_key": [{"current_key": "AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10"}],
-      "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCPzZZWrLGmnUlzxo66h4tzn0I0HsV-10"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"
