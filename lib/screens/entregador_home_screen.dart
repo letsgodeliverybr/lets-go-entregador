@@ -126,11 +126,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
     try {
-      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final inicioDia = DateTime(agora.year, agora.month, agora.day)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
+      // finalizado_em é gravado como hora local (sem offset), então compara com meia-noite local
+      final now = DateTime.now();
+      final inicioDia = DateTime(now.year, now.month, now.day).toIso8601String();
       final pedidos = await _supabase
           .from('pedidos')
           .select('taxa_motoboy, gorjeta')

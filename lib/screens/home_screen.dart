@@ -170,12 +170,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final uid = _supabase.auth.currentUser?.id;
       if (uid == null) return;
 
-      // Brasília = UTC-3 (mesma lógica do EntregadorHomeScreen._carregarStats)
-      final agora = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final inicioDia = DateTime(agora.year, agora.month, agora.day)
-          .toUtc()
-          .add(const Duration(hours: 3))
-          .toIso8601String();
+      // finalizado_em é gravado como hora local (sem offset), então compara com meia-noite local
+      final now = DateTime.now();
+      final inicioDia = DateTime(now.year, now.month, now.day).toIso8601String();
 
       final r = await Future.wait<dynamic>([
         _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
