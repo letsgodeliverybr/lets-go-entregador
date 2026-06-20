@@ -26,7 +26,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.letsgodelivery.entregador"
-    compileSdkVersion 34
+    compileSdkVersion 35
         ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -54,7 +54,7 @@ android {
     defaultConfig {
         applicationId "br.com.letsgodelivery.parceiro"
         minSdkVersion 21
-        targetSdkVersion flutter.targetSdkVersion
+        targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
