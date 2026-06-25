@@ -5,9 +5,9 @@ create extension if not exists pg_net schema extensions;
 alter table public.entregadores
   add column if not exists fcm_token text;
 
--- Armazena o segredo do webhook como configuração do banco
--- SUBSTITUA 'SEU_SECRET_AQUI' pelo mesmo valor definido em NOTIFY_WEBHOOK_SECRET
-alter database postgres set app.notify_secret = 'SEU_SECRET_AQUI';
+-- ATENÇÃO: app.notify_secret NÃO pode ser definido via migration (exige superusuário).
+-- Configure pelo painel Supabase: Database → Configuration → Custom config
+-- Adicione:  app.notify_secret = '<seu_secret>'
 
 -- Função chamada pelo trigger
 create or replace function public.fn_notify_pedido_pronto()

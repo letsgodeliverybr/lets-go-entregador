@@ -43,7 +43,7 @@ Future<double> calcularSaldoSemana() async {
       .from('saques')
       .select('valor, data_inicio, data_fim')
       .eq('entregador_id', user.id)
-      .neq('status', 'cancelado')
+      .inFilter('status', ['pago', 'pendente'])
       .lte('data_inicio', fimData)
       .gte('data_fim', inicioData);
 
@@ -57,7 +57,7 @@ Future<double> calcularSaldoSemana() async {
       .from('saques')
       .select('valor, data_inicio, data_fim, created_at')
       .eq('entregador_id', user.id)
-      .neq('status', 'cancelado')
+      .inFilter('status', ['pago', 'pendente'])
       .gte('created_at', inicio.toIso8601String())
       .lte('created_at', fim.toIso8601String());
 
