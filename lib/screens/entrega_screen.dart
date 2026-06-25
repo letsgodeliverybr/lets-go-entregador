@@ -107,13 +107,20 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   }
 
   Future<void> _abrirMaps(String endereco, {double? lat, double? lng}) async {
-    Uri uri;
     if (lat != null && lng != null) {
-      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
-    } else {
-      final encoded = Uri.encodeComponent(endereco);
-      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$encoded&travelmode=driving');
+      final navUri = Uri.parse('google.navigation:q=$lat,$lng&mode=d');
+      if (await canLaunchUrl(navUri)) {
+        await launchUrl(navUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+      final fallbackUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+      if (await canLaunchUrl(fallbackUri)) {
+        await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+      }
+      return;
     }
+    final encoded = Uri.encodeComponent(endereco);
+    final uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$encoded&travelmode=driving');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
