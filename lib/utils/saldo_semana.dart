@@ -53,7 +53,7 @@ Future<double> calcularSaldoSemana() async {
       .gte('data', inicioData)
       .lte('data', fimData);
 
-  final listaCreditos = creditos as List<dynamic>;
+  final listaCreditos = creditos;
   double totalCreditos = 0;
   double totalDebitos = 0;
   for (final c in listaCreditos) {
