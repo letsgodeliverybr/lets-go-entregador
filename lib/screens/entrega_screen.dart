@@ -106,9 +106,14 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     }
   }
 
-  Future<void> _abrirMaps(String endereco) async {
-    final encoded = Uri.encodeComponent(endereco);
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+  Future<void> _abrirMaps(String endereco, {double? lat, double? lng}) async {
+    Uri uri;
+    if (lat != null && lng != null) {
+      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+    } else {
+      final encoded = Uri.encodeComponent(endereco);
+      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$encoded&travelmode=driving');
+    }
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -696,9 +701,9 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     return _buildCardTela2(numero);
   }
 
-  Widget _buildEnderecoClicavel(String endereco, {Color iconColor = const Color(0xFF1A56DB)}) {
+  Widget _buildEnderecoClicavel(String endereco, {Color iconColor = const Color(0xFF1A56DB), double? lat, double? lng}) {
     return GestureDetector(
-      onTap: () => _abrirMaps(endereco),
+      onTap: () => _abrirMaps(endereco, lat: lat, lng: lng),
       child: Row(children: [
         Icon(Icons.location_on, color: iconColor, size: 18),
         const SizedBox(width: 8),
@@ -746,7 +751,10 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         const SizedBox(height: 10),
         const Text('Endereço de coleta:', style: TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 0.5)),
         const SizedBox(height: 4),
-        _buildEnderecoClicavel(enderecoColeta),
+        _buildEnderecoClicavel(enderecoColeta,
+          lat: (widget.pedido['latitude_coleta'] as num?)?.toDouble(),
+          lng: (widget.pedido['longitude_coleta'] as num?)?.toDouble(),
+        ),
         if (_distanciaLojaKm != null) ...[
           const SizedBox(height: 8),
           Row(children: [
@@ -797,13 +805,19 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         if (enderecoColeta.isNotEmpty) ...[
           const Text('COLETA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
           const SizedBox(height: 4),
-          _buildEnderecoClicavel(enderecoColeta),
+          _buildEnderecoClicavel(enderecoColeta,
+            lat: (widget.pedido['latitude_coleta'] as num?)?.toDouble(),
+            lng: (widget.pedido['longitude_coleta'] as num?)?.toDouble(),
+          ),
           const SizedBox(height: 10),
         ],
 
         const Text('ENDEREÇO DE ENTREGA', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.5)),
         const SizedBox(height: 8),
-        _buildEnderecoClicavel(endereco),
+        _buildEnderecoClicavel(endereco,
+          lat: (widget.pedido['latitude'] as num?)?.toDouble(),
+          lng: (widget.pedido['longitude'] as num?)?.toDouble(),
+        ),
         if (complemento.isNotEmpty) ...[
           const SizedBox(height: 6),
           Row(children: [
