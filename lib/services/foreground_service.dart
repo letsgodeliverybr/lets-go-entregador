@@ -6,8 +6,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const _supabaseUrl = 'https://astbkmpegcmqljltmdpx.supabase.co';
-const _supabaseKey = 'sb_publishable_8ocBGGO6EM8GYlg-6HBdmQ_LA6VDL9O';
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const _supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 @pragma('vm:entry-point')
 void startForegroundCallback() {

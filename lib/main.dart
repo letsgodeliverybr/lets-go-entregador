@@ -46,8 +46,8 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
   await Supabase.initialize(
-    url: 'https://astbkmpegcmqljltmdpx.supabase.co',
-    anonKey: 'sb_publishable_8ocBGGO6EM8GYlg-6HBdmQ_LA6VDL9O',
+    url: const String.fromEnvironment('SUPABASE_URL'),
+    anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
   );
 
   await NotificationService.initLocal();

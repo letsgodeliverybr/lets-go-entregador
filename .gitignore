@@ -45,3 +45,6 @@ app.*.map.json
 # Keystore de produção — nunca commitar
 *.jks
 *.keystore
+
+# Credenciais de ambiente — nunca commitar (use .dart_define.json.example como referência)
+.dart_define.json
