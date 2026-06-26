@@ -161,8 +161,21 @@ class _State extends State<PedidosDisponiveisScreen> {
             await _supabase
                 .from('pedidos')
                 .select('*, lojas(nome, endereco, latitude, longitude)')
-                .inFilter('id', pedidoIds),
+                .inFilter('id', pedidoIds)
+                .eq('status', 'pronto'),
           );
+          // Expira fila para pedidos cancelados ou aceitos
+          final idsValidos = lista.map((p) => p['id'].toString()).toSet();
+          final idsInvalidos = pedidoIds.where((id) => !idsValidos.contains(id)).toList();
+          for (final id in idsInvalidos) {
+            _supabase
+                .from('despacho_fila')
+                .update({'status': 'expirado'})
+                .eq('pedido_id', id)
+                .eq('entregador_id', user.id)
+                .eq('status', 'aguardando')
+                .then((_) {});
+          }
         }
       } else {
         lista = List<Map<String, dynamic>>.from(
