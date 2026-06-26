@@ -21,6 +21,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   final _supabase = Supabase.instance.client;
   final _audioPlayer = AudioPlayer();
   List<Map<String, dynamic>> _pedidos = [];
+  List<Map<String, dynamic>> _rotasAgrupadas = [];
   bool _carregando = true;
   bool _disponivel = true;
   String _modoDespacho = 'todos';
@@ -143,13 +144,15 @@ class _State extends State<PedidosDisponiveisScreen> {
       List<Map<String, dynamic>> lista;
 
       if (modoDespacho == 'sequencial') {
-        final filaResult = await _supabase
+        // ── Pedidos individuais (sem rota agrupada) ──────────────────────────
+        final filaIndividual = await _supabase
             .from('despacho_fila')
             .select('pedido_id')
             .eq('entregador_id', user.id)
-            .eq('status', 'aguardando');
+            .eq('status', 'aguardando')
+            .isFilter('rota_agrupada_id', null);
 
-        final pedidoIds = (filaResult as List)
+        final pedidoIds = (filaIndividual as List)
             .map((f) => f['pedido_id']?.toString())
             .whereType<String>()
             .toList();
@@ -164,7 +167,6 @@ class _State extends State<PedidosDisponiveisScreen> {
                 .inFilter('id', pedidoIds)
                 .eq('status', 'pronto'),
           );
-          // Expira fila para pedidos cancelados ou aceitos
           final idsValidos = lista.map((p) => p['id'].toString()).toSet();
           final idsInvalidos = pedidoIds.where((id) => !idsValidos.contains(id)).toList();
           for (final id in idsInvalidos) {
@@ -177,6 +179,60 @@ class _State extends State<PedidosDisponiveisScreen> {
                 .then((_) {});
           }
         }
+
+        // ── Rotas agrupadas ──────────────────────────────────────────────────
+        final filaRotas = await _supabase
+            .from('despacho_fila')
+            .select('id, pedido_id, rota_agrupada_id')
+            .eq('entregador_id', user.id)
+            .eq('status', 'aguardando')
+            .not('rota_agrupada_id', 'is', null);
+
+        final idsRotasConhecidas = _rotasAgrupadas
+            .map((r) => r['rota_agrupada_id']?.toString())
+            .toSet();
+
+        final novasRotas = <Map<String, dynamic>>[];
+        for (final filaRota in filaRotas as List) {
+          final rotaId = filaRota['rota_agrupada_id']?.toString();
+          if (rotaId == null) continue;
+          try {
+            final rotaData = await _supabase
+                .from('rotas_agrupadas')
+                .select('*')
+                .eq('id', rotaId)
+                .maybeSingle();
+            if (rotaData == null) continue;
+
+            final pedidoIdsRota = (rotaData['pedido_ids'] as List? ?? [])
+                .map((id) => id.toString())
+                .toList();
+            final pedidosRota = pedidoIdsRota.isEmpty
+                ? <Map<String, dynamic>>[]
+                : List<Map<String, dynamic>>.from(
+                    await _supabase
+                        .from('pedidos')
+                        .select('*, lojas(nome, endereco, latitude, longitude)')
+                        .inFilter('id', pedidoIdsRota),
+                  );
+
+            novasRotas.add({
+              'rota_agrupada_id': rotaId,
+              'fila_id': filaRota['id'].toString(),
+              'rota': rotaData,
+              'pedidos': pedidosRota,
+            });
+
+            if (!idsRotasConhecidas.contains(rotaId)) {
+              _tocarNotificacao();
+              _iniciarContadorRota(rotaId, filaRota['id'].toString());
+            }
+          } catch (e) {
+            debugPrint('Erro ao buscar rota $rotaId: $e');
+          }
+        }
+
+        if (mounted) setState(() => _rotasAgrupadas = novasRotas);
       } else {
         lista = List<Map<String, dynamic>>.from(
           await _supabase
@@ -240,6 +296,38 @@ class _State extends State<PedidosDisponiveisScreen> {
         }
       } else {
         if (mounted) setState(() => _contadores[pedidoId] = atual);
+      }
+    });
+  }
+
+  void _iniciarContadorRota(String rotaId, String filaId) {
+    final key = 'rota_$rotaId';
+    _timersContadores[key]?.cancel();
+    if (mounted) setState(() => _contadores[key] = 29);
+    _timersContadores[key] = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (!mounted) { t.cancel(); return; }
+      final atual = (_contadores[key] ?? 0) - 1;
+      if (atual <= 0) {
+        t.cancel();
+        _timersContadores.remove(key);
+        if (mounted) setState(() => _contadores.remove(key));
+        final user = _supabase.auth.currentUser;
+        if (user != null) {
+          try {
+            await _supabase
+                .from('despacho_fila')
+                .update({'status': 'expirado'})
+                .eq('id', filaId)
+                .eq('status', 'aguardando');
+          } catch (e) {
+            debugPrint('Erro ao expirar despacho_fila rota: $e');
+          }
+        }
+        if (mounted) {
+          setState(() => _rotasAgrupadas.removeWhere((r) => r['rota_agrupada_id'] == rotaId));
+        }
+      } else {
+        if (mounted) setState(() => _contadores[key] = atual);
       }
     });
   }
@@ -308,7 +396,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             final novoStatus = novo['status']?.toString() ?? '';
             final id = novo['id']?.toString() ?? '';
             if (id.isEmpty) return;
-
             if (novoStatus == 'pronto') {
               _buscar();
             } else {
@@ -398,13 +485,24 @@ class _State extends State<PedidosDisponiveisScreen> {
             final record = payload.newRecord;
             final status = record['status']?.toString() ?? '';
             final pedidoId = record['pedido_id']?.toString() ?? '';
-            if (status != 'aguardando' && pedidoId.isNotEmpty && mounted) {
-              _timersContadores[pedidoId]?.cancel();
-              _timersContadores.remove(pedidoId);
-              setState(() {
-                _contadores.remove(pedidoId);
-                _pedidos.removeWhere((p) => p['id']?.toString() == pedidoId);
-              });
+            final rotaId = record['rota_agrupada_id']?.toString();
+            if (status != 'aguardando' && mounted) {
+              if (rotaId != null && rotaId.isNotEmpty) {
+                final key = 'rota_$rotaId';
+                _timersContadores[key]?.cancel();
+                _timersContadores.remove(key);
+                setState(() {
+                  _contadores.remove(key);
+                  _rotasAgrupadas.removeWhere((r) => r['rota_agrupada_id'] == rotaId);
+                });
+              } else if (pedidoId.isNotEmpty) {
+                _timersContadores[pedidoId]?.cancel();
+                _timersContadores.remove(pedidoId);
+                setState(() {
+                  _contadores.remove(pedidoId);
+                  _pedidos.removeWhere((p) => p['id']?.toString() == pedidoId);
+                });
+              }
             }
           },
         )
@@ -470,8 +568,58 @@ class _State extends State<PedidosDisponiveisScreen> {
     }
   }
 
+  Future<void> _aceitarRota(Map<String, dynamic> rotaData) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final rotaId = rotaData['rota_agrupada_id'].toString();
+    final filaId = rotaData['fila_id'].toString();
+    final pedidos = List<Map<String, dynamic>>.from(rotaData['pedidos'] as List);
+
+    try {
+      final agora = DateTime.now().toIso8601String();
+
+      for (final pedido in pedidos) {
+        await _supabase.from('pedidos').update({
+          'status': 'aceito',
+          'status_detalhado': 'aceito',
+          'aceito_em': agora,
+          'motoboy_id': user.id,
+          'entregador_id': user.id,
+          'updated_at': agora,
+        }).eq('id', pedido['id']).eq('status', 'pronto');
+      }
+
+      await _supabase.from('rotas_agrupadas')
+          .update({'status': 'aceita'})
+          .eq('id', rotaId);
+
+      await _supabase.from('despacho_fila')
+          .update({'status': 'aceito'})
+          .eq('id', filaId);
+
+      final key = 'rota_$rotaId';
+      _timersContadores[key]?.cancel();
+      _timersContadores.remove(key);
+      if (mounted) setState(() => _contadores.remove(key));
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao aceitar rota: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final totalItens = _pedidos.length + _rotasAgrupadas.length;
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),
@@ -483,14 +631,14 @@ class _State extends State<PedidosDisponiveisScreen> {
           const Text('Disponíveis',
               style: TextStyle(
                   color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          if (_pedidos.isNotEmpty) ...[
+          if (totalItens > 0) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                   color: const Color(0xFF1A56DB),
                   borderRadius: BorderRadius.circular(20)),
-              child: Text('${_pedidos.length}',
+              child: Text('$totalItens',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -511,17 +659,22 @@ class _State extends State<PedidosDisponiveisScreen> {
               ? _buildOffline()
               : Column(
               children: [
-                if (_rotaAtual != null) _buildCardRota(_rotaAtual!),
+                if (_rotaAtual != null) _buildBannerRota(_rotaAtual!),
                 Expanded(
-                  child: _pedidos.isEmpty
+                  child: totalItens == 0
                       ? _buildVazio()
                       : RefreshIndicator(
                           onRefresh: _buscar,
                           color: const Color(0xFF1A56DB),
                           child: ListView.builder(
                             padding: const EdgeInsets.all(16),
-                            itemCount: _pedidos.length,
-                            itemBuilder: (_, i) => _buildCard(_pedidos[i]),
+                            itemCount: totalItens,
+                            itemBuilder: (_, i) {
+                              if (i < _rotasAgrupadas.length) {
+                                return _buildCardRotaAgrupada(_rotasAgrupadas[i]);
+                              }
+                              return _buildCard(_pedidos[i - _rotasAgrupadas.length]);
+                            },
                           ),
                         ),
                 ),
@@ -530,7 +683,8 @@ class _State extends State<PedidosDisponiveisScreen> {
     );
   }
 
-  Widget _buildCardRota(Map<String, dynamic> rota) {
+  // Banner de rota manual atribuída pelo admin (tabela 'rotas')
+  Widget _buildBannerRota(Map<String, dynamic> rota) {
     final pedidoIds = (rota['pedido_ids'] as List?)?.length ?? 0;
     return GestureDetector(
       onTap: () => setState(() => _rotaAtual = null),
@@ -576,8 +730,189 @@ class _State extends State<PedidosDisponiveisScreen> {
     );
   }
 
+  // Card de rota agrupada pelo roterizador automático
+  Widget _buildCardRotaAgrupada(Map<String, dynamic> rotaData) {
+    final rota = rotaData['rota'] as Map<String, dynamic>;
+    final pedidos = List<Map<String, dynamic>>.from(rotaData['pedidos'] as List);
+    final rotaId = rotaData['rota_agrupada_id'].toString();
+    final key = 'rota_$rotaId';
+    final segundosRestantes = _contadores[key];
+
+    final nomeLoja = pedidos.isNotEmpty
+        ? (pedidos[0]['lojas']?['nome'] ?? 'Estabelecimento')
+        : 'Estabelecimento';
+    final valorTotal = (rota['valor_total'] as num?)?.toDouble() ?? 0.0;
+    final distanciaTotal = pedidos.fold<double>(
+      0.0,
+      (sum, p) => sum + (double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161820),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: segundosRestantes != null && segundosRestantes <= 10
+              ? Colors.orange
+              : const Color(0xFF1A56DB),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A56DB),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.route, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(nomeLoja,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '🗺️ ${pedidos.length} entregas agrupadas',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (segundosRestantes != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: segundosRestantes <= 10 ? Colors.red : Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${segundosRestantes}s',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ]),
+
+            const SizedBox(height: 12),
+            const Divider(color: Color(0xFF2A2D35)),
+            const SizedBox(height: 8),
+
+            // Endereços de entrega
+            ...pedidos.asMap().entries.map((entry) {
+              final i = entry.key;
+              final p = entry.value;
+              final endereco = p['endereco_entrega']?.toString()
+                  ?? p['endereco']?.toString()
+                  ?? '—';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A56DB),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(endereco,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+              );
+            }),
+
+            const SizedBox(height: 8),
+
+            // Distância + valor
+            Row(children: [
+              const Icon(Icons.route_outlined, color: Colors.white54, size: 16),
+              const SizedBox(width: 4),
+              Text('${distanciaTotal.toStringAsFixed(2)} km total',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
+              const Spacer(),
+              Text(
+                'R\$${valorTotal.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
+              ),
+            ]),
+
+            const SizedBox(height: 12),
+
+            // Botão aceitar rota
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _aceitarRota(rotaData),
+                icon: const Icon(Icons.check_circle_outline,
+                    color: Colors.white, size: 18),
+                label: const Text('Aceitar Rota',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A56DB),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCard(Map<String, dynamic> pedido) {
-    print('[DISPONIVEL] pedido=${pedido['numero']} lat_coleta=${pedido['latitude_coleta']}');
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
@@ -587,8 +922,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     final rawPd = taxaMotoboySalvo - taxaBase;
     final pdSalvo = rawPd >= 0.05 ? rawPd : 0.0;
     final taxaFinal = taxaBase + gorjeta + pdSalvo;
-    final temBonus = gorjeta > 0 || pdSalvo > 0;
-    debugPrint('[Disponivel] #${pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaBase.toStringAsFixed(2)} pd_detectado=${pdSalvo.toStringAsFixed(2)}');
 
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final pontos = pedido['pontos'] ?? 4;
@@ -616,7 +949,11 @@ class _State extends State<PedidosDisponiveisScreen> {
     final isSequencial = _modoDespacho == 'sequencial';
 
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: pedido))).then((_) => _buscar()),
+      onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => RotaDisponivelScreen(pedido: pedido)))
+          .then((_) => _buscar()),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
@@ -631,146 +968,145 @@ class _State extends State<PedidosDisponiveisScreen> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A56DB),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.store, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(nomeLoja,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 8),
-              if (isSequencial && segundosRestantes != null) ...[
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: segundosRestantes <= 10 ? Colors.red : Colors.orange,
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF1A56DB),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    '${segundosRestantes}s',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: const Icon(Icons.store, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(nomeLoja,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                 ),
                 const SizedBox(width: 8),
-              ],
-              Text('#$numero',
-                  style: const TextStyle(color: Colors.white54, fontSize: 13)),
-            ]),
-            const SizedBox(height: 10),
-
-            Row(children: [
-              const Icon(Icons.location_on, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                distMotoboyLoja > 0
-                    ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
-                    : '— km de onde você está',
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ]),
-            const SizedBox(height: 8),
-
-            Row(children: [
-              const Icon(Icons.star_border, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text('$pontos pontos',
-                  style: const TextStyle(color: Colors.white, fontSize: 13)),
-            ]),
-            const SizedBox(height: 8),
-
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white),
+                if (isSequencial && segundosRestantes != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: segundosRestantes <= 10 ? Colors.red : Colors.orange,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${segundosRestantes}s',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                  child: const Text('Bag térmica',
-                      style: TextStyle(color: Colors.white, fontSize: 12)),
+                  const SizedBox(width: 8),
+                ],
+                Text('#$numero',
+                    style: const TextStyle(color: Colors.white54, fontSize: 13)),
+              ]),
+              const SizedBox(height: 10),
+
+              Row(children: [
+                const Icon(Icons.location_on, color: Colors.white, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  distMotoboyLoja > 0
+                      ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
+                      : '— km de onde você está',
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
-                if (comRetorno)
+              ]),
+              const SizedBox(height: 8),
+
+              Row(children: [
+                const Icon(Icons.star_border, color: Colors.white, size: 16),
+                const SizedBox(width: 6),
+                Text('$pontos pontos',
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ]),
+              const SizedBox(height: 8),
+
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: Colors.white),
                     ),
-                    child: const Text('RETORNO',
+                    child: const Text('Bag térmica',
                         style: TextStyle(color: Colors.white, fontSize: 12)),
                   ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            Row(children: [
-              const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
-              const SizedBox(width: 4),
-              Text('${distanciaKm.toStringAsFixed(2)} km',
-                  style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
-              const Spacer(),
-              if (comRetorno) ...[
-                Text('R\$${taxaSemRetorno.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 13,
-                      decoration: TextDecoration.lineThrough,
-                      decorationColor: Colors.red,
-                    )),
-                const SizedBox(width: 8),
-              ] else if (pdSalvo > 0) ...[
-                Text('R\$${taxaBase.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 13,
-                      decoration: TextDecoration.lineThrough,
-                      decorationColor: Colors.red,
-                    )),
-                const SizedBox(width: 8),
-              ] else if (gorjeta > 0) ...[
-                Text('R\$${taxaBase.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 13,
-                      decoration: TextDecoration.lineThrough,
-                      decorationColor: Colors.white38,
-                    )),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                pdSalvo > 0
-                    ? 'R\$${(taxaBase + pdSalvo).toStringAsFixed(2)}'
-                    : 'R\$${taxaFinal.toStringAsFixed(2)}',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold),
+                  if (comRetorno)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white),
+                      ),
+                      child: const Text('RETORNO',
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                ],
               ),
-            ]),
 
-          ],
+              const SizedBox(height: 12),
+
+              Row(children: [
+                const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
+                const SizedBox(width: 4),
+                Text('${distanciaKm.toStringAsFixed(2)} km',
+                    style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+                const Spacer(),
+                if (comRetorno) ...[
+                  Text('R\$${taxaSemRetorno.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.red,
+                      )),
+                  const SizedBox(width: 8),
+                ] else if (pdSalvo > 0) ...[
+                  Text('R\$${taxaBase.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.red,
+                      )),
+                  const SizedBox(width: 8),
+                ] else if (gorjeta > 0) ...[
+                  Text('R\$${taxaBase.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: Colors.white38,
+                      )),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  pdSalvo > 0
+                      ? 'R\$${(taxaBase + pdSalvo).toStringAsFixed(2)}'
+                      : 'R\$${taxaFinal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                ),
+              ]),
+            ],
           ),
         ),
       ),
