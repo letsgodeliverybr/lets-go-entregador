@@ -75,11 +75,13 @@ class _State extends State<PedidosDisponiveisScreen> {
       if (mounted) setState(() { _disponivel = false; _carregando = false; });
       return;
     }
-    _buscar();
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
-    _assinarRealtime();
+    await _buscar();
     _assinarRealtimeRota();
     _assinarRealtimeDespachoFila();
+    if (_modoDespacho != 'sequencial') {
+      _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
+      _assinarRealtime();
+    }
   }
 
   @override
