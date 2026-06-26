@@ -23,9 +23,13 @@ class _State extends State<PedidosDisponiveisScreen> {
   List<Map<String, dynamic>> _pedidos = [];
   bool _carregando = true;
   bool _disponivel = true;
+  String _modoDespacho = 'todos';
+  final Map<String, int> _contadores = {};
+  final Map<String, Timer> _timersContadores = {};
   Timer? _timer;
   RealtimeChannel? _channel;
   RealtimeChannel? _channelRota;
+  RealtimeChannel? _channelDespachoFila;
 
   Map<String, dynamic>? _rotaAtual;
 
@@ -75,13 +79,17 @@ class _State extends State<PedidosDisponiveisScreen> {
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
     _assinarRealtime();
     _assinarRealtimeRota();
+    _assinarRealtimeDespachoFila();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    for (final t in _timersContadores.values) { t.cancel(); }
+    _timersContadores.clear();
     _channel?.unsubscribe();
     _channelRota?.unsubscribe();
+    _channelDespachoFila?.unsubscribe();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -111,13 +119,12 @@ class _State extends State<PedidosDisponiveisScreen> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      final results = await Future.wait([
+      final configs = await Future.wait([
         _supabase
-            .from('pedidos')
-            .select('*, lojas(nome, endereco, latitude, longitude)')
-            .inFilter('status', ['pronto'])
-            .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
-            .order('pronto_em', ascending: true),
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'modo_despacho')
+            .maybeSingle(),
         _supabase
             .from('configuracoes')
             .select('valor')
@@ -125,27 +132,101 @@ class _State extends State<PedidosDisponiveisScreen> {
             .maybeSingle(),
       ]);
 
-      final lista = List<Map<String, dynamic>>.from(results[0] as List);
+      final modoDespacho =
+          (configs[0] as Map<String, dynamic>?)?['valor']?.toString() ?? 'todos';
       final precoDinamico = double.tryParse(
-              (results[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
+              (configs[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
+
+      List<Map<String, dynamic>> lista;
+
+      if (modoDespacho == 'sequencial') {
+        final filaResult = await _supabase
+            .from('despacho_fila')
+            .select('pedido_id')
+            .eq('entregador_id', user.id)
+            .eq('status', 'aguardando');
+
+        final pedidoIds = (filaResult as List)
+            .map((f) => f['pedido_id']?.toString())
+            .whereType<String>()
+            .toList();
+
+        if (pedidoIds.isEmpty) {
+          lista = [];
+        } else {
+          lista = List<Map<String, dynamic>>.from(
+            await _supabase
+                .from('pedidos')
+                .select('*, lojas(nome, endereco, latitude, longitude)')
+                .inFilter('id', pedidoIds),
+          );
+        }
+      } else {
+        lista = List<Map<String, dynamic>>.from(
+          await _supabase
+              .from('pedidos')
+              .select('*, lojas(nome, endereco, latitude, longitude)')
+              .inFilter('status', ['pronto'])
+              .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
+              .order('pronto_em', ascending: true),
+        );
+      }
 
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
       if (novos.isNotEmpty) {
         _tocarNotificacao();
+        if (modoDespacho == 'sequencial') {
+          for (final pedido in novos) {
+            _iniciarContador(pedido['id'].toString());
+          }
+        }
       }
 
       if (mounted) {
         setState(() {
           _pedidos = lista;
           _precoDinamico = precoDinamico;
+          _modoDespacho = modoDespacho;
           _carregando = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _carregando = false);
     }
+  }
+
+  void _iniciarContador(String pedidoId) {
+    _timersContadores[pedidoId]?.cancel();
+    if (mounted) setState(() => _contadores[pedidoId] = 29);
+    _timersContadores[pedidoId] = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (!mounted) { t.cancel(); return; }
+      final atual = (_contadores[pedidoId] ?? 0) - 1;
+      if (atual <= 0) {
+        t.cancel();
+        _timersContadores.remove(pedidoId);
+        if (mounted) setState(() => _contadores.remove(pedidoId));
+        final user = _supabase.auth.currentUser;
+        if (user != null) {
+          try {
+            await _supabase
+                .from('despacho_fila')
+                .update({'status': 'expirado'})
+                .eq('pedido_id', pedidoId)
+                .eq('entregador_id', user.id)
+                .eq('status', 'aguardando');
+          } catch (e) {
+            debugPrint('Erro ao expirar despacho_fila: $e');
+          }
+        }
+        if (mounted) {
+          setState(() => _pedidos.removeWhere((p) => p['id'].toString() == pedidoId));
+        }
+      } else {
+        if (mounted) setState(() => _contadores[pedidoId] = atual);
+      }
+    });
   }
 
   Future<void> _tocarNotificacao() async {
@@ -200,7 +281,6 @@ class _State extends State<PedidosDisponiveisScreen> {
           table: 'pedidos',
           callback: (payload) {
             final status = payload.newRecord['status']?.toString() ?? '';
-            // Novo pedido pronto: todos os motoboys atualizam a lista
             if (status == 'pronto') _buscar();
           },
         )
@@ -215,11 +295,8 @@ class _State extends State<PedidosDisponiveisScreen> {
             if (id.isEmpty) return;
 
             if (novoStatus == 'pronto') {
-              // Pedido voltou/chegou a pronto: atualiza minha lista
-              // (pode ser novo pedido disponível para mim — som dispara em _buscar())
               _buscar();
             } else {
-              // Pedido aceito por outro motoboy ou cancelado: remove imediatamente
               if (mounted) {
                 setState(() => _pedidos.removeWhere((p) => p['id'] == id));
               }
@@ -269,6 +346,33 @@ class _State extends State<PedidosDisponiveisScreen> {
         .subscribe();
   }
 
+  void _assinarRealtimeDespachoFila() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    _channelDespachoFila = _supabase
+        .channel('despacho-fila-${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'despacho_fila',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: user.id,
+          ),
+          callback: (payload) async {
+            final record = payload.newRecord;
+            final status = record['status']?.toString() ?? '';
+            if (status == 'aguardando') {
+              await _tocarNotificacao();
+              _buscar();
+            }
+          },
+        )
+        .subscribe();
+  }
+
   Future<void> _aceitar(Map<String, dynamic> pedido) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -295,6 +399,23 @@ class _State extends State<PedidosDisponiveisScreen> {
         ));
         _buscar();
         return;
+      }
+
+      if (_modoDespacho == 'sequencial') {
+        final pedidoId = pedido['id'].toString();
+        _timersContadores[pedidoId]?.cancel();
+        _timersContadores.remove(pedidoId);
+        if (mounted) setState(() => _contadores.remove(pedidoId));
+        try {
+          await _supabase
+              .from('despacho_fila')
+              .update({'status': 'aceito'})
+              .eq('pedido_id', pedido['id'])
+              .eq('entregador_id', user.id)
+              .eq('status', 'aguardando');
+        } catch (e) {
+          debugPrint('Erro ao atualizar despacho_fila: $e');
+        }
       }
 
       if (mounted) {
@@ -452,6 +573,10 @@ class _State extends State<PedidosDisponiveisScreen> {
       );
     }
 
+    final pedidoId = pedido['id'].toString();
+    final segundosRestantes = _contadores[pedidoId];
+    final isSequencial = _modoDespacho == 'sequencial';
+
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: pedido))).then((_) => _buscar()),
       child: Container(
@@ -459,7 +584,11 @@ class _State extends State<PedidosDisponiveisScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF161820),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF2A2D35)),
+          border: Border.all(
+            color: isSequencial && segundosRestantes != null && segundosRestantes <= 10
+                ? Colors.orange
+                : const Color(0xFF2A2D35),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -487,6 +616,24 @@ class _State extends State<PedidosDisponiveisScreen> {
                     overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: 8),
+              if (isSequencial && segundosRestantes != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: segundosRestantes <= 10 ? Colors.red : Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${segundosRestantes}s',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               Text('#$numero',
                   style: const TextStyle(color: Colors.white54, fontSize: 13)),
             ]),
@@ -584,6 +731,31 @@ class _State extends State<PedidosDisponiveisScreen> {
                     fontWeight: FontWeight.bold),
               ),
             ]),
+
+            if (isSequencial) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _aceitar(pedido),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A56DB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Aceitar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
           ),
         ),
