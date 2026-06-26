@@ -313,7 +313,7 @@ class _State extends State<PedidosDisponiveisScreen> {
               _buscar();
             } else {
               if (mounted) {
-                setState(() => _pedidos.removeWhere((p) => p['id'] == id));
+                setState(() => _pedidos.removeWhere((p) => p['id']?.toString() == id));
               }
             }
           },
@@ -382,6 +382,29 @@ class _State extends State<PedidosDisponiveisScreen> {
             if (status == 'aguardando') {
               await _tocarNotificacao();
               _buscar();
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'despacho_fila',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            final record = payload.newRecord;
+            final status = record['status']?.toString() ?? '';
+            final pedidoId = record['pedido_id']?.toString() ?? '';
+            if (status != 'aguardando' && pedidoId.isNotEmpty && mounted) {
+              _timersContadores[pedidoId]?.cancel();
+              _timersContadores.remove(pedidoId);
+              setState(() {
+                _contadores.remove(pedidoId);
+                _pedidos.removeWhere((p) => p['id']?.toString() == pedidoId);
+              });
             }
           },
         )
@@ -747,30 +770,6 @@ class _State extends State<PedidosDisponiveisScreen> {
               ),
             ]),
 
-            if (isSequencial) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _aceitar(pedido),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A56DB),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
-                    'Aceitar',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
           ),
         ),
