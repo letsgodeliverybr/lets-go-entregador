@@ -96,6 +96,7 @@ class _State extends State<AceitarPedidoScreen> {
             'status_detalhado': 'aceito',
             'aceito_em': DateTime.now().toIso8601String(),
             'motoboy_id': user.id,
+            'entregador_id': user.id,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .or('status.eq.pronto,status_detalhado.eq.pronto')

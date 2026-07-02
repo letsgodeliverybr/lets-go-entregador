@@ -37,7 +37,6 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   String? _nomeLoja;
   double? _lojaLat;
   double? _lojaLng;
-  double _precoDinamico = 0.0;
   StreamSubscription<Position>? _subProximidade;
   RealtimeChannel? _subPedido;
   Timer? _retryTimerPedido;
@@ -67,7 +66,6 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     }
     _obterPosicao();
     _buscarInfoLoja();
-    _buscarPrecoDinamico();
     _assinarResetPedido();
     _configurarComunicacaoForeground();
     _solicitarExcecaoBateria();
@@ -124,18 +122,6 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
-  }
-
-  Future<void> _buscarPrecoDinamico() async {
-    try {
-      final data = await _supabase
-          .from('configuracoes')
-          .select('valor')
-          .eq('chave', 'preco_dinamico_entregador')
-          .maybeSingle();
-      final valor = double.tryParse(data?['valor']?.toString() ?? '0') ?? 0.0;
-      if (mounted) setState(() => _precoDinamico = valor);
-    } catch (_) {}
   }
 
   void _configurarComunicacaoForeground() {
@@ -355,7 +341,11 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
             final novo = payload.newRecord;
             final status = novo['status']?.toString() ?? '';
             final motoboyId = novo['motoboy_id'];
-            if (status == 'recebido' || status == 'pronto' || motoboyId == null) {
+            final meuId = _supabase.auth.currentUser?.id;
+            if (status == 'recebido' ||
+                status == 'pronto' ||
+                motoboyId == null ||
+                (meuId != null && motoboyId != meuId)) {
               _handleResetPedido();
             } else if (status == 'chegou_destino' &&
                 (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
@@ -972,7 +962,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   Widget _buildFinalizado() {
     final gorjeta = (widget.pedido['gorjeta'] as num?)?.toDouble() ?? 0;
     final taxa = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? (widget.pedido['taxa_entrega'] as num?)?.toDouble() ?? 0;
-    final totalMotoboy = taxa + gorjeta + _precoDinamico;
+    final totalMotoboy = taxa + gorjeta;
 
     return Column(children: [
       const Icon(Icons.check_circle, color: Color(0xFF1A56DB), size: 90),
