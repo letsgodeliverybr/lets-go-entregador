@@ -48,10 +48,18 @@ class _RegistroScreenState extends State<RegistroScreen> {
       final supabase = Supabase.instance.client;
 
       // ── 1. signUp ──────────────────────────────────────────
+      // data.origem='entregador' é lido pelo trigger on_auth_user_created_entregadores
+      // (ver migrations/fix_entregadores_signup_trigger.sql) pra criar a linha em
+      // entregadores no servidor, sem depender da sessão que ainda não existe
+      // quando a confirmação de e-mail está habilitada.
       debugPrint('[REGISTRO] chamando supabase.auth.signUp...');
       final response = await supabase.auth.signUp(
         email: email,
         password: _senhaCtrl.text,
+        data: {
+          'origem': 'entregador',
+          'nome': _nomeCtrl.text.trim(),
+        },
       );
       debugPrint('[REGISTRO] signUp response: user=${response.user?.id} identities=${response.user?.identities?.length} session=${response.session != null}');
 
@@ -72,17 +80,20 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
-      // ── 2. INSERT entregadores — best-effort, nunca bloqueia o fluxo ──
-      debugPrint('[REGISTRO] inserindo row em entregadores id=${user.id}...');
+      // ── 2. Fallback client-side — a linha normalmente já existe aqui, criada
+      // pelo trigger on_auth_user_created_entregadores no servidor (passo 1). Usa
+      // upsert (não insert) pra não falhar com conflito de chave quando isso
+      // acontece, e continua cobrindo o caso do trigger não estar disponível.
+      debugPrint('[REGISTRO] upsert em entregadores id=${user.id}...');
       try {
-        await supabase.from('entregadores').insert({
+        await supabase.from('entregadores').upsert({
           'id': user.id,
           'nome': _nomeCtrl.text.trim(),
           'status': 'inativo',
           'aprovado': false,
           'status_cadastro': 'pendente',
         });
-        debugPrint('[REGISTRO] ✅ entregadores row inserida');
+        debugPrint('[REGISTRO] ✅ entregadores row upsertada');
       } catch (insertErr) {
         // Row já existe, RLS bloqueou ou qualquer outro erro — conta já foi criada,
         // continua para a tela de aprovação normalmente.

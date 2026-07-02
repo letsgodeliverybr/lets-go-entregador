@@ -271,6 +271,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       }
 
       final payload = {
+        'id': uid,
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
         'cpf': _cpfCtrl.text.trim(),
@@ -291,12 +292,15 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       };
-      debugPrint('[DEBUG] PATCH entregadores WHERE id=$uid');
+      debugPrint('[DEBUG] upsert entregadores id=$uid');
       debugPrint('[DEBUG] payload: $payload');
 
-      await _supabase.from('entregadores').update(payload).eq('id', uid);
+      // upsert em vez de update: se por algum motivo a linha ainda não existe
+      // (trigger não disparou, conta antiga de antes da correção), cria em vez
+      // de silenciosamente não afetar nenhuma linha.
+      await _supabase.from('entregadores').upsert(payload);
 
-      debugPrint('[DEBUG] PATCH concluído com sucesso');
+      debugPrint('[DEBUG] upsert concluído com sucesso');
       debugPrint('[DEBUG] navegando para AguardoAprovacaoScreen');
 
       if (!mounted) return;

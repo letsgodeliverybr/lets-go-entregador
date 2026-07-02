@@ -35,13 +35,18 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final user = response.user;
       if (user != null) {
-        await supabase.from('entregadores').update({
+        // upsert em vez de update: contas antigas que ficaram sem linha em
+        // entregadores (bug do signup corrigido em fix_entregadores_signup_trigger.sql)
+        // se auto-recuperam no próximo login em vez de logar "com sucesso" numa
+        // conta sem dados nenhum.
+        await supabase.from('entregadores').upsert({
+          'id': user.id,
           'status': 'ativo',
           'disponivel': false,
           'lat': -21.1775,
           'lng': -47.8103,
           'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', user.id);
+        });
         await NotificationService.saveFcmToken(user.id);
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
