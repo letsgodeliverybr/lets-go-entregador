@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'screens/login_screen.dart';
 import 'screens/permissoes_screen.dart';
 import 'screens/home_screen.dart';
@@ -397,7 +399,24 @@ class _AuthGateState extends State<AuthGate> {
 
   Future<Widget> _resolverTela() async {
     final locPerm = await Geolocator.checkPermission();
-    final precisaPermissoes = locPerm == LocationPermission.denied;
+    final locFaltando = locPerm == LocationPermission.denied ||
+        locPerm == LocationPermission.deniedForever;
+
+    final notifOk = await FlutterLocalNotificationsPlugin()
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.areNotificationsEnabled() ??
+        true;
+    final notifFaltando = !notifOk;
+
+    bool bateriaFaltando = false;
+    try {
+      final ignorandoOtimizacao =
+          await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+      bateriaFaltando = !ignorandoOtimizacao;
+    } catch (_) {}
+
+    final precisaPermissoes = locFaltando || notifFaltando || bateriaFaltando;
 
     final session = Supabase.instance.client.auth.currentSession;
     if (session == null) {
