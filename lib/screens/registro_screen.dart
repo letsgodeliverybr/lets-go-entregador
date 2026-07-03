@@ -81,23 +81,33 @@ class _RegistroScreenState extends State<RegistroScreen> {
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
       // ── 2. Fallback client-side — a linha normalmente já existe aqui, criada
-      // pelo trigger on_auth_user_created_entregadores no servidor (passo 1). Usa
-      // upsert (não insert) pra não falhar com conflito de chave quando isso
-      // acontece, e continua cobrindo o caso do trigger não estar disponível.
-      debugPrint('[REGISTRO] upsert em entregadores id=${user.id}...');
+      // pelo trigger on_auth_user_created_entregadores no servidor (passo 1).
+      // UPDATE primeiro (nunca sobrescreve colunas fora do payload); só faz
+      // INSERT completo se a linha realmente não existir ainda. upsert() puro
+      // não serve aqui: o PostgREST exige todas as colunas NOT NULL no payload
+      // mesmo quando a linha já existe e a intenção é só atualizar 'nome'.
+      debugPrint('[REGISTRO] update em entregadores id=${user.id}...');
       try {
-        await supabase.from('entregadores').upsert({
-          'id': user.id,
-          'nome': _nomeCtrl.text.trim(),
-          'status': 'inativo',
-          'aprovado': false,
-          'status_cadastro': 'pendente',
-        });
-        debugPrint('[REGISTRO] ✅ entregadores row upsertada');
+        final atualizados = await supabase
+            .from('entregadores')
+            .update({'nome': _nomeCtrl.text.trim()})
+            .eq('id', user.id)
+            .select('id');
+        if (atualizados.isEmpty) {
+          debugPrint('[REGISTRO] linha não existia, criando via insert completo');
+          await supabase.from('entregadores').insert({
+            'id': user.id,
+            'nome': _nomeCtrl.text.trim(),
+            'status': 'inativo',
+            'aprovado': false,
+            'status_cadastro': 'pendente',
+          });
+        }
+        debugPrint('[REGISTRO] ✅ entregadores row ok');
       } catch (insertErr) {
         // Row já existe, RLS bloqueou ou qualquer outro erro — conta já foi criada,
         // continua para a tela de aprovação normalmente.
-        debugPrint('[REGISTRO] ⚠️ INSERT entregadores falhou (não bloqueia): $insertErr');
+        debugPrint('[REGISTRO] ⚠️ entregadores falhou (não bloqueia): $insertErr');
       }
 
       // ── 3. Navegar para tela de aprovação ─────────────────

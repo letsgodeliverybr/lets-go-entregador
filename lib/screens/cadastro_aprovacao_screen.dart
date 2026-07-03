@@ -270,8 +270,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         debugPrint('[DEBUG] nenhuma foto selecionada');
       }
 
-      final payload = {
-        'id': uid,
+      final camposPerfil = {
         'nome': _nomeCtrl.text.trim(),
         'telefone': _telefoneCtrl.text.trim(),
         'cpf': _cpfCtrl.text.trim(),
@@ -292,15 +291,30 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       };
-      debugPrint('[DEBUG] upsert entregadores id=$uid');
-      debugPrint('[DEBUG] payload: $payload');
+      debugPrint('[DEBUG] update entregadores id=$uid');
+      debugPrint('[DEBUG] payload: $camposPerfil');
 
-      // upsert em vez de update: se por algum motivo a linha ainda não existe
-      // (trigger não disparou, conta antiga de antes da correção), cria em vez
-      // de silenciosamente não afetar nenhuma linha.
-      await _supabase.from('entregadores').upsert(payload);
+      // UPDATE primeiro — nunca sobrescreve colunas fora do payload (status,
+      // aprovado, email, criados pelo trigger/registro). Só faz INSERT completo
+      // se a linha realmente não existir ainda (trigger não disparou por algum
+      // motivo, conta antiga de antes da correção).
+      final atualizados = await _supabase
+          .from('entregadores')
+          .update(camposPerfil)
+          .eq('id', uid)
+          .select('id');
 
-      debugPrint('[DEBUG] upsert concluído com sucesso');
+      if (atualizados.isEmpty) {
+        debugPrint('[DEBUG] linha não existia, criando via insert completo');
+        await _supabase.from('entregadores').insert({
+          'id': uid,
+          'status': 'inativo',
+          'aprovado': false,
+          ...camposPerfil,
+        });
+      }
+
+      debugPrint('[DEBUG] gravação concluída com sucesso');
       debugPrint('[DEBUG] navegando para AguardoAprovacaoScreen');
 
       if (!mounted) return;

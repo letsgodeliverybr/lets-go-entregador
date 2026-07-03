@@ -35,18 +35,33 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final user = response.user;
       if (user != null) {
-        // upsert em vez de update: contas antigas que ficaram sem linha em
-        // entregadores (bug do signup corrigido em fix_entregadores_signup_trigger.sql)
-        // se auto-recuperam no próximo login em vez de logar "com sucesso" numa
-        // conta sem dados nenhum.
-        await supabase.from('entregadores').upsert({
-          'id': user.id,
+        // UPDATE primeiro — nunca sobrescreve nome/outros campos fora do payload
+        // (upsert() puro exigiria 'nome' NOT NULL no payload mesmo quando a linha
+        // já existe). Só cria a linha (INSERT) se ela realmente não existir ainda
+        // — contas antigas que ficaram órfãs (bug do signup corrigido em
+        // fix_entregadores_signup_trigger.sql) se auto-recuperam no próximo login
+        // em vez de logar "com sucesso" numa conta sem dados nenhum.
+        final camposLogin = {
           'status': 'ativo',
           'disponivel': false,
           'lat': -21.1775,
           'lng': -47.8103,
           'updated_at': DateTime.now().toIso8601String(),
-        });
+        };
+        final atualizados = await supabase
+            .from('entregadores')
+            .update(camposLogin)
+            .eq('id', user.id)
+            .select('id');
+        if (atualizados.isEmpty) {
+          await supabase.from('entregadores').insert({
+            'id': user.id,
+            'nome': (user.userMetadata?['nome'] as String?) ?? '',
+            'aprovado': false,
+            'status_cadastro': 'pendente',
+            ...camposLogin,
+          });
+        }
         await NotificationService.saveFcmToken(user.id);
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
