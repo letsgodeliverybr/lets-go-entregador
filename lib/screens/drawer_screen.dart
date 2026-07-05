@@ -5,6 +5,7 @@ import 'login_screen.dart';
 import 'extrato_screen.dart';
 import 'historico_saques_screen.dart';
 import 'minha_conta_screen.dart';
+import 'ranking_screen.dart';
 
 class DrawerScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -170,6 +171,9 @@ class _DrawerScreenState extends State<DrawerScreen> {
               onTap: () {
                 if (item == 'Vagas de Motoboy Fixo' || item == 'Promoções de Feriado') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const VagasScreen()));
+                } else if (item == 'Ranking') {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const RankingScreen()));
                 }
               },
             ),
