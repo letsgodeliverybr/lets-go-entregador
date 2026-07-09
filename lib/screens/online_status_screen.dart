@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/location_permission_flow.dart';
 import '../services/tracking_service.dart';
 import 'home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
@@ -116,6 +117,10 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
           }
           return;
         }
+
+        if (!mounted) return;
+        final permOk = await LocationPermissionFlow.garantir(context);
+        if (!permOk) return;
 
         await TrackingService.ficarOnline(_uid);
         await TrackingService.iniciar(_uid);

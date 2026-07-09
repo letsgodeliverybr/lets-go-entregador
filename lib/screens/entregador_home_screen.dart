@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/location_permission_flow.dart';
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -81,7 +82,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
         _entregador = response;
         if (!TrackingService.ativo) _online = response['disponivel'] == true;
       });
-      if (_online && !TrackingService.ativo) await TrackingService.iniciar(user.id);
+      if (_online && !TrackingService.ativo) {
+        if (!mounted) return;
+        final ok = await LocationPermissionFlow.garantir(context);
+        if (ok && mounted) await TrackingService.iniciar(user.id);
+      }
     } catch (_) {}
   }
 
@@ -183,6 +188,12 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           return;
         }
 
+        if (!mounted) return;
+        final permOk = await LocationPermissionFlow.garantir(context);
+        if (!permOk) {
+          if (mounted) setState(() => _online = false);
+          return;
+        }
         await TrackingService.iniciar(user.id);
         final pos = await LocationService.getCurrentPosition();
         if (pos != null && mounted) {

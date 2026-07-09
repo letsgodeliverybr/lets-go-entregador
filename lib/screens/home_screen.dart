@@ -7,6 +7,7 @@ import 'drawer_screen.dart';
 import 'entregador_home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
+import '../services/location_permission_flow.dart';
 import '../services/tracking_service.dart';
 import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -237,6 +238,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           Navigator.push(context,
               MaterialPageRoute(builder: (_) => const CadastroAprovacaoScreen()));
         }
+        return;
+      }
+
+      if (!mounted) return;
+      final permOk = await LocationPermissionFlow.garantir(context);
+      if (!permOk) {
+        if (mounted) setState(() => _carregando = false);
         return;
       }
 
