@@ -125,6 +125,15 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
         ));
         return;
       }
+      try {
+        await _supabase
+            .from('despacho_fila')
+            .update({'status': 'aceito'})
+            .eq('pedido_id', _pedido['id'])
+            .eq('entregador_id', user.id)
+            .eq('status', 'aguardando');
+      } catch (_) {}
+      if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: _pedido)));
     } catch (e) {
       if (mounted) {

@@ -141,44 +141,48 @@ class _State extends State<PedidosDisponiveisScreen> {
               (configs[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
 
+      // ── Despacho individual direcionado a mim (despacho_fila), sempre —
+      //    independente do modo_despacho global. Cobre tanto o modo
+      //    sequencial quanto realocação manual de pedido único feita pelo
+      //    admin/loja/suporte no modo 'todos'.
+      final filaIndividual = await _supabase
+          .from('despacho_fila')
+          .select('pedido_id')
+          .eq('entregador_id', user.id)
+          .eq('status', 'aguardando')
+          .isFilter('rota_agrupada_id', null);
+
+      final pedidoIdsFila = (filaIndividual as List)
+          .map((f) => f['pedido_id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      List<Map<String, dynamic>> pedidosFila = [];
+      if (pedidoIdsFila.isNotEmpty) {
+        pedidosFila = List<Map<String, dynamic>>.from(
+          await _supabase
+              .from('pedidos')
+              .select('*, lojas(nome, endereco, latitude, longitude)')
+              .inFilter('id', pedidoIdsFila)
+              .eq('status', 'pronto'),
+        );
+        final idsValidos = pedidosFila.map((p) => p['id'].toString()).toSet();
+        final idsInvalidos = pedidoIdsFila.where((id) => !idsValidos.contains(id)).toList();
+        for (final id in idsInvalidos) {
+          _supabase
+              .from('despacho_fila')
+              .update({'status': 'expirado'})
+              .eq('pedido_id', id)
+              .eq('entregador_id', user.id)
+              .eq('status', 'aguardando')
+              .then((_) {});
+        }
+      }
+
       List<Map<String, dynamic>> lista;
 
       if (modoDespacho == 'sequencial') {
-        // ── Pedidos individuais (sem rota agrupada) ──────────────────────────
-        final filaIndividual = await _supabase
-            .from('despacho_fila')
-            .select('pedido_id')
-            .eq('entregador_id', user.id)
-            .eq('status', 'aguardando')
-            .isFilter('rota_agrupada_id', null);
-
-        final pedidoIds = (filaIndividual as List)
-            .map((f) => f['pedido_id']?.toString())
-            .whereType<String>()
-            .toList();
-
-        if (pedidoIds.isEmpty) {
-          lista = [];
-        } else {
-          lista = List<Map<String, dynamic>>.from(
-            await _supabase
-                .from('pedidos')
-                .select('*, lojas(nome, endereco, latitude, longitude)')
-                .inFilter('id', pedidoIds)
-                .eq('status', 'pronto'),
-          );
-          final idsValidos = lista.map((p) => p['id'].toString()).toSet();
-          final idsInvalidos = pedidoIds.where((id) => !idsValidos.contains(id)).toList();
-          for (final id in idsInvalidos) {
-            _supabase
-                .from('despacho_fila')
-                .update({'status': 'expirado'})
-                .eq('pedido_id', id)
-                .eq('entregador_id', user.id)
-                .eq('status', 'aguardando')
-                .then((_) {});
-          }
-        }
+        lista = pedidosFila;
 
         // ── Rotas agrupadas ──────────────────────────────────────────────────
         final filaRotas = await _supabase
@@ -234,7 +238,19 @@ class _State extends State<PedidosDisponiveisScreen> {
 
         if (mounted) setState(() => _rotasAgrupadas = novasRotas);
       } else {
-        lista = List<Map<String, dynamic>>.from(
+        // Pedidos ofertados individualmente (pra qualquer motoboy) agora —
+        // não devem aparecer no broadcast geral pra quem não é o alvo.
+        final ofertadosIndividualmente = await _supabase
+            .from('despacho_fila')
+            .select('pedido_id')
+            .eq('status', 'aguardando')
+            .isFilter('rota_agrupada_id', null);
+        final idsOfertados = (ofertadosIndividualmente as List)
+            .map((f) => f['pedido_id']?.toString())
+            .whereType<String>()
+            .toSet();
+
+        final broadcast = List<Map<String, dynamic>>.from(
           await _supabase
               .from('pedidos')
               .select('*, lojas(nome, endereco, latitude, longitude)')
@@ -242,15 +258,26 @@ class _State extends State<PedidosDisponiveisScreen> {
               .or('motoboy_id.is.null,motoboy_id.eq.${user.id}')
               .order('pronto_em', ascending: true),
         );
+
+        final idsFila = pedidosFila.map((p) => p['id'].toString()).toSet();
+        final resto = broadcast.where((p) {
+          final id = p['id'].toString();
+          if (idsFila.contains(id)) return false; // já incluído via pedidosFila
+          return !idsOfertados.contains(id); // exclui oferta exclusiva de outro motoboy
+        }).toList();
+
+        lista = [...pedidosFila, ...resto];
       }
 
+      final idsFila = pedidosFila.map((p) => p['id'].toString()).toSet();
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
       if (novos.isNotEmpty) {
         _tocarNotificacao();
-        if (modoDespacho == 'sequencial') {
-          for (final pedido in novos) {
-            _iniciarContador(pedido['id'].toString());
+        for (final pedido in novos) {
+          final id = pedido['id'].toString();
+          if (modoDespacho == 'sequencial' || idsFila.contains(id)) {
+            _iniciarContador(id);
           }
         }
       }
