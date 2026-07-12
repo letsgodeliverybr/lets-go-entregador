@@ -592,6 +592,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final numero = widget.pedido['numero'] ?? _pedidoId.substring(0, 6);
+    final comRetorno = widget.pedido['com_retorno'] == true;
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 2),
@@ -622,11 +623,38 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                 const SizedBox(height: 24),
               ],
               if (_etapa == EtapaEntrega.chegouDestino) ...[
-                _buildCampoCodigo(),
-                const SizedBox(height: 8),
-                if (_erro != null)
-                  Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
-                const SizedBox(height: 8),
+                // Pedido com_retorno: o motoboy precisa levar algo de volta
+                // à loja (maquininha/troco) antes de finalizar — não faz
+                // sentido oferecer "Finalizar entrega" aqui, então nem o
+                // código de confirmação (que só serve pra esse fluxo) nem
+                // o botão de finalizar aparecem; só resta "Retornar".
+                if (!comRetorno) ...[
+                  _buildCampoCodigo(),
+                  const SizedBox(height: 8),
+                  if (_erro != null)
+                    Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                ] else ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A56DB).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF1A56DB).withOpacity(0.4)),
+                    ),
+                    child: const Text(
+                      'Este pedido tem retorno — leve a maquininha/troco de '
+                      'volta à loja para finalizar.',
+                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_erro != null) ...[
+                    Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                  ],
+                ],
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF1A56DB),
@@ -636,7 +664,10 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                   ),
                   onPressed: _carregando ? null : _marcarRetornando,
                   icon: const Icon(Icons.keyboard_return, size: 18),
-                  label: const Text('Preciso retornar (maquininha/troco)', style: TextStyle(fontSize: 13)),
+                  label: Text(
+                    comRetorno ? 'Retornar com o pedido' : 'Preciso retornar (maquininha/troco)',
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -645,7 +676,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
                 ),
-              _buildBotao(),
+              if (!(comRetorno && _etapa == EtapaEntrega.chegouDestino)) _buildBotao(),
             ],
           ],
         ),
