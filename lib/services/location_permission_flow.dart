@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/location_disclosure_screen.dart';
 
 /// Garante que a permissão de localização (incluindo segundo plano) foi
@@ -8,33 +9,65 @@ import '../screens/location_disclosure_screen.dart';
 /// o status "disponível"), para cobrir usuários que já passaram pela
 /// PermissoesScreen no primeiro acesso mas tiveram a permissão revogada,
 /// ou que nunca passaram por ela (sessão antiga).
+///
+/// Fica marcado em disco (SharedPreferences) quando o motoboy já passou
+/// pelo disclosure — [garantir] é chamado toda vez que o rastreamento é
+/// (re)iniciado (voltar de uma entrega, app reaberto após o Android matar
+/// o processo, etc.), então sem essa memória a tela reapareceria a cada
+/// reinício mesmo com a permissão já concedida.
 class LocationPermissionFlow {
+  static const _chaveDisclosureConcluido = 'location_disclosure_concluido';
+
   static Future<bool> garantir(BuildContext context) async {
     final perm = await Geolocator.checkPermission();
 
     if (perm == LocationPermission.deniedForever) {
+      await _marcarDisclosureConcluido(false);
       if (!context.mounted) return false;
       return _mostrarDialogoConfiguracoes(context);
     }
 
     if (perm == LocationPermission.denied) {
+      // Permissão ausente/revogada — refaz o disclosure completo do zero.
+      await _marcarDisclosureConcluido(false);
       if (!context.mounted) return false;
       final ok = await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (_) => const LocationDisclosureScreen()),
       );
+      if (ok == true) await _marcarDisclosureConcluido(true);
       return ok == true;
     }
 
     if (perm == LocationPermission.whileInUse) {
-      if (!context.mounted) return true;
-      await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (_) => const LocationDisclosureScreen(apenasBackground: true),
-        ),
-      );
+      // Só mostra a etapa de segundo plano se ainda não passou por ela —
+      // sem isso, reaparece toda vez que o app reinicia com "sempre" ainda
+      // não concedido (o normal no Android 11+, que exige ir em
+      // Configurações e não deixa reconceder direto pelo popup do app).
+      if (!await _disclosureJaConcluido()) {
+        if (!context.mounted) return true;
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => const LocationDisclosureScreen(apenasBackground: true),
+          ),
+        );
+        await _marcarDisclosureConcluido(true);
+      }
+      return true;
     }
 
+    // LocationPermission.always
+    await _marcarDisclosureConcluido(true);
     return true;
+  }
+
+  static Future<bool> _disclosureJaConcluido() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_chaveDisclosureConcluido) ?? false;
+  }
+
+  static Future<void> _marcarDisclosureConcluido(bool valor) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_chaveDisclosureConcluido, valor);
   }
 
   static Future<bool> _mostrarDialogoConfiguracoes(BuildContext context) async {

@@ -369,7 +369,7 @@ packages:
     source: hosted
     version: "11.1.0"
   geolocator_android:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: geolocator_android
       sha256: "7aefc530db47d90d0580b552df3242440a10fe60814496a979aa67aa98b1fd47"
@@ -385,7 +385,7 @@ packages:
     source: hosted
     version: "2.3.9"
   geolocator_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: geolocator_platform_interface
       sha256: "386ce3d9cce47838355000070b1d0b13efb5bc430f8ecda7e9238c8409ace012"
@@ -833,7 +833,7 @@ packages:
     source: hosted
     version: "3.4.0"
   shared_preferences:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences
       sha256: d3bbe5553a986e83980916ded2f0b435ef2e1893dfaa29d5a7a790d0eca12180

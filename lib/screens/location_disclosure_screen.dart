@@ -54,8 +54,13 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
   }
 
   Future<void> _solicitarBackground() async {
+    // No Android 11+ (API 30+) o sistema não mostra mais o popup nativo de
+    // "permitir o tempo todo" numa segunda chamada de requestPermission()
+    // in-app — precisa abrir as Configurações do app pra essa opção
+    // aparecer. Chamar requestPermission() aqui de novo silenciosamente
+    // não faz nada na maioria dos aparelhos modernos.
     setState(() => _fase = _Fase.solicitandoBackground);
-    await Geolocator.requestPermission();
+    await Geolocator.openAppSettings();
     if (!mounted) return;
     Navigator.pop(context, true);
   }
@@ -110,10 +115,10 @@ class _LocationDisclosureScreenState extends State<LocationDisclosureScreen> {
             'Isso é necessário para o rastreamento da entrega em tempo real '
                 '— sem ele, lojas e clientes não conseguem acompanhar onde '
                 'você está durante o trajeto.',
-            'No próximo passo, escolha a opção "Permitir o tempo todo" '
-                'quando o Android perguntar.',
+            'Vamos abrir as Configurações do app — lá, em "Permissões" > '
+                '"Localização", escolha a opção "Permitir o tempo todo".',
           ],
-          botaoTexto: 'Permitir sempre',
+          botaoTexto: 'Abrir configurações',
           onBotao: _solicitarBackground,
           botaoSecundarioTexto: 'Agora não',
           onBotaoSecundario: _pularBackground,
@@ -165,51 +170,62 @@ class _Disclosure extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 56),
-        Container(
-          width: 72,
-          height: 72,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: corIcone.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Icon(icone, color: corIcone, size: 38),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          titulo,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: destaque
-                ? const Color(0xFFf59e0b).withOpacity(0.08)
-                : const Color(0xFF161820),
-            borderRadius: BorderRadius.circular(16),
-            border: destaque
-                ? Border.all(color: const Color(0xFFf59e0b).withOpacity(0.4))
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (int i = 0; i < paragrafos.length; i++) ...[
-                if (i > 0) const SizedBox(height: 12),
+        // Rolável: em telas menores ou com parágrafos mais longos, o
+        // conteúdo não pode estourar o layout — só os botões ficam fixos.
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 56),
+                Container(
+                  width: 72,
+                  height: 72,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: corIcone.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(icone, color: corIcone, size: 38),
+                ),
+                const SizedBox(height: 24),
                 Text(
-                  paragrafos[i],
+                  titulo,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
-                      color: Color(0xFFD1D5DB), fontSize: 14.5, height: 1.5),
+                      color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: destaque
+                        ? const Color(0xFFf59e0b).withOpacity(0.08)
+                        : const Color(0xFF161820),
+                    borderRadius: BorderRadius.circular(16),
+                    border: destaque
+                        ? Border.all(color: const Color(0xFFf59e0b).withOpacity(0.4))
+                        : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (int i = 0; i < paragrafos.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        Text(
+                          paragrafos[i],
+                          style: const TextStyle(
+                              color: Color(0xFFD1D5DB), fontSize: 14.5, height: 1.5),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 20),
         SizedBox(
           height: 52,
           child: ElevatedButton(
