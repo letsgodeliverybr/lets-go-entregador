@@ -66,7 +66,15 @@ async function getFirebaseAccessToken(): Promise<string> {
   return access_token;
 }
 
-// Envia mensagem FCM para um token específico
+// Envia mensagem FCM para um token específico.
+// Inclui bloco `notification`: em background/killed, o Android exibe a
+// notificação direto pelo sistema (usando o canal/som já criados no app),
+// sem precisar acordar o processo do app — em aparelhos com restrição
+// agressiva de segundo plano (MIUI/HyperOS etc.), uma mensagem data-only
+// só é entregue se o app tiver permissão de "Autoiniciar" concedida
+// manualmente, o que não é viável pedir de motoboys reais. O app não
+// duplica mais essa exibição em background (ver _firebaseBackgroundHandler
+// em main.dart) — só o onMessage em foreground continua mostrando local.
 async function sendFCM(
   token: string,
   tipo: string,
@@ -86,18 +94,18 @@ async function sendFCM(
         message: {
           token,
           notification: {
-            title: isRota ? "🛵 Nova Rota!" : "🛵 Novo Pedido!",
+            title: isRota ? "🛵 Nova Rota!" : "LET'S GO MOTOCA 🛵",
             body: isRota
               ? "Nova rota com múltiplas entregas para você!"
-              : "Pedido disponível para entrega",
+              : "Pedidos na tela! Vem Pra Rua!",
           },
           data: { tipo },
           android: {
             priority: "high",
             ttl: "60s",
             notification: {
-              channel_id: isRota ? "letsgo_nova_rota" : "letsgo_novo_pedido",
-              sound: "letsgo",
+              channel_id: isRota ? "letsgo_nova_rota_v2" : "letsgo_novo_pedido_v2",
+              sound: "letsgo_notification",
             },
           },
         },
@@ -121,18 +129,26 @@ Deno.serve(async (req) => {
 
   const payload = await req.json();
   const tipo: string = payload.tipo ?? "novo_pedido";
+  const entregadorId: string | undefined = payload.entregador_id;
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Busca todos os entregadores online com token FCM
-  const { data: entregadores, error } = await supabase
+  // Com entregador_id: envio direcionado a um único entregador (ex: item
+  // colocado na fila individual dele pelo roterizador automático), sem
+  // exigir disponivel=true (a fila já foi montada pra ele especificamente).
+  // Sem entregador_id: broadcast pra todos os entregadores online (fluxo
+  // original de pedido avulso, primeiro a aceitar leva).
+  const query = supabase
     .from("entregadores")
     .select("id, fcm_token")
-    .eq("disponivel", true)
     .not("fcm_token", "is", null);
+
+  const { data: entregadores, error } = entregadorId
+    ? await query.eq("id", entregadorId)
+    : await query.eq("disponivel", true);
 
   if (error) {
     console.error("[FCM] erro ao buscar entregadores:", error.message);
@@ -142,7 +158,7 @@ Deno.serve(async (req) => {
   }
 
   if (!entregadores?.length) {
-    console.log("[FCM] nenhum entregador online com token");
+    console.log("[FCM] nenhum entregador encontrado com token");
     return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
   }
 

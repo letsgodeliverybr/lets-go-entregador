@@ -8,11 +8,15 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  static const String _channelPedidoId = 'letsgo_novo_pedido';
+  // _v2: canais Android são imutáveis depois de criados (o som não pode
+  // mudar via código uma vez que o canal já existe no aparelho) — troca de
+  // ID força o Android a criar um canal novo do zero com o som certo,
+  // em vez de manter travado um canal antigo criado sem som customizado.
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v2';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
-  static const String _channelRotaId = 'letsgo_nova_rota';
+  static const String _channelRotaId = 'letsgo_nova_rota_v2';
   static const String _channelRotaName = 'Nova Rota';
   static const String _channelRotaDesc = 'Alerta de rota com múltiplas entregas';
 
@@ -56,7 +60,7 @@ class NotificationService {
         description: _channelPedidoDesc,
         importance: Importance.max,
         playSound: true,
-        sound: RawResourceAndroidNotificationSound('letsgo'),
+        sound: RawResourceAndroidNotificationSound('letsgo_notification'),
         enableVibration: true,
         enableLights: true,
       ));
@@ -67,7 +71,7 @@ class NotificationService {
         description: _channelRotaDesc,
         importance: Importance.max,
         playSound: true,
-        sound: RawResourceAndroidNotificationSound('letsgo'),
+        sound: RawResourceAndroidNotificationSound('letsgo_notification'),
         enableVibration: true,
         enableLights: true,
       ));
@@ -187,7 +191,7 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
-      sound: RawResourceAndroidNotificationSound('letsgo'),
+      sound: RawResourceAndroidNotificationSound('letsgo_notification'),
       enableVibration: true,
       enableLights: true,
       ticker: 'Novo pedido disponível',
@@ -220,7 +224,7 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
-      sound: RawResourceAndroidNotificationSound('letsgo'),
+      sound: RawResourceAndroidNotificationSound('letsgo_notification'),
       enableVibration: true,
       enableLights: true,
       ticker: 'Nova rota disponível',
