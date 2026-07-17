@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
@@ -29,17 +28,14 @@ const _firebaseOptions = FirebaseOptions(
   storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
 );
 
+// O payload agora sempre inclui um bloco `notification` (ver
+// notify-novo-pedido/despacho-engine) — em background/killed o Android
+// exibe a notificação sozinho, direto do sistema, sem invocar este
+// handler. Ele só precisa existir e estar registrado (exigência do
+// plugin); não deve mostrar nada aqui, senão duplica a notificação que o
+// sistema já exibiu.
 @pragma('vm:entry-point')
-Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: _firebaseOptions);
-  await NotificationService.initLocal();
-  final tipo = message.data['tipo']?.toString() ?? '';
-  if (tipo == 'nova_rota') {
-    await NotificationService.showNovaRotaLocal();
-  } else {
-    await NotificationService.showNovoPedidoLocal();
-  }
-}
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +62,6 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _supabase = Supabase.instance.client;
-  final _audioPlayer = AudioPlayer();
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
   OverlayEntry? _overlayEntry;
@@ -154,24 +149,6 @@ class _MyAppState extends State<MyApp> {
     );
     overlay.insert(_overlayEntry!);
     _overlayTimer = Timer(const Duration(seconds: 30), _fecharOverlay);
-    _tocarSom();
-  }
-
-  Future<void> _tocarSom() async {
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAudioSource(
-        ConcatenatingAudioSource(
-          children: List.generate(
-            2,
-            (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
-          ),
-        ),
-      );
-      await _audioPlayer.play();
-    } catch (e) {
-      debugPrint('[Overlay] Áudio falhou: $e');
-    }
   }
 
   void _fecharOverlay() {
@@ -179,7 +156,6 @@ class _MyAppState extends State<MyApp> {
     _overlayTimer = null;
     _overlayEntry?.remove();
     _overlayEntry = null;
-    _audioPlayer.stop();
   }
 
   @override
@@ -187,7 +163,6 @@ class _MyAppState extends State<MyApp> {
     _authSub?.cancel();
     _cancelarStream();
     _fecharOverlay();
-    _audioPlayer.dispose();
     super.dispose();
   }
 

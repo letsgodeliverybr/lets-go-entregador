@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
-import '../services/notification_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import 'pedidos_aceitos_screen.dart';
 import 'rota_disponivel_screen.dart';
@@ -29,10 +28,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   final Map<String, Timer> _timersContadores = {};
   Timer? _timer;
   RealtimeChannel? _channel;
-  RealtimeChannel? _channelRota;
   RealtimeChannel? _channelDespachoFila;
-
-  Map<String, dynamic>? _rotaAtual;
 
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
@@ -77,7 +73,6 @@ class _State extends State<PedidosDisponiveisScreen> {
       return;
     }
     await _buscar();
-    _assinarRealtimeRota();
     _assinarRealtimeDespachoFila();
     if (_modoDespacho != 'sequencial') {
       _timer = Timer.periodic(const Duration(seconds: 8), (_) => _buscar());
@@ -91,7 +86,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     for (final t in _timersContadores.values) { t.cancel(); }
     _timersContadores.clear();
     _channel?.unsubscribe();
-    _channelRota?.unsubscribe();
     _channelDespachoFila?.unsubscribe();
     _audioPlayer.dispose();
     super.dispose();
@@ -359,10 +353,11 @@ class _State extends State<PedidosDisponiveisScreen> {
     });
   }
 
+  // Reforço tocado direto pelo app (independente do canal de notificação do
+  // Android) — reintroduzido porque o som do canal do sistema, mesmo com
+  // canal/importância/prioridade corretos, não está tocando neste aparelho
+  // por motivo ainda não identificado. Não depende de notificação chegar.
   Future<void> _tocarNotificacao() async {
-    NotificationService.showNovoPedidoLocal().catchError((e) {
-      debugPrint('Notificação falhou: $e');
-    });
     HapticFeedback.heavyImpact();
     try {
       await _audioPlayer.stop();
@@ -370,34 +365,13 @@ class _State extends State<PedidosDisponiveisScreen> {
         ConcatenatingAudioSource(
           children: List.generate(
             2,
-            (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
+            (_) => AudioSource.asset('assets/sounds/letsgo_notification.wav'),
           ),
         ),
       );
       await _audioPlayer.play();
     } catch (e) {
       debugPrint('Áudio falhou: $e');
-    }
-  }
-
-  Future<void> _tocarNotificacaoRota() async {
-    NotificationService.showNovaRotaLocal().catchError((e) {
-      debugPrint('Notificação rota falhou: $e');
-    });
-    HapticFeedback.heavyImpact();
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAudioSource(
-        ConcatenatingAudioSource(
-          children: List.generate(
-            2,
-            (_) => AudioSource.asset('assets/sounds/letsgo.wav'),
-          ),
-        ),
-      );
-      await _audioPlayer.play();
-    } catch (e) {
-      debugPrint('Áudio rota falhou: $e');
     }
   }
 
@@ -435,46 +409,6 @@ class _State extends State<PedidosDisponiveisScreen> {
         .subscribe();
   }
 
-  void _assinarRealtimeRota() {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-
-    _channelRota = _supabase
-        .channel('entregador-rota-${user.id}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'entregadores',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'id',
-            value: user.id,
-          ),
-          callback: (payload) async {
-            final novoRegistro = payload.newRecord;
-            final antigoRegistro = payload.oldRecord;
-            final novaNotif = novoRegistro['notificacao_rota'];
-            final antigaNotif = antigoRegistro['notificacao_rota'];
-            if (novaNotif != null && novaNotif.toString() != antigaNotif?.toString()) {
-              await _tocarNotificacaoRota();
-              try {
-                final rota = await _supabase
-                    .from('rotas')
-                    .select()
-                    .eq('id', novaNotif.toString())
-                    .maybeSingle();
-                if (mounted && rota != null) {
-                  setState(() => _rotaAtual = rota);
-                }
-              } catch (e) {
-                debugPrint('Erro ao buscar rota: $e');
-              }
-            }
-          },
-        )
-        .subscribe();
-  }
-
   void _assinarRealtimeDespachoFila() {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -494,7 +428,7 @@ class _State extends State<PedidosDisponiveisScreen> {
             final record = payload.newRecord;
             final status = record['status']?.toString() ?? '';
             if (status == 'aguardando') {
-              await _tocarNotificacao();
+              _tocarNotificacao();
               _buscar();
             }
           },
@@ -686,7 +620,6 @@ class _State extends State<PedidosDisponiveisScreen> {
               ? _buildOffline()
               : Column(
               children: [
-                if (_rotaAtual != null) _buildBannerRota(_rotaAtual!),
                 Expanded(
                   child: totalItens == 0
                       ? _buildVazio()
@@ -707,53 +640,6 @@ class _State extends State<PedidosDisponiveisScreen> {
                 ),
               ],
             ),
-    );
-  }
-
-  // Banner de rota manual atribuída pelo admin (tabela 'rotas')
-  Widget _buildBannerRota(Map<String, dynamic> rota) {
-    final pedidoIds = (rota['pedido_ids'] as List?)?.length ?? 0;
-    return GestureDetector(
-      onTap: () => setState(() => _rotaAtual = null),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1A56DB), Color(0xFF0E3A99)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1A56DB).withOpacity(0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(children: [
-          const Icon(Icons.route, color: Colors.white, size: 32),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('🛵 Rota Disponível!',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text('$pedidoIds entregas agrupadas para você',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ],
-            ),
-          ),
-          const Icon(Icons.close, color: Colors.white54, size: 20),
-        ]),
-      ),
     );
   }
 
