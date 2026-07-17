@@ -125,6 +125,11 @@ class NotificationService {
   }
 
   // ── Salva token FCM na tabela entregadores ──────────────────────────────
+  // Chamado sempre que o app abre com sessão válida (main.dart) e após login
+  // (login_screen.dart) — sempre sobrescreve com o token atual do Firebase,
+  // sem comparar com o valor salvo antes (overwrite incondicional é mais
+  // simples e robusto que comparar-e-atualizar). Grava 'updated_at' pra dar
+  // pra confirmar de fora (sem log) que essa gravação de fato rodou.
   static Future<void> saveFcmToken(String uid) async {
     if (uid.isEmpty) return;
     try {
@@ -132,7 +137,10 @@ class NotificationService {
       if (token == null) return;
       await Supabase.instance.client
           .from('entregadores')
-          .update({'fcm_token': token})
+          .update({
+            'fcm_token': token,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('id', uid);
       debugPrint('[FCM] token salvo');
 
@@ -140,7 +148,10 @@ class NotificationService {
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
         Supabase.instance.client
             .from('entregadores')
-            .update({'fcm_token': newToken})
+            .update({
+              'fcm_token': newToken,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
             .eq('id', uid);
         debugPrint('[FCM] token renovado e salvo');
       });
