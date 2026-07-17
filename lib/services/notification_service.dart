@@ -12,11 +12,11 @@ class NotificationService {
   // mudar via código uma vez que o canal já existe no aparelho) — troca de
   // ID força o Android a criar um canal novo do zero com o som certo,
   // em vez de manter travado um canal antigo criado sem som customizado.
-  static const String _channelPedidoId = 'letsgo_novo_pedido_v2';
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v3';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
-  static const String _channelRotaId = 'letsgo_nova_rota_v2';
+  static const String _channelRotaId = 'letsgo_nova_rota_v3';
   static const String _channelRotaName = 'Nova Rota';
   static const String _channelRotaDesc = 'Alerta de rota com múltiplas entregas';
 

@@ -104,7 +104,7 @@ async function sendFCM(
             priority: "high",
             ttl: "60s",
             notification: {
-              channel_id: isRota ? "letsgo_nova_rota_v2" : "letsgo_novo_pedido_v2",
+              channel_id: isRota ? "letsgo_nova_rota_v3" : "letsgo_novo_pedido_v3",
               sound: "letsgo_notification",
             },
           },

@@ -64,7 +64,7 @@ async function enviarPushFCM(fcmToken: string, pedidoId: string, numero: string)
           },
           android: {
             priority: "HIGH",
-            notification: { sound: "letsgo_notification", channel_id: "letsgo_novo_pedido_v2" },
+            notification: { sound: "letsgo_notification", channel_id: "letsgo_novo_pedido_v3" },
           },
         },
       }),
