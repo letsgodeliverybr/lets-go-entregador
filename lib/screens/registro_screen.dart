@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cadastro_aprovacao_screen.dart';
+import 'permissoes_screen.dart';
 
 class RegistroScreen extends StatefulWidget {
   const RegistroScreen({super.key});
@@ -13,16 +16,25 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _telefoneCtrl = TextEditingController();
+  final _cpfCtrl = TextEditingController();
   final _senhaCtrl = TextEditingController();
   final _confirmarSenhaCtrl = TextEditingController();
   bool _senhaVisivel = false;
   bool _confirmarSenhaVisivel = false;
   bool _carregando = false;
 
+  final _telefoneMask = MaskTextInputFormatter(
+      mask: '(##) #####-####', filter: {'#': RegExp(r'[0-9]')});
+  final _cpfMask = MaskTextInputFormatter(
+      mask: '###.###.###-##', filter: {'#': RegExp(r'[0-9]')});
+
   @override
   void dispose() {
     _nomeCtrl.dispose();
     _emailCtrl.dispose();
+    _telefoneCtrl.dispose();
+    _cpfCtrl.dispose();
     _senhaCtrl.dispose();
     _confirmarSenhaCtrl.dispose();
     super.dispose();
@@ -80,27 +92,72 @@ class _RegistroScreenState extends State<RegistroScreen> {
 
       debugPrint('[REGISTRO] ✅ user criado id=${user.id} email=${user.email}');
 
-      // ── 2. Fallback client-side — a linha normalmente já existe aqui, criada
+      // ── 2. Verificar CPF/telefone duplicados ──────────────
+      // Só é possível checar contra a tabela depois do signUp (sessão
+      // autenticada); a conta em auth.users já existe neste ponto mesmo se
+      // o CPF/telefone estiver duplicado (mesma limitação que já existia
+      // antes na checagem de CadastroAprovacaoScreen).
+      final cpfDigitado = _cpfCtrl.text.trim();
+      final cpfSomenteDigitos = cpfDigitado.replaceAll(RegExp(r'[^0-9]'), '');
+      try {
+        final duplicadoCpf = await supabase
+            .from('entregadores')
+            .select('id')
+            .or('cpf.eq.$cpfDigitado,cpf.eq.$cpfSomenteDigitos')
+            .neq('id', user.id)
+            .limit(1);
+        if (duplicadoCpf.isNotEmpty) {
+          debugPrint('[REGISTRO] ❌ CPF já cadastrado por outro entregador');
+          _mostrarErro('CPF já cadastrado por outro entregador.');
+          return;
+        }
+      } catch (e) {
+        debugPrint('[REGISTRO] ⚠️ erro ao verificar CPF duplicado: $e');
+      }
+
+      final telefoneDigitado = _telefoneCtrl.text.trim();
+      try {
+        final duplicadoTelefone = await supabase
+            .from('entregadores')
+            .select('id')
+            .eq('telefone', telefoneDigitado)
+            .neq('id', user.id)
+            .limit(1);
+        if (duplicadoTelefone.isNotEmpty) {
+          debugPrint('[REGISTRO] ❌ telefone já cadastrado por outro entregador');
+          _mostrarErro('Telefone já cadastrado por outro entregador.');
+          return;
+        }
+      } catch (e) {
+        debugPrint('[REGISTRO] ⚠️ erro ao verificar telefone duplicado: $e');
+      }
+
+      // ── 3. Fallback client-side — a linha normalmente já existe aqui, criada
       // pelo trigger on_auth_user_created_entregadores no servidor (passo 1).
       // UPDATE primeiro (nunca sobrescreve colunas fora do payload); só faz
       // INSERT completo se a linha realmente não existir ainda. upsert() puro
       // não serve aqui: o PostgREST exige todas as colunas NOT NULL no payload
       // mesmo quando a linha já existe e a intenção é só atualizar 'nome'.
       debugPrint('[REGISTRO] update em entregadores id=${user.id}...');
+      final camposIniciais = {
+        'nome': _nomeCtrl.text.trim(),
+        'telefone': telefoneDigitado,
+        'cpf': cpfDigitado,
+      };
       try {
         final atualizados = await supabase
             .from('entregadores')
-            .update({'nome': _nomeCtrl.text.trim()})
+            .update(camposIniciais)
             .eq('id', user.id)
             .select('id');
         if (atualizados.isEmpty) {
           debugPrint('[REGISTRO] linha não existia, criando via insert completo');
           await supabase.from('entregadores').insert({
             'id': user.id,
-            'nome': _nomeCtrl.text.trim(),
             'status': 'inativo',
             'aprovado': false,
             'status_cadastro': 'pendente',
+            ...camposIniciais,
           });
         }
         debugPrint('[REGISTRO] ✅ entregadores row ok');
@@ -110,12 +167,20 @@ class _RegistroScreenState extends State<RegistroScreen> {
         debugPrint('[REGISTRO] ⚠️ entregadores falhou (não bloqueia): $insertErr');
       }
 
-      // ── 3. Navegar para tela de aprovação ─────────────────
-      debugPrint('[REGISTRO] navegando para CadastroAprovacaoScreen...');
+      // ── 4. Navegar para permissões, depois aprovação ──────
+      // Passa por todas as permissões (localização, notificação, bateria,
+      // não perturbe) juntas, numa tela só, antes do resto do cadastro —
+      // signUp() já criou sessão, então o cold-start check de main.dart
+      // (session == null) nunca pegaria esse caso.
+      debugPrint('[REGISTRO] navegando para PermissoesScreen...');
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const CadastroAprovacaoScreen()),
+        MaterialPageRoute(
+          builder: (_) => const PermissoesScreen(
+            next: CadastroAprovacaoScreen(),
+          ),
+        ),
       );
       debugPrint('[REGISTRO] ✅ navegação concluída');
 
@@ -220,6 +285,38 @@ class _RegistroScreenState extends State<RegistroScreen> {
                   return null;
                 },
               ),
+              _label('Telefone (WhatsApp)'),
+              const SizedBox(height: 8),
+              _campo(
+                controller: _telefoneCtrl,
+                hint: '(00) 00000-0000',
+                icone: Icons.phone_outlined,
+                teclado: TextInputType.phone,
+                formatters: [_telefoneMask],
+                validar: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Informe o telefone';
+                  if (v.replaceAll(RegExp(r'[^0-9]'), '').length < 10) {
+                    return 'Telefone inválido';
+                  }
+                  return null;
+                },
+              ),
+              _label('CPF'),
+              const SizedBox(height: 8),
+              _campo(
+                controller: _cpfCtrl,
+                hint: '000.000.000-00',
+                icone: Icons.badge_outlined,
+                teclado: TextInputType.number,
+                formatters: [_cpfMask],
+                validar: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Informe o CPF';
+                  if (v.replaceAll(RegExp(r'[^0-9]'), '').length < 11) {
+                    return 'CPF inválido';
+                  }
+                  return null;
+                },
+              ),
               _label('Senha'),
               const SizedBox(height: 8),
               _campoSenha(
@@ -292,12 +389,14 @@ class _RegistroScreenState extends State<RegistroScreen> {
     required IconData icone,
     TextInputType teclado = TextInputType.text,
     String? Function(String?)? validar,
+    List<TextInputFormatter>? formatters,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
         keyboardType: teclado,
+        inputFormatters: formatters,
         style: const TextStyle(color: Colors.white),
         validator: validar,
         decoration: InputDecoration(

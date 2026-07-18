@@ -655,21 +655,26 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                     const SizedBox(height: 8),
                   ],
                 ],
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1A56DB),
-                    side: const BorderSide(color: Color(0xFF1A56DB)),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                // Só pedidos com_retorno mostram esse botão — sem_retorno finaliza
+                // direto pelo código acima, sem opção de cair no fluxo de retorno
+                // (que só a loja consegue finalizar depois).
+                if (comRetorno) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1A56DB),
+                      side: const BorderSide(color: Color(0xFF1A56DB)),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _carregando ? null : _marcarRetornando,
+                    icon: const Icon(Icons.keyboard_return, size: 18),
+                    label: const Text(
+                      'Retornar com o pedido',
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
-                  onPressed: _carregando ? null : _marcarRetornando,
-                  icon: const Icon(Icons.keyboard_return, size: 18),
-                  label: Text(
-                    comRetorno ? 'Retornar com o pedido' : 'Preciso retornar (maquininha/troco)',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
               ],
               if (_erro != null && _etapa != EtapaEntrega.chegouDestino)
                 Padding(

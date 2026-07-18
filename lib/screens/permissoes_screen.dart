@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'location_disclosure_screen.dart';
+import '../services/dnd_permission_service.dart';
+import '../services/location_permission_flow.dart';
 
 enum _Status { pendente, processando, concedida, negada }
 enum _FaseTela { disclosure, solicitando }
@@ -55,6 +56,12 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
         descricao: 'Manter GPS ativo em segundo plano',
         cor: const Color(0xFF059669),
       ),
+      _Item(
+        icone: Icons.do_not_disturb_on_outlined,
+        titulo: 'Não perturbe',
+        descricao: 'Tocar o alerta de pedido mesmo nesse modo',
+        cor: const Color(0xFFDC2626),
+      ),
     ];
   }
 
@@ -81,12 +88,12 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
     try {
       switch (i) {
         case 0:
-          concedida = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const LocationDisclosureScreen()),
-              ) ==
-              true;
+          // Via LocationPermissionFlow (não Navigator direto pra
+          // LocationDisclosureScreen) — é quem marca a conclusão em
+          // SharedPreferences; sem isso, a primeira checagem de
+          // entregador_home_screen.dart (garantir()) acha que ainda não
+          // concluiu e pede de novo a etapa de segundo plano logo em seguida.
+          concedida = await LocationPermissionFlow.garantir(context);
           break;
         case 1:
           final ok = await FlutterLocalNotificationsPlugin()
@@ -98,6 +105,9 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
         case 2:
           await FlutterForegroundTask.requestIgnoreBatteryOptimization();
           concedida = true;
+          break;
+        case 3:
+          concedida = await DndPermissionService.garantir();
           break;
       }
     } catch (_) {
@@ -232,6 +242,14 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
                 texto:
                     'A exceção de otimização de bateria mantém o GPS ativo '
                     'durante a entrega, mesmo com o app em segundo plano.',
+              ),
+              SizedBox(height: 16),
+              _LinhaDisclosure(
+                icone: Icons.do_not_disturb_on_outlined,
+                cor: Color(0xFFDC2626),
+                texto:
+                    'Pedimos também a exceção de "Não perturbe", pra você não '
+                    'perder um pedido se o celular estiver nesse modo.',
               ),
             ],
           ),
