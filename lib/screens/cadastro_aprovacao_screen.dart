@@ -20,8 +20,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
 
   // Dados Pessoais
   final _nomeCtrl = TextEditingController();
-  final _telefoneCtrl = TextEditingController();
-  final _cpfCtrl = TextEditingController();
   final _rgCtrl = TextEditingController();
   String? _dataNascimento;
   final _cepCtrl = TextEditingController();
@@ -35,10 +33,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _picker = ImagePicker();
 
   // Máscaras
-  final _cpfMask = MaskTextInputFormatter(
-      mask: '###.###.###-##', filter: {'#': RegExp(r'[0-9]')});
-  final _telefoneMask = MaskTextInputFormatter(
-      mask: '(##) #####-####', filter: {'#': RegExp(r'[0-9]')});
   final _cepMask = MaskTextInputFormatter(
       mask: '#####-###', filter: {'#': RegExp(r'[0-9]')});
 
@@ -62,8 +56,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   @override
   void dispose() {
     _nomeCtrl.dispose();
-    _telefoneCtrl.dispose();
-    _cpfCtrl.dispose();
     _rgCtrl.dispose();
     _cepCtrl.dispose();
     _bairroCtrl.dispose();
@@ -89,8 +81,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       if (!mounted) return;
       setState(() {
         _nomeCtrl.text = e['nome'] ?? '';
-        _telefoneCtrl.text = e['telefone'] ?? '';
-        _cpfCtrl.text = e['cpf'] ?? '';
         _rgCtrl.text = e['rg'] ?? '';
         _dataNascimento = e['data_nascimento']?.toString();
         _cepCtrl.text = e['cep'] ?? '';
@@ -189,63 +179,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     final uid = user.id;
     debugPrint('[DEBUG] uid resolvido: "$uid"');
 
-    // ── Verificar CPF duplicado ──────────────────────────────
-    final cpfDigitado = _cpfCtrl.text.trim();
-    if (cpfDigitado.isNotEmpty) {
-      try {
-        // Compara com e sem formatação para cobrir qualquer padrão gravado no banco
-        final cpfSomenteDigitos =
-            cpfDigitado.replaceAll(RegExp(r'[^0-9]'), '');
-        debugPrint('[DEBUG] verificando CPF duplicado: formatado="$cpfDigitado" digitos="$cpfSomenteDigitos" excluindo uid=$uid');
-        final duplicado = await _supabase
-            .from('entregadores')
-            .select('id')
-            .or('cpf.eq.$cpfDigitado,cpf.eq.$cpfSomenteDigitos')
-            .neq('id', uid)
-            .limit(1);
-        debugPrint('[DEBUG] resultado CPF duplicado: ${duplicado.length} registro(s)');
-        if (duplicado.isNotEmpty) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('CPF já cadastrado por outro entregador'),
-              backgroundColor: Color(0xFFef4444),
-              duration: Duration(seconds: 5),
-            ),
-          );
-          return;
-        }
-      } catch (e) {
-        debugPrint('[DEBUG] Erro ao verificar CPF duplicado: $e');
-      }
-    }
-
-    // ── Verificar Telefone duplicado ─────────────────────────
-    final telefoneDigitado = _telefoneCtrl.text.trim();
-    if (telefoneDigitado.isNotEmpty) {
-      try {
-        final duplicadoTel = await _supabase
-            .from('entregadores')
-            .select('id')
-            .eq('telefone', telefoneDigitado)
-            .neq('id', uid)
-            .limit(1);
-        if (duplicadoTel.isNotEmpty) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Telefone já cadastrado por outro entregador'),
-              backgroundColor: Color(0xFFef4444),
-              duration: Duration(seconds: 5),
-            ),
-          );
-          return;
-        }
-      } catch (e) {
-        debugPrint('[DEBUG] Erro ao verificar telefone duplicado: $e');
-      }
-    }
-
     setState(() => _salvando = true);
     try {
       // Upload de foto — não-bloqueante: falha é logada mas não aborta o envio
@@ -272,8 +205,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
 
       final camposPerfil = {
         'nome': _nomeCtrl.text.trim(),
-        'telefone': _telefoneCtrl.text.trim(),
-        'cpf': _cpfCtrl.text.trim(),
         'rg': _rgCtrl.text.trim(),
         'data_nascimento': _dataNascimento,
         'cep': _cepCtrl.text.trim(),
@@ -366,15 +297,6 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _secao('👤 Dados Pessoais'),
               _fotoField(),
               _campo('Nome completo', _nomeCtrl, obrigatorio: true),
-              _campo('Telefone', _telefoneCtrl,
-                  tipo: TextInputType.phone,
-                  hint: '(00) 00000-0000',
-                  obrigatorio: true,
-                  formatters: [_telefoneMask]),
-              _campo('CPF', _cpfCtrl,
-                  hint: '000.000.000-00',
-                  obrigatorio: true,
-                  formatters: [_cpfMask]),
               _campo('RG', _rgCtrl),
               _dataNascimentoField(),
               _campo('CEP', _cepCtrl,

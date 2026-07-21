@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/dnd_permission_service.dart';
+import '../services/fullscreen_intent_permission_service.dart';
 import '../services/location_permission_flow.dart';
 
 enum _Status { pendente, processando, concedida, negada }
@@ -62,6 +63,12 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
         descricao: 'Tocar o alerta de pedido mesmo nesse modo',
         cor: const Color(0xFFDC2626),
       ),
+      _Item(
+        icone: Icons.fullscreen,
+        titulo: 'Abrir tela cheia',
+        descricao: 'Mostrar o pedido na tela assim que ele chegar',
+        cor: const Color(0xFFEA580C),
+      ),
     ];
   }
 
@@ -108,6 +115,9 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
           break;
         case 3:
           concedida = await DndPermissionService.garantir();
+          break;
+        case 4:
+          concedida = await FullScreenIntentPermissionService.garantir();
           break;
       }
     } catch (_) {
@@ -250,6 +260,14 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
                 texto:
                     'Pedimos também a exceção de "Não perturbe", pra você não '
                     'perder um pedido se o celular estiver nesse modo.',
+              ),
+              SizedBox(height: 16),
+              _LinhaDisclosure(
+                icone: Icons.fullscreen,
+                cor: Color(0xFFEA580C),
+                texto:
+                    'Por fim, pedimos pra abrir a tela do pedido automaticamente '
+                    'quando ele chegar, mesmo com o celular bloqueado.',
               ),
             ],
           ),

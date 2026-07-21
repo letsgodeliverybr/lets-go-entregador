@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:just_audio/just_audio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -18,7 +16,6 @@ class PedidosDisponiveisScreen extends StatefulWidget {
 
 class _State extends State<PedidosDisponiveisScreen> {
   final _supabase = Supabase.instance.client;
-  final _audioPlayer = AudioPlayer();
   List<Map<String, dynamic>> _pedidos = [];
   List<Map<String, dynamic>> _rotasAgrupadas = [];
   bool _carregando = true;
@@ -87,7 +84,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     _timersContadores.clear();
     _channel?.unsubscribe();
     _channelDespachoFila?.unsubscribe();
-    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -222,7 +218,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             });
 
             if (!idsRotasConhecidas.contains(rotaId)) {
-              _tocarNotificacao();
               _iniciarContadorRota(rotaId, filaRota['id'].toString());
             }
           } catch (e) {
@@ -267,7 +262,6 @@ class _State extends State<PedidosDisponiveisScreen> {
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
       if (novos.isNotEmpty) {
-        _tocarNotificacao();
         for (final pedido in novos) {
           final id = pedido['id'].toString();
           if (modoDespacho == 'sequencial' || idsFila.contains(id)) {
@@ -353,28 +347,6 @@ class _State extends State<PedidosDisponiveisScreen> {
     });
   }
 
-  // Reforço tocado direto pelo app (independente do canal de notificação do
-  // Android) — reintroduzido porque o som do canal do sistema, mesmo com
-  // canal/importância/prioridade corretos, não está tocando neste aparelho
-  // por motivo ainda não identificado. Não depende de notificação chegar.
-  Future<void> _tocarNotificacao() async {
-    HapticFeedback.heavyImpact();
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAudioSource(
-        ConcatenatingAudioSource(
-          children: List.generate(
-            2,
-            (_) => AudioSource.asset('assets/sounds/letsgo_notification.wav'),
-          ),
-        ),
-      );
-      await _audioPlayer.play();
-    } catch (e) {
-      debugPrint('Áudio falhou: $e');
-    }
-  }
-
   void _assinarRealtime() {
     _channel?.unsubscribe();
     _channel = _supabase
@@ -428,7 +400,6 @@ class _State extends State<PedidosDisponiveisScreen> {
             final record = payload.newRecord;
             final status = record['status']?.toString() ?? '';
             if (status == 'aguardando') {
-              _tocarNotificacao();
               _buscar();
             }
           },

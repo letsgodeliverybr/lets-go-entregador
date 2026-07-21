@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -62,8 +64,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _supabase = Supabase.instance.client;
+  final _audioPlayer = AudioPlayer();
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
+  RealtimeChannel? _channelDespachoFila;
   OverlayEntry? _overlayEntry;
   Timer? _overlayTimer;
   Set<String> _idsConhecidos = {};
@@ -97,11 +101,58 @@ class _MyAppState extends State<MyApp> {
         .stream(primaryKey: ['id'])
         .eq('status', 'pronto')
         .listen(_onPedidosUpdate);
+    _assinarRealtimeDespachoFila();
   }
 
   void _cancelarStream() {
     _streamSub?.cancel();
     _streamSub = null;
+    _channelDespachoFila?.unsubscribe();
+    _channelDespachoFila = null;
+  }
+
+  void _assinarRealtimeDespachoFila() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    _channelDespachoFila = _supabase
+        .channel('despacho-fila-global-${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'despacho_fila',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            final status = payload.newRecord['status']?.toString() ?? '';
+            if (status == 'aguardando') _tocarNotificacao();
+          },
+        )
+        .subscribe();
+  }
+
+  // Toca em qualquer tela do app (mesmo player/arquivo já usado antes só
+  // na tela Disponíveis) — centralizado aqui porque _MyAppState fica
+  // montado o app inteiro, diferente de uma tela específica.
+  Future<void> _tocarNotificacao() async {
+    HapticFeedback.heavyImpact();
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setAudioSource(
+        ConcatenatingAudioSource(
+          children: List.generate(
+            2,
+            (_) => AudioSource.asset('assets/sounds/letsgo_notification.wav'),
+          ),
+        ),
+      );
+      await _audioPlayer.play();
+    } catch (e) {
+      debugPrint('Áudio falhou: $e');
+    }
   }
 
   Future<void> _onPedidosUpdate(List<Map<String, dynamic>> lista) async {
@@ -132,6 +183,7 @@ class _MyAppState extends State<MyApp> {
           .eq('status', 'pronto')
           .maybeSingle();
       if (data == null) return;
+      _tocarNotificacao();
       _mostrarOverlay(data);
     } catch (_) {}
   }
@@ -163,6 +215,7 @@ class _MyAppState extends State<MyApp> {
     _authSub?.cancel();
     _cancelarStream();
     _fecharOverlay();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
