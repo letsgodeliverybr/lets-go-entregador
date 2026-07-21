@@ -66,6 +66,7 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
   RealtimeChannel? _channelDespachoFila;
+  RealtimeChannel? _channelPedidosRemocao;
   OverlayEntry? _overlayEntry;
   Timer? _overlayTimer;
   Set<String> _idsConhecidos = {};
@@ -102,6 +103,7 @@ class _MyAppState extends State<MyApp> {
         .eq('status', 'pronto')
         .listen(_onPedidosUpdate);
     _assinarRealtimeDespachoFila();
+    _assinarRemocaoPedidos();
   }
 
   void _cancelarStream() {
@@ -109,7 +111,38 @@ class _MyAppState extends State<MyApp> {
     _streamSub = null;
     _channelDespachoFila?.unsubscribe();
     _channelDespachoFila = null;
+    _channelPedidosRemocao?.unsubscribe();
+    _channelPedidosRemocao = null;
     SomPedidoService.pararLoop();
+  }
+
+  // `.stream().eq('status','pronto')` (acima) passa o filtro pro Realtime
+  // do lado do servidor — e o Realtime só entrega UPDATE quando a linha
+  // NOVA ainda bate com o filtro. Quando um pedido é aceito (status sai de
+  // 'pronto'), a linha deixa de bater e o evento nunca chega nessa
+  // assinatura filtrada: o cache do stream fica com a cópia antiga pra
+  // sempre, e o loop de som nunca para. Por isso essa segunda assinatura,
+  // SEM filtro (mesmo padrão já usado em pedidos_disponiveis_screen.dart),
+  // só pra detectar quando um pedido sai do conjunto disponível.
+  void _assinarRemocaoPedidos() {
+    _channelPedidosRemocao = _supabase
+        .channel('pedidos-remocao-global')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'pedidos',
+          callback: (payload) {
+            final novo = payload.newRecord;
+            final id = novo['id']?.toString() ?? '';
+            if (id.isEmpty) return;
+            final aindaDisponivel = novo['status']?.toString() == 'pronto' &&
+                (novo['motoboy_id']?.toString() ?? '').isEmpty;
+            if (!aindaDisponivel && _idsConhecidos.remove(id)) {
+              _pararSomSeNadaDisponivel();
+            }
+          },
+        )
+        .subscribe();
   }
 
   void _assinarRealtimeDespachoFila() {
