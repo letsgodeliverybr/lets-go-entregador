@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'services/som_pedido_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/permissoes_screen.dart';
 import 'screens/home_screen.dart';
@@ -64,13 +63,13 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _supabase = Supabase.instance.client;
-  final _audioPlayer = AudioPlayer();
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
   RealtimeChannel? _channelDespachoFila;
   OverlayEntry? _overlayEntry;
   Timer? _overlayTimer;
   Set<String> _idsConhecidos = {};
+  final Set<String> _despachoAtivos = {};
   bool _primeiraEmissao = true;
 
   @override
@@ -96,6 +95,7 @@ class _MyAppState extends State<MyApp> {
     _cancelarStream();
     _primeiraEmissao = true;
     _idsConhecidos = {};
+    _despachoAtivos.clear();
     _streamSub = _supabase
         .from('pedidos')
         .stream(primaryKey: ['id'])
@@ -109,6 +109,7 @@ class _MyAppState extends State<MyApp> {
     _streamSub = null;
     _channelDespachoFila?.unsubscribe();
     _channelDespachoFila = null;
+    SomPedidoService.pararLoop();
   }
 
   void _assinarRealtimeDespachoFila() {
@@ -128,30 +129,39 @@ class _MyAppState extends State<MyApp> {
           ),
           callback: (payload) {
             final status = payload.newRecord['status']?.toString() ?? '';
-            if (status == 'aguardando') _tocarNotificacao();
+            final id = payload.newRecord['id']?.toString() ?? '';
+            if (status == 'aguardando' && id.isNotEmpty) {
+              _despachoAtivos.add(id);
+              SomPedidoService.tocarLoop();
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'despacho_fila',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'entregador_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            final status = payload.newRecord['status']?.toString() ?? '';
+            final id = payload.newRecord['id']?.toString() ?? '';
+            if (status != 'aguardando' && id.isNotEmpty) {
+              _despachoAtivos.remove(id);
+              _pararSomSeNadaDisponivel();
+            }
           },
         )
         .subscribe();
   }
 
-  // Toca em qualquer tela do app (mesmo player/arquivo já usado antes só
-  // na tela Disponíveis) — centralizado aqui porque _MyAppState fica
-  // montado o app inteiro, diferente de uma tela específica.
-  Future<void> _tocarNotificacao() async {
-    HapticFeedback.heavyImpact();
-    try {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAudioSource(
-        ConcatenatingAudioSource(
-          children: List.generate(
-            2,
-            (_) => AudioSource.asset('assets/sounds/letsgo_notification.wav'),
-          ),
-        ),
-      );
-      await _audioPlayer.play();
-    } catch (e) {
-      debugPrint('Áudio falhou: $e');
+  // Loop só para quando não sobrar nenhum pedido/despacho ativo — evita
+  // cortar o som se um pedido foi aceito/expirou mas outro ainda espera.
+  void _pararSomSeNadaDisponivel() {
+    if (_idsConhecidos.isEmpty && _despachoAtivos.isEmpty) {
+      SomPedidoService.pararLoop();
     }
   }
 
@@ -172,9 +182,16 @@ class _MyAppState extends State<MyApp> {
     final novosIds = idsAtuais.difference(_idsConhecidos);
     _idsConhecidos = idsAtuais;
 
+    if (idsAtuais.isEmpty) {
+      _pararSomSeNadaDisponivel();
+      return;
+    }
+
     if (novosIds.isEmpty) return;
 
-    // Fetch the first new pedido with lojas join
+    SomPedidoService.tocarLoop();
+
+    // Fetch the first new pedido with lojas join (só pro overlay visual)
     try {
       final data = await _supabase
           .from('pedidos')
@@ -183,7 +200,6 @@ class _MyAppState extends State<MyApp> {
           .eq('status', 'pronto')
           .maybeSingle();
       if (data == null) return;
-      _tocarNotificacao();
       _mostrarOverlay(data);
     } catch (_) {}
   }
@@ -215,7 +231,6 @@ class _MyAppState extends State<MyApp> {
     _authSub?.cancel();
     _cancelarStream();
     _fecharOverlay();
-    _audioPlayer.dispose();
     super.dispose();
   }
 

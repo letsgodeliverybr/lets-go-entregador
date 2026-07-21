@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const BUCKET = "documentos-entregador";
-const TIPOS_VALIDOS = ["foto_perfil", "cnh", "crlv", "comprovante_residencia"];
+const TIPOS_VALIDOS = ["foto_perfil", "cnh", "crlv", "comprovante_residencia", "placa"];
 
 Deno.serve(async (req) => {
   // Valida segredo compartilhado (mesmo padrão de notify-novo-pedido) — o

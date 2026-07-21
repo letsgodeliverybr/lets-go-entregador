@@ -39,11 +39,12 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _numeroEndCtrl = TextEditingController();
   final _complementoEndCtrl = TextEditingController();
 
-  // Foto / selfie e documentos (CNH, CRLV, comprovante de residência)
+  // Foto / selfie e documentos (CNH, CRLV, comprovante de residência, placa)
   final _docFoto = _DocState();
   final _docCnh = _DocState();
   final _docCrlv = _DocState();
   final _docComprovante = _DocState();
+  final _docPlaca = _DocState();
   final _picker = ImagePicker();
 
   // Máscaras
@@ -112,6 +113,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         _docCnh.pathExistente = e['foto_cnh'];
         _docCrlv.pathExistente = e['foto_crlv'];
         _docComprovante.pathExistente = e['foto_comprovante_residencia'];
+        _docPlaca.pathExistente = e['foto_placa'];
       });
     } catch (_) {}
   }
@@ -219,6 +221,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
       if (!_docCnh.presente) 'CNH',
       if (!_docCrlv.presente) 'CRLV',
       if (!_docComprovante.presente) 'Comprovante de Residência',
+      if (!_docPlaca.presente) 'Foto da Placa',
     ];
     if (faltando.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -252,6 +255,10 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         if (_docComprovante.novo != null) {
           novosPaths['foto_comprovante_residencia'] = await _uploadDocumento(
               _docComprovante.novo!, uid, 'comprovante_residencia');
+        }
+        if (_docPlaca.novo != null) {
+          novosPaths['foto_placa'] =
+              await _uploadDocumento(_docPlaca.novo!, uid, 'placa');
         }
       } catch (uploadErr) {
         debugPrint('[DEBUG] ❌ upload de documento falhou: $uploadErr');
@@ -365,19 +372,25 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _campo('CEP', _cepCtrl,
                   tipo: TextInputType.number,
                   hint: '00000-000',
+                  obrigatorio: true,
                   formatters: [_cepMask]),
-              _campo('Bairro', _bairroCtrl),
-              _campo('Logradouro', _logradouroCtrl, hint: 'Rua, Av...'),
+              _campo('Bairro', _bairroCtrl, obrigatorio: true),
+              _campo('Logradouro', _logradouroCtrl,
+                  hint: 'Rua, Av...', obrigatorio: true),
               Row(children: [
                 Expanded(
                     flex: 2,
                     child: _campo('Número', _numeroEndCtrl,
-                        tipo: TextInputType.number, padding: false)),
+                        tipo: TextInputType.number,
+                        obrigatorio: true,
+                        padding: false)),
                 const SizedBox(width: 12),
                 Expanded(
                     flex: 3,
                     child: _campo('Complemento', _complementoEndCtrl,
-                        hint: 'Apto, Bloco...', padding: false)),
+                        hint: 'Apto, Bloco... (sem apto? escreva "Casa")',
+                        obrigatorio: true,
+                        padding: false)),
               ]),
               const SizedBox(height: 4),
 
@@ -393,10 +406,12 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                 },
                 onChanged: (v) => setState(() => _modalVeiculo = v!),
               ),
-              _campo('Placa', _placaCtrl, hint: 'ABC-1234'),
-              _campo('Modelo', _modeloCtrl, hint: 'Honda CG 160...'),
-              _campo('Cor', _corCtrl, hint: 'Preta'),
-              _campo('CNH', _cnhCtrl),
+              _campo('Placa', _placaCtrl,
+                  hint: 'ABC-1234', obrigatorio: true),
+              _campo('Modelo', _modeloCtrl,
+                  hint: 'Honda CG 160...', obrigatorio: true),
+              _campo('Cor', _corCtrl, hint: 'Preta', obrigatorio: true),
+              _campo('CNH', _cnhCtrl, obrigatorio: true),
               _campo('CNPJ', _cnpjCtrl, hint: '00.000.000/0000-00'),
 
               _secao('📄 Documentos'),
@@ -405,6 +420,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _documentoField(
                   'Comprovante de Residência', _docComprovante,
                   documento: true),
+              _documentoField('Foto da Placa', _docPlaca, documento: true),
 
               const SizedBox(height: 32),
             ],
@@ -711,30 +727,55 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
         const SizedBox(height: 5),
-        GestureDetector(
-          onTap: _selecionarData,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF3A3A3A)),
-            ),
-            child: Row(children: [
-              Expanded(
-                child: Text(
-                  _dataNascimento ?? 'Selecionar data',
-                  style: TextStyle(
-                      color: _dataNascimento != null
-                          ? Colors.white
-                          : const Color(0xFF777777),
-                      fontSize: 14),
+        FormField<String>(
+          initialValue: _dataNascimento,
+          validator: (_) =>
+              _dataNascimento == null ? 'Obrigatório' : null,
+          builder: (field) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: () async {
+                  await _selecionarData();
+                  field.didChange(_dataNascimento);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 13),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2D2D2D),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: field.hasError
+                          ? const Color(0xFFef4444)
+                          : const Color(0xFF3A3A3A),
+                    ),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(
+                        _dataNascimento ?? 'Selecionar data',
+                        style: TextStyle(
+                            color: _dataNascimento != null
+                                ? Colors.white
+                                : const Color(0xFF777777),
+                            fontSize: 14),
+                      ),
+                    ),
+                    const Icon(Icons.calendar_today,
+                        color: Color(0xFFBBBBBB), size: 18),
+                  ]),
                 ),
               ),
-              const Icon(Icons.calendar_today,
-                  color: Color(0xFFBBBBBB), size: 18),
-            ]),
+              if (field.hasError)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Text(field.errorText!,
+                      style: const TextStyle(
+                          color: Color(0xFFef4444), fontSize: 12)),
+                ),
+            ],
           ),
         ),
       ]),

@@ -17,21 +17,33 @@ class DrawerScreen extends StatefulWidget {
 class _DrawerScreenState extends State<DrawerScreen> {
   final _supabase = Supabase.instance.client;
   String? _nome;
+  String? _fotoUrl;
 
   @override
   void initState() {
     super.initState();
-    _carregarNome();
+    _carregarPerfil();
   }
 
-  Future<void> _carregarNome() async {
+  Future<void> _carregarPerfil() async {
     try {
       final data = await _supabase
           .from('entregadores')
-          .select('nome')
+          .select('nome, foto_perfil')
           .eq('id', _supabase.auth.currentUser!.id)
           .single();
       if (mounted) setState(() => _nome = data['nome']?.toString());
+
+      // Bucket privado: a URL assinada só é gerada com sucesso pra própria
+      // pasta do entregador (RLS `entregador_select_proprios_documentos`,
+      // auth.uid() == pasta) — diferente do painel, aqui existe sessão real.
+      final fotoPath = data['foto_perfil']?.toString();
+      if (fotoPath != null && fotoPath.isNotEmpty) {
+        final signedUrl = await _supabase.storage
+            .from('documentos-entregador')
+            .createSignedUrl(fotoPath, 3600);
+        if (mounted) setState(() => _fotoUrl = signedUrl);
+      }
     } catch (_) {}
   }
 
@@ -54,10 +66,14 @@ class _DrawerScreenState extends State<DrawerScreen> {
               color: const Color(0xFF161820),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 32,
-                    backgroundColor: Color(0xFF1A56DB),
-                    child: Icon(Icons.person, color: Colors.white, size: 32),
+                    backgroundColor: const Color(0xFF1A56DB),
+                    backgroundImage:
+                        _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
+                    child: _fotoUrl == null
+                        ? const Icon(Icons.person, color: Colors.white, size: 32)
+                        : null,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
