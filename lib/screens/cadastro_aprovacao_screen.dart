@@ -13,6 +13,17 @@ class CadastroAprovacaoScreen extends StatefulWidget {
       _CadastroAprovacaoScreenState();
 }
 
+/// Estado de um documento: [novo] é o arquivo recém-selecionado nesta sessão
+/// (ainda não enviado); [pathExistente] é o path já salvo no banco de um
+/// envio anterior (fluxo de reprovação/reedição). Conta como presente se
+/// qualquer um dos dois estiver preenchido — só reenvia pro storage se
+/// houver [novo].
+class _DocState {
+  XFile? novo;
+  String? pathExistente;
+  bool get presente => novo != null || pathExistente != null;
+}
+
 class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
@@ -28,8 +39,11 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
   final _numeroEndCtrl = TextEditingController();
   final _complementoEndCtrl = TextEditingController();
 
-  // Foto / selfie
-  XFile? _foto;
+  // Foto / selfie e documentos (CNH, CRLV, comprovante de residência)
+  final _docFoto = _DocState();
+  final _docCnh = _DocState();
+  final _docCrlv = _DocState();
+  final _docComprovante = _DocState();
   final _picker = ImagePicker();
 
   // Máscaras
@@ -94,18 +108,26 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         _corCtrl.text = e['cor_veiculo'] ?? '';
         _cnhCtrl.text = e['cnh'] ?? '';
         _cnpjCtrl.text = e['cnpj'] ?? '';
+        _docFoto.pathExistente = e['foto_perfil'];
+        _docCnh.pathExistente = e['foto_cnh'];
+        _docCrlv.pathExistente = e['foto_crlv'];
+        _docComprovante.pathExistente = e['foto_comprovante_residencia'];
       });
     } catch (_) {}
   }
 
-  Future<void> _selecionarFoto(ImageSource source) async {
+  // Selfie usa resolução menor (não precisa de detalhe); documentos (CNH,
+  // CRLV, comprovante) usam resolução maior pra manter texto legível.
+  Future<void> _selecionarDocumento(_DocState doc, ImageSource source,
+      {bool documento = false}) async {
     final picked = await _picker.pickImage(
       source: source,
-      imageQuality: 80,
-      maxWidth: 1024,
-      preferredCameraDevice: CameraDevice.front,
+      imageQuality: documento ? 85 : 80,
+      maxWidth: documento ? 1600 : 1024,
+      preferredCameraDevice:
+          documento ? CameraDevice.rear : CameraDevice.front,
     );
-    if (picked != null) setState(() => _foto = picked);
+    if (picked != null) setState(() => doc.novo = picked);
   }
 
   Future<void> _selecionarData() async {
@@ -137,6 +159,18 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
             '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
+  }
+
+  // Bucket privado (documentos-entregador): salva o path relativo, não a
+  // URL pública (não existe uma pra bucket privado) — quem precisa exibir
+  // (painel) pede uma URL assinada via Edge Function.
+  Future<String> _uploadDocumento(XFile arquivo, String uid, String tipo) async {
+    final bytes = await File(arquivo.path).readAsBytes();
+    final path = '$uid/$tipo.jpg';
+    await _supabase.storage.from('documentos-entregador').uploadBinary(
+        path, bytes,
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true));
+    return path;
   }
 
   Future<void> _enviar() async {
@@ -179,28 +213,57 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     final uid = user.id;
     debugPrint('[DEBUG] uid resolvido: "$uid"');
 
+    // ── Documentos obrigatórios ──────────────────────────────
+    final faltando = <String>[
+      if (!_docFoto.presente) 'Foto de Perfil',
+      if (!_docCnh.presente) 'CNH',
+      if (!_docCrlv.presente) 'CRLV',
+      if (!_docComprovante.presente) 'Comprovante de Residência',
+    ];
+    if (faltando.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Faltam documentos: ${faltando.join(', ')}'),
+          backgroundColor: const Color(0xFFef4444),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
     setState(() => _salvando = true);
     try {
-      // Upload de foto — não-bloqueante: falha é logada mas não aborta o envio
-      String? fotoUrl;
-      if (_foto != null) {
-        try {
-          final bytes = await File(_foto!.path).readAsBytes();
-          final path = '$uid/selfie.jpg';
-          await _supabase.storage
-              .from('fotos-cadastro')
-              .uploadBinary(path, bytes,
-                  fileOptions: const FileOptions(
-                      contentType: 'image/jpeg', upsert: true));
-          fotoUrl = _supabase.storage
-              .from('fotos-cadastro')
-              .getPublicUrl(path);
-          debugPrint('[DEBUG] foto enviada: $fotoUrl');
-        } catch (uploadErr) {
-          debugPrint('[DEBUG] AVISO upload foto falhou (não bloqueia): $uploadErr');
+      // Documentos são obrigatórios agora: diferente do que existia antes
+      // (upload de foto não-bloqueante), falha aqui interrompe o envio.
+      final novosPaths = <String, String>{};
+      try {
+        if (_docFoto.novo != null) {
+          novosPaths['foto_perfil'] =
+              await _uploadDocumento(_docFoto.novo!, uid, 'foto_perfil');
         }
-      } else {
-        debugPrint('[DEBUG] nenhuma foto selecionada');
+        if (_docCnh.novo != null) {
+          novosPaths['foto_cnh'] =
+              await _uploadDocumento(_docCnh.novo!, uid, 'cnh');
+        }
+        if (_docCrlv.novo != null) {
+          novosPaths['foto_crlv'] =
+              await _uploadDocumento(_docCrlv.novo!, uid, 'crlv');
+        }
+        if (_docComprovante.novo != null) {
+          novosPaths['foto_comprovante_residencia'] = await _uploadDocumento(
+              _docComprovante.novo!, uid, 'comprovante_residencia');
+        }
+      } catch (uploadErr) {
+        debugPrint('[DEBUG] ❌ upload de documento falhou: $uploadErr');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Falha ao enviar documento: $uploadErr'),
+            backgroundColor: const Color(0xFFef4444),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return;
       }
 
       final camposPerfil = {
@@ -218,7 +281,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
         'cor_veiculo': _corCtrl.text.trim(),
         'cnh': _cnhCtrl.text.trim(),
         'cnpj': _cnpjCtrl.text.trim(),
-        if (fotoUrl != null) 'foto_url': fotoUrl,
+        ...novosPaths,
         'status_cadastro': 'em_analise',
         'updated_at': DateTime.now().toIso8601String(),
       };
@@ -336,6 +399,13 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               _campo('CNH', _cnhCtrl),
               _campo('CNPJ', _cnpjCtrl, hint: '00.000.000/0000-00'),
 
+              _secao('📄 Documentos'),
+              _documentoField('Foto da CNH', _docCnh, documento: true),
+              _documentoField('Foto do CRLV', _docCrlv, documento: true),
+              _documentoField(
+                  'Comprovante de Residência', _docComprovante,
+                  documento: true),
+
               const SizedBox(height: 32),
             ],
           ),
@@ -379,19 +449,24 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     );
   }
 
-  Widget _fotoField() {
+  Widget _fotoField() => _documentoField('Foto / Selfie', _docFoto,
+      documento: false, dica: 'Toque para adicionar sua foto');
+
+  Widget _documentoField(String titulo, _DocState doc,
+      {required bool documento, String dica = 'Toque para adicionar'}) {
+    final jaEnviado = doc.novo == null && doc.pathExistente != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Foto / Selfie',
-            style: TextStyle(
+        Text(titulo,
+            style: const TextStyle(
                 color: Color(0xFFBBBBBB),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5)),
         const SizedBox(height: 8),
         GestureDetector(
-          onTap: () => _mostrarOpcoesFoto(),
+          onTap: () => _mostrarOpcoesDocumento(doc, documento: documento),
           child: Container(
             width: double.infinity,
             height: 180,
@@ -399,18 +474,18 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
               color: const Color(0xFF2D2D2D),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _foto != null
+                color: doc.presente
                     ? const Color(0xFF1A56DB)
                     : const Color(0xFF3A3A3A),
-                width: _foto != null ? 1.5 : 1,
+                width: doc.presente ? 1.5 : 1,
               ),
             ),
-            child: _foto != null
+            child: doc.novo != null
                 ? Stack(children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(11),
                       child: Image.file(
-                        File(_foto!.path),
+                        File(doc.novo!.path),
                         width: double.infinity,
                         height: double.infinity,
                         fit: BoxFit.cover,
@@ -420,7 +495,7 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                       top: 8,
                       right: 8,
                       child: GestureDetector(
-                        onTap: () => setState(() => _foto = null),
+                        onTap: () => setState(() => doc.novo = null),
                         child: Container(
                           width: 28,
                           height: 28,
@@ -434,27 +509,49 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                       ),
                     ),
                   ])
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.add_a_photo_outlined,
-                          color: Color(0xFFBBBBBB), size: 36),
-                      const SizedBox(height: 10),
-                      const Text('Toque para adicionar sua foto',
-                          style: TextStyle(
-                              color: Color(0xFFBBBBBB),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 14),
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        _btnFoto(Icons.camera_alt_outlined, 'Câmera',
-                            () => _selecionarFoto(ImageSource.camera)),
-                        const SizedBox(width: 10),
-                        _btnFoto(Icons.photo_library_outlined, 'Galeria',
-                            () => _selecionarFoto(ImageSource.gallery)),
-                      ]),
-                    ],
-                  ),
+                : jaEnviado
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: Color(0xFF16A34A), size: 36),
+                          const SizedBox(height: 10),
+                          const Text('Documento já enviado',
+                              style: TextStyle(
+                                  color: Color(0xFFBBBBBB),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          const Text('Toque pra substituir',
+                              style: TextStyle(
+                                  color: Color(0xFF777777), fontSize: 11)),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add_a_photo_outlined,
+                              color: Color(0xFFBBBBBB), size: 36),
+                          const SizedBox(height: 10),
+                          Text(dica,
+                              style: const TextStyle(
+                                  color: Color(0xFFBBBBBB),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 14),
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            _btnFoto(Icons.camera_alt_outlined, 'Câmera',
+                                () => _selecionarDocumento(
+                                    doc, ImageSource.camera,
+                                    documento: documento)),
+                            const SizedBox(width: 10),
+                            _btnFoto(Icons.photo_library_outlined, 'Galeria',
+                                () => _selecionarDocumento(
+                                    doc, ImageSource.gallery,
+                                    documento: documento)),
+                          ]),
+                        ],
+                      ),
           ),
         ),
       ]),
@@ -485,8 +582,8 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
     );
   }
 
-  void _mostrarOpcoesFoto() {
-    if (_foto != null) return;
+  void _mostrarOpcoesDocumento(_DocState doc, {required bool documento}) {
+    if (doc.novo != null) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E2130),
@@ -505,11 +602,13 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined,
                 color: Color(0xFF60a5fa)),
-            title: const Text('Tirar selfie',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            title: Text(documento ? 'Tirar foto do documento' : 'Tirar selfie',
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w600)),
             onTap: () {
               Navigator.pop(context);
-              _selecionarFoto(ImageSource.camera);
+              _selecionarDocumento(doc, ImageSource.camera,
+                  documento: documento);
             },
           ),
           ListTile(
@@ -519,7 +618,8 @@ class _CadastroAprovacaoScreenState extends State<CadastroAprovacaoScreen> {
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
             onTap: () {
               Navigator.pop(context);
-              _selecionarFoto(ImageSource.gallery);
+              _selecionarDocumento(doc, ImageSource.gallery,
+                  documento: documento);
             },
           ),
           const SizedBox(height: 8),

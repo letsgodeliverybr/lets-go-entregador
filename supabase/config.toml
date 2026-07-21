@@ -1,0 +1,15 @@
+# Config do Supabase CLI para este projeto.
+# Sem esse arquivo, comandos como `supabase functions deploy` caem no default
+# do CLI (verify_jwt = true), o que quebra o trigger do banco que chama
+# notify-novo-pedido só com um header customizado (x-webhook-secret), sem
+# JWT — foi exatamente isso que aconteceu num redeploy manual em 2026-07-17.
+project_id = "astbkmpegcmqljltmdpx"
+
+[functions.notify-novo-pedido]
+verify_jwt = false
+
+[functions.despacho-engine]
+verify_jwt = false
+
+[functions.get-documento-signed-url]
+verify_jwt = false
