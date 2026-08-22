@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
+import '../utils/cla_helper.dart' as cla;
 import 'entrega_screen.dart';
 import 'pedidos_disponiveis_screen.dart';
 
@@ -105,6 +106,24 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     setState(() => _processando = true);
     final user = _supabase.auth.currentUser;
     if (user == null) { Navigator.pop(context); return; }
+
+    // Trava de exclusividade de clã — reforço: esse pedido chegou aqui via
+    // overlay do stream global (main.dart), que já filtra por clã, mas
+    // revalida com dado fresco na hora do aceite mesmo assim (mesma janela
+    // de risco do _aceitar em pedidos_disponiveis_screen.dart).
+    await cla.carregarCla();
+    if (!cla.pedidoElegivelParaMeuCla(_pedido['loja_id']?.toString())) {
+      if (mounted) {
+        setState(() => _processando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Este pedido é exclusivo de outro clã de entregadores.'),
+          backgroundColor: Colors.red,
+        ));
+        Navigator.pop(context);
+      }
+      return;
+    }
+
     try {
       final agora = DateTime.now().toIso8601String();
       final result = await _supabase.from('pedidos').update({

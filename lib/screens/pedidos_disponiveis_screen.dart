@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
+import '../utils/cla_helper.dart' as cla;
 import 'pedidos_aceitos_screen.dart';
 import 'rota_disponivel_screen.dart';
 
@@ -111,6 +112,13 @@ class _State extends State<PedidosDisponiveisScreen> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
+
+      // Exclusividade de clã — recarrega a cada _buscar() (mesmo cadenciamento
+      // do resto da tela, 8s/eventos realtime) porque o admin pode mudar o
+      // clã com o app já aberto. Só afeta o broadcast do modo 'todos' abaixo
+      // — despacho_fila já vem corretamente restrito pelo backend
+      // (entregadores_no_raio), não precisa filtrar de novo.
+      await cla.carregarCla();
 
       final configs = await Future.wait([
         _supabase
@@ -252,7 +260,8 @@ class _State extends State<PedidosDisponiveisScreen> {
         final resto = broadcast.where((p) {
           final id = p['id'].toString();
           if (idsFila.contains(id)) return false; // já incluído via pedidosFila
-          return !idsOfertados.contains(id); // exclui oferta exclusiva de outro motoboy
+          if (idsOfertados.contains(id)) return false; // exclui oferta exclusiva de outro motoboy
+          return cla.pedidoElegivelParaMeuCla(p['loja_id']?.toString());
         }).toList();
 
         lista = [...pedidosFila, ...resto];
@@ -444,6 +453,23 @@ class _State extends State<PedidosDisponiveisScreen> {
   Future<void> _aceitar(Map<String, dynamic> pedido) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
+
+    // Trava de exclusividade de clã — reforço mesmo com a tela já filtrando
+    // certo: revalida com dado fresco na hora do aceite, cobrindo a janela
+    // entre a lista carregar e o toque no botão (ex: admin tirou o
+    // entregador do clã nesse meio-tempo).
+    await cla.carregarCla();
+    if (!cla.pedidoElegivelParaMeuCla(pedido['loja_id']?.toString())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Este pedido é exclusivo de outro clã de entregadores.'),
+          backgroundColor: Colors.red,
+        ));
+        _buscar();
+      }
+      return;
+    }
+
     try {
       final result = await _supabase
           .from('pedidos')

@@ -18,6 +18,7 @@ import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
+import 'utils/cla_helper.dart' as cla;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -199,9 +200,16 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _onPedidosUpdate(List<Map<String, dynamic>> lista) async {
-    // Filter motoboy_id is null in Dart
+    // Exclusividade de clã: recarrega sempre (não fica em cache permanente)
+    // porque o admin pode mudar o clã com o app já aberto — precisa valer
+    // pro próximo pedido que aparecer nesse mesmo stream, não só depois de
+    // reabrir o app. Tabelas de clã são pequenas, custo desprezível.
+    await cla.carregarCla();
+
+    // Filter motoboy_id is null in Dart, e exclusividade de clã
     final disponiveis = lista
         .where((p) => (p['motoboy_id']?.toString() ?? '').isEmpty)
+        .where((p) => cla.pedidoElegivelParaMeuCla(p['loja_id']?.toString()))
         .toList();
 
     final idsAtuais = disponiveis.map((p) => p['id'].toString()).toSet();
