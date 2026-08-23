@@ -30,14 +30,28 @@ const _firebaseOptions = FirebaseOptions(
   storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
 );
 
-// O payload agora sempre inclui um bloco `notification` (ver
-// notify-novo-pedido/despacho-engine) — em background/killed o Android
-// exibe a notificação sozinho, direto do sistema, sem invocar este
-// handler. Ele só precisa existir e estar registrado (exigência do
-// plugin); não deve mostrar nada aqui, senão duplica a notificação que o
-// sistema já exibiu.
+// O payload do despacho-engine agora é data-only, de propósito (sem bloco
+// `notification`) — exatamente pra SEMPRE cair aqui, mesmo com o app em
+// background ou morto, em vez de deixar o Android renderizar a
+// notificação sozinho (esse caminho não suporta fullScreenIntent nem dá
+// pra controlar o som, e foi como um channel_id desatualizado foi parar em
+// produção sem ninguém notar). Roda num isolate novo e separado do app
+// principal — precisa inicializar Flutter/Firebase de novo aqui dentro
+// (mesmo padrão de main(), é um entry point próprio, daí o
+// @pragma('vm:entry-point')). Usa as mesmas notificações locais do
+// NotificationService (fullScreenIntent + som insistente) que o app usa
+// quando está em foreground — canais já existem, criar de novo é no-op.
 @pragma('vm:entry-point')
-Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {}
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: _firebaseOptions);
+  final tipo = message.data['tipo']?.toString() ?? '';
+  if (tipo == 'nova_rota') {
+    await NotificationService.showNovaRotaLocal();
+  } else {
+    await NotificationService.showNovoPedidoLocal();
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -195,7 +195,7 @@ class NotificationService {
   static Future<void> showNovoPedidoLocal() async {
     if (!_initialized) await initLocal();
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       _channelPedidoId,
       _channelPedidoName,
       channelDescription: _channelPedidoDesc,
@@ -208,6 +208,10 @@ class NotificationService {
       ticker: 'Novo pedido disponível',
       icon: '@mipmap/ic_launcher',
       fullScreenIntent: true,
+      // FLAG_INSISTENT (valor 4, nativo do Android Notification) — repete o
+      // som/vibração em loop até o entregador abrir ou dispensar a
+      // notificação, igual uma ligação. Sem isso o som toca só uma vez.
+      additionalFlags: Int32List.fromList(<int>[4]),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -220,7 +224,7 @@ class NotificationService {
       1001,
       "LET'S GO MOTOCA 🛵",
       "Pedidos na tela! Vem Pra Rua! Aproveite Alta Demanda Para Faturar Mais Com A Let's Go Delivery!",
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
 
@@ -228,7 +232,7 @@ class NotificationService {
   static Future<void> showNovaRotaLocal() async {
     if (!_initialized) await initLocal();
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       _channelRotaId,
       _channelRotaName,
       channelDescription: _channelRotaDesc,
@@ -241,6 +245,7 @@ class NotificationService {
       ticker: 'Nova rota disponível',
       icon: '@mipmap/ic_launcher',
       fullScreenIntent: true,
+      additionalFlags: Int32List.fromList(<int>[4]),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -253,7 +258,7 @@ class NotificationService {
       1002,
       '🛵 Rota Disponível!',
       'Nova rota com múltiplas entregas para você!',
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
 }

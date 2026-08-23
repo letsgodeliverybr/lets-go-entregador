@@ -55,17 +55,22 @@ async function enviarPushFCM(fcmToken: string, pedidoId: string, numero: string)
         "Authorization": `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
+        // Data-only de propósito (sem bloco `notification`): um payload com
+        // `notification` é renderizado pelo próprio Android direto do
+        // sistema quando o app está em background/morto, sem nunca chamar
+        // código do app — nesse caminho não tem como pedir full-screen
+        // intent nem controlar o som (esse campo não existe no formato
+        // `notification` do FCM), e também foi assim que um channel_id
+        // desatualizado (sem o sufixo _v3, achado nesta correção) foi
+        // parar em produção sem ninguém notar — nada validava contra os
+        // canais reais criados no app. Data-only força a entrega sempre
+        // passar pelo código do app (_firebaseBackgroundHandler em
+        // main.dart, mesmo com o app morto), que constrói a notificação
+        // local com fullScreenIntent de verdade, usando os canais reais.
         message: {
           token: fcmToken,
           data: { tipo: "novo_pedido", pedido_id: pedidoId, numero: String(numero) },
-          notification: {
-            title: "LET'S GO MOTOCA 🛵",
-            body: `Pedido #${numero} disponível! Vem pra rua!`,
-          },
-          android: {
-            priority: "HIGH",
-            notification: { sound: "letsgo_notification", channel_id: "letsgo_novo_pedido_v3" },
-          },
+          android: { priority: "HIGH" },
         },
       }),
     });
@@ -223,8 +228,9 @@ serve(async () => {
         const refP = pedidosRota[0];
         const agoraRota = new Date();
         const { data: entregadores, error: entRaioErr } = await supabase.rpc("entregadores_no_raio", {
-          lat: refP.latitude, lng: refP.longitude,
-          raio_km: parseFloat(cfg["despacho_raio_busca_km"] || "32"),
+          p_lat: refP.latitude, p_lng: refP.longitude,
+          p_raio_km: parseFloat(cfg["despacho_raio_busca_km"] || "32"),
+          p_loja_id: rota.loja_id,
         });
         logErr(`buscar entregadores no raio da rota ${rota.id}`, entRaioErr);
 
@@ -264,8 +270,9 @@ serve(async () => {
     // ── FIM DESPACHO DE ROTAS ─────────────────────────────────────────────────
 
     // Loop de despacho normal — pedidos sem rota (incluindo recém-desagrupados)
+    // loja_id: precisa pra checar exclusividade de clã em entregadores_no_raio.
     const { data: pedidos } = await supabase
-      .from("pedidos").select("id, numero, latitude, longitude, created_at")
+      .from("pedidos").select("id, numero, latitude, longitude, created_at, loja_id")
       .eq("status", "pronto").is("motoboy_id", null)
       .is("rota_agrupada_id", null);
 
@@ -311,8 +318,9 @@ serve(async () => {
         const idsJaReceberam = (jaReceberam || []).map((r: any) => r.entregador_id);
 
         const { data: entregadores, error: entRaioErr } = await supabase.rpc("entregadores_no_raio", {
-          lat: pedido.latitude, lng: pedido.longitude,
-          raio_km: 40075, // sem limite de raio — metade da circunferência da Terra
+          p_lat: pedido.latitude, p_lng: pedido.longitude,
+          p_raio_km: 40075, // sem limite de raio — metade da circunferência da Terra
+          p_loja_id: pedido.loja_id,
         });
         logErr(`buscar entregadores no raio (fallback, pedido ${pedido.id})`, entRaioErr);
 
@@ -360,8 +368,9 @@ serve(async () => {
         if ((jaEnviado.data?.length || 0) > 0) continue;
 
         const { data: entregadores, error: entRaioErr } = await supabase.rpc("entregadores_no_raio", {
-          lat: pedido.latitude, lng: pedido.longitude,
-          raio_km: parseFloat(cfg["despacho_raio_busca_km"] || "32"),
+          p_lat: pedido.latitude, p_lng: pedido.longitude,
+          p_raio_km: parseFloat(cfg["despacho_raio_busca_km"] || "32"),
+          p_loja_id: pedido.loja_id,
         });
         logErr(`buscar entregadores no raio (pedido ${pedido.id})`, entRaioErr);
 
@@ -407,7 +416,8 @@ serve(async () => {
         const idsJaReceberam = (jaReceberam || []).map((r: any) => r.entregador_id);
 
         const { data: entregadores, error: entRaioOndaErr } = await supabase.rpc("entregadores_no_raio", {
-          lat: pedido.latitude, lng: pedido.longitude, raio_km: ondaAtual.raio,
+          p_lat: pedido.latitude, p_lng: pedido.longitude, p_raio_km: ondaAtual.raio,
+          p_loja_id: pedido.loja_id,
         });
         logErr(`buscar entregadores no raio (onda ${ondaNum}, pedido ${pedido.id})`, entRaioOndaErr);
 
