@@ -292,8 +292,8 @@ class _State extends State<AceitarPedidoScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c'],
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.letsgo.entregador',
                 ),
                 MarkerLayer(markers: markers),
               ],

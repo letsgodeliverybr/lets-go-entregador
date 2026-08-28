@@ -414,8 +414,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                   options: MapOptions(initialCenter: pos, initialZoom: 15),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.letsgo.entregador',
                     ),
 
                     // Pins das lojas (azul com ícone de loja)
