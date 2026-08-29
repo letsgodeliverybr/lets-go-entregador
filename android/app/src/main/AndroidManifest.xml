@@ -28,6 +28,13 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="google.navigation" />
         </intent>
+        <!-- Sem isso, launchUrl('market://...') nunca resolve no Android 11+
+             (visibilidade de pacotes) mesmo com a Play Store instalada —
+             usado pelo convite de avaliação do app (abrirAvaliacaoPlayStore). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
     </queries>
 
     <application

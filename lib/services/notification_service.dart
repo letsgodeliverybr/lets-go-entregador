@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -24,6 +25,18 @@ class NotificationService {
   static const String _channelDestinoName = 'Chegou ao Destino';
   static const String _channelDestinoDesc = 'Alerta de chegada ao endereço de entrega';
 
+  // Sem som customizado de propósito — usa o som padrão do sistema
+  // (playSound:true, sem RawResourceAndroidNotificationSound), pra não
+  // repetir o mesmo problema já achado nos outros canais: som referenciado
+  // só por nome via string é removido pelo shrinker de recursos do build
+  // de release se não tiver o res/raw/keep.xml também cobrindo ele. Como
+  // este canal não é urgente (não precisa de som customizado/insistente
+  // igual pedido novo), simplesmente não usa recurso customizado nenhum.
+  static const String _channelAvaliarId = 'letsgo_avaliar_app';
+  static const String _channelAvaliarName = 'Avaliação do app';
+  static const String _channelAvaliarDesc = 'Convite pra avaliar o app na Play Store';
+  static const String _androidPackageId = 'br.com.letsgodelivery.parceiro';
+
   static bool _initialized = false;
 
   // ── Notificações locais ─────────────────────────────────────────────────
@@ -44,6 +57,7 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (details) {
         debugPrint('Notificação tocada: ${details.payload}');
+        if (details.payload == 'avaliar_app') abrirAvaliacaoPlayStore();
       },
     );
 
@@ -52,7 +66,25 @@ class NotificationService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
 
-      await plugin?.requestNotificationsPermission();
+      // Crash real e confirmado: requestNotificationsPermission() acessa a
+      // Activity internamente (plugin nativo) — quando initLocal() roda
+      // dentro de _firebaseBackgroundHandler (isolate de background, sem
+      // Activity nenhuma), derruba com NullPointerException
+      // ("Context.checkPermission on a null object reference"), sem
+      // try/catch nenhum ao redor. Isso interrompia a função ANTES da
+      // criação dos canais logo abaixo — nenhuma notificação local
+      // conseguia ser mostrada via esse caminho, pra nenhum tipo de
+      // mensagem (pedido, rota, avaliação), sempre que o app estava
+      // realmente em segundo plano. A permissão já foi pedida no onboarding
+      // (PermissoesScreen/DeviceSetupScreen, isolate principal, com
+      // Activity) — pedir de novo aqui é redundante mesmo quando funciona;
+      // envolver em try/catch garante que uma falha aqui nunca impede o
+      // resto (canais) de ser criado.
+      try {
+        await plugin?.requestNotificationsPermission();
+      } catch (e) {
+        debugPrint('[NotificationService] requestNotificationsPermission falhou (provável isolate sem Activity): $e');
+      }
 
       await plugin?.createNotificationChannel(const AndroidNotificationChannel(
         _channelPedidoId,
@@ -85,6 +117,15 @@ class NotificationService {
         enableVibration: true,
         enableLights: true,
       ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelAvaliarId,
+        _channelAvaliarName,
+        description: _channelAvaliarDesc,
+        importance: Importance.defaultImportance,
+        playSound: true,
+        enableVibration: true,
+      ));
     }
 
     _initialized = true;
@@ -105,7 +146,9 @@ class NotificationService {
     FirebaseMessaging.onMessage.listen((msg) async {
       debugPrint('[FCM] foreground: ${msg.data}');
       final tipo = msg.data['tipo']?.toString() ?? '';
-      if (tipo == 'nova_rota') {
+      if (tipo == 'avaliar_app') {
+        await showAvaliarAppLocal();
+      } else if (tipo == 'nova_rota') {
         await showNovaRotaLocal();
       } else {
         await showNovoPedidoLocal();
@@ -115,13 +158,75 @@ class NotificationService {
     // Usuário tocou na notificação com app em background
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {
       debugPrint('[FCM] aberto via notificação: ${msg.data}');
+      _tratarTapNotificacao(msg.data);
     });
 
     // App estava terminado e foi aberto pela notificação
     final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
       debugPrint('[FCM] iniciado via notificação: ${initialMessage.data}');
+      _tratarTapNotificacao(initialMessage.data);
     }
+  }
+
+  // Toque na notificação (app reaberto/trazido pra frente por ela) — hoje
+  // só trata o tipo 'avaliar_app' (abre a tela de avaliação da Play Store
+  // direto); pedido/rota já abrem a tela certa sozinhos porque o app inteiro
+  // é sobre acompanhar pedidos, não precisa de deep link específico.
+  static void _tratarTapNotificacao(Map<String, dynamic> data) {
+    final tipo = data['tipo']?.toString() ?? '';
+    if (tipo == 'avaliar_app') abrirAvaliacaoPlayStore();
+  }
+
+  // market://details abre o app da Play Store direto na ficha do app com
+  // showAllReviews=true (tenta levar pra seção de avaliações/escrever
+  // avaliação — não é 100% documentado/garantido pelo Google, pode variar
+  // por versão da Play Store). Sem o app da Play Store instalado (raro,
+  // mas existe em alguns aparelhos), cai no fallback https://, que abre no
+  // navegador.
+  static Future<void> abrirAvaliacaoPlayStore() async {
+    final marketUri = Uri.parse(
+        'market://details?id=$_androidPackageId&showAllReviews=true');
+    final webUri = Uri.parse(
+        'https://play.google.com/store/apps/details?id=$_androidPackageId&showAllReviews=true');
+    try {
+      final abriu = await launchUrl(marketUri, mode: LaunchMode.externalApplication);
+      if (abriu) return;
+    } catch (_) {}
+    try {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[avaliarApp] falhou ao abrir Play Store: $e');
+    }
+  }
+
+  // ── Notificação local: pedir avaliação na Play Store ────────────────────
+  static Future<void> showAvaliarAppLocal() async {
+    if (!_initialized) await initLocal();
+
+    const androidDetails = AndroidNotificationDetails(
+      _channelAvaliarId,
+      _channelAvaliarName,
+      channelDescription: _channelAvaliarDesc,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      playSound: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      3001,
+      'Gostando do app? 💙🩵',
+      'Deixa sua avaliação pra gente na Play Store!',
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'avaliar_app',
+    );
   }
 
   // ── Salva token FCM na tabela entregadores ──────────────────────────────

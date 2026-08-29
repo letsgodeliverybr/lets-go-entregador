@@ -59,6 +59,8 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
     final tipo = message.data['tipo']?.toString() ?? '';
     if (tipo == 'nova_rota') {
       await NotificationService.showNovaRotaLocal();
+    } else if (tipo == 'avaliar_app') {
+      await NotificationService.showAvaliarAppLocal();
     } else {
       await NotificationService.showNovoPedidoLocal();
     }
