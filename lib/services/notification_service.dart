@@ -37,6 +37,15 @@ class NotificationService {
   static const String _channelAvaliarDesc = 'Convite pra avaliar o app na Play Store';
   static const String _androidPackageId = 'br.com.letsgodelivery.parceiro';
 
+  static const String _channelIndicacaoId = 'letsgo_indicacao';
+  static const String _channelIndicacaoName = 'Indicação';
+  static const String _channelIndicacaoDesc = 'Convite pra indicar motoboy/loja nova';
+  // Login do painel real (sistema.letsgodelivery.com.br) — a mesma tela
+  // tem o botão "Ainda não é parceiro? Cadastre sua loja", que abre o
+  // cadastro. Não é o wa.me de suporte — o motoboy indica levando a loja
+  // direto pra esse link, não abrindo conversa de WhatsApp.
+  static const String _linkIndicacao = 'https://sistema.letsgodelivery.com.br/login';
+
   static bool _initialized = false;
 
   // ── Notificações locais ─────────────────────────────────────────────────
@@ -126,6 +135,15 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
       ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelIndicacaoId,
+        _channelIndicacaoName,
+        description: _channelIndicacaoDesc,
+        importance: Importance.defaultImportance,
+        playSound: true,
+        enableVibration: true,
+      ));
     }
 
     _initialized = true;
@@ -148,6 +166,8 @@ class NotificationService {
       final tipo = msg.data['tipo']?.toString() ?? '';
       if (tipo == 'avaliar_app') {
         await showAvaliarAppLocal();
+      } else if (tipo == 'indicacao') {
+        await showIndicacaoLocal();
       } else if (tipo == 'nova_rota') {
         await showNovaRotaLocal();
       } else {
@@ -170,12 +190,13 @@ class NotificationService {
   }
 
   // Toque na notificação (app reaberto/trazido pra frente por ela) — hoje
-  // só trata o tipo 'avaliar_app' (abre a tela de avaliação da Play Store
-  // direto); pedido/rota já abrem a tela certa sozinhos porque o app inteiro
-  // é sobre acompanhar pedidos, não precisa de deep link específico.
+  // só trata 'avaliar_app' (Play Store) e 'indicacao' (link de cadastro);
+  // pedido/rota já abrem a tela certa sozinhos porque o app inteiro é
+  // sobre acompanhar pedidos, não precisa de deep link específico.
   static void _tratarTapNotificacao(Map<String, dynamic> data) {
     final tipo = data['tipo']?.toString() ?? '';
     if (tipo == 'avaliar_app') abrirAvaliacaoPlayStore();
+    if (tipo == 'indicacao') abrirLinkIndicacao();
   }
 
   // market://details abre o app da Play Store direto na ficha do app com
@@ -197,6 +218,17 @@ class NotificationService {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint('[avaliarApp] falhou ao abrir Play Store: $e');
+    }
+  }
+
+  // Abre o link de cadastro/login (sistema.letsgodelivery.com.br/login) —
+  // essa mesma tela tem o botão "Ainda não é parceiro? Cadastre sua loja",
+  // então é o destino certo pra quem tá indicando uma loja nova.
+  static Future<void> abrirLinkIndicacao() async {
+    try {
+      await launchUrl(Uri.parse(_linkIndicacao), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[indicacao] falhou ao abrir link: $e');
     }
   }
 
@@ -226,6 +258,45 @@ class NotificationService {
       'Deixa sua avaliação pra gente na Play Store!',
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'avaliar_app',
+    );
+  }
+
+  // ── Notificação local: convite pra indicar motoboy/loja nova ────────────
+  static const String _corpoIndicacao =
+      "Já tá gostando de faturar R\$2 por km rodado nas entregas? Indique um "
+      "motoboy ou uma loja nova pra Let's Go Delivery e fature ainda mais — "
+      "R\$150 de bônus por loja indicada! Chama (11) 99170-2772, time de "
+      "expansão nacional Let's Go Delivery.";
+
+  static Future<void> showIndicacaoLocal() async {
+    if (!_initialized) await initLocal();
+
+    // BigTextStyleInformation: sem isso, o corpo (mais longo que o normal)
+    // fica truncado numa linha só na notificação recolhida — com isso,
+    // o Android mostra o texto completo ao expandir.
+    const androidDetails = AndroidNotificationDetails(
+      _channelIndicacaoId,
+      _channelIndicacaoName,
+      channelDescription: _channelIndicacaoDesc,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      playSound: true,
+      icon: '@mipmap/ic_launcher',
+      styleInformation: BigTextStyleInformation(_corpoIndicacao),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      3002,
+      '🛵 Ei, motoboy!',
+      _corpoIndicacao,
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'indicacao',
     );
   }
 
