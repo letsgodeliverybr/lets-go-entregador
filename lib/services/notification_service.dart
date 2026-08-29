@@ -165,9 +165,15 @@ class NotificationService {
       debugPrint('[FCM] foreground: ${msg.data}');
       final tipo = msg.data['tipo']?.toString() ?? '';
       if (tipo == 'avaliar_app') {
-        await showAvaliarAppLocal();
+        await showAvaliarAppLocal(
+          titulo: msg.data['titulo']?.toString(),
+          corpo: msg.data['corpo']?.toString(),
+        );
       } else if (tipo == 'indicacao') {
-        await showIndicacaoLocal();
+        await showIndicacaoLocal(
+          titulo: msg.data['titulo']?.toString(),
+          corpo: msg.data['corpo']?.toString(),
+        );
       } else if (tipo == 'nova_rota') {
         await showNovaRotaLocal();
       } else {
@@ -236,7 +242,11 @@ class NotificationService {
   }
 
   // ── Notificação local: pedir avaliação na Play Store ────────────────────
-  static Future<void> showAvaliarAppLocal() async {
+  // titulo/corpo vêm do data payload do FCM (texto editável pelo admin no
+  // painel, mesma fonte usada pelo disparo automático e pelo manual — ver
+  // lembrete-avaliacao/index.ts) — os literais abaixo são só o fallback
+  // pra quando o payload não traz o campo (ex: versão antiga da function).
+  static Future<void> showAvaliarAppLocal({String? titulo, String? corpo}) async {
     if (!_initialized) await initLocal();
 
     const androidDetails = AndroidNotificationDetails(
@@ -257,27 +267,31 @@ class NotificationService {
 
     await _localNotifications.show(
       3001,
-      'Gostando do app? 💙🩵',
-      'Deixa sua avaliação pra gente na Play Store!',
+      (titulo?.isNotEmpty ?? false) ? titulo! : 'Gostando do app? 💙🩵',
+      (corpo?.isNotEmpty ?? false) ? corpo! : 'Deixa sua avaliação pra gente na Play Store!',
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'avaliar_app',
     );
   }
 
   // ── Notificação local: convite pra indicar motoboy/loja nova ────────────
-  static const String _corpoIndicacao =
+  // Mesma lógica de fallback de showAvaliarAppLocal — ver comentário acima.
+  static const String _corpoIndicacaoPadrao =
       "Já tá gostando de faturar R\$2 por km rodado nas entregas? Indique um "
       "motoboy ou uma loja nova pra Let's Go Delivery e fature ainda mais — "
       "R\$150 de bônus por loja indicada! Chama (11) 99170-2772, time de "
       "expansão nacional Let's Go Delivery.";
 
-  static Future<void> showIndicacaoLocal() async {
+  static Future<void> showIndicacaoLocal({String? titulo, String? corpo}) async {
     if (!_initialized) await initLocal();
+
+    final tituloFinal = (titulo?.isNotEmpty ?? false) ? titulo! : '🛵 Ei, motoboy!';
+    final corpoFinal = (corpo?.isNotEmpty ?? false) ? corpo! : _corpoIndicacaoPadrao;
 
     // BigTextStyleInformation: sem isso, o corpo (mais longo que o normal)
     // fica truncado numa linha só na notificação recolhida — com isso,
     // o Android mostra o texto completo ao expandir.
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       _channelIndicacaoId,
       _channelIndicacaoName,
       channelDescription: _channelIndicacaoDesc,
@@ -285,7 +299,7 @@ class NotificationService {
       priority: Priority.defaultPriority,
       playSound: true,
       icon: '@mipmap/ic_launcher',
-      styleInformation: BigTextStyleInformation(_corpoIndicacao),
+      styleInformation: BigTextStyleInformation(corpoFinal),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -296,9 +310,9 @@ class NotificationService {
 
     await _localNotifications.show(
       3002,
-      '🛵 Ei, motoboy!',
-      _corpoIndicacao,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      tituloFinal,
+      corpoFinal,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'indicacao',
     );
   }
