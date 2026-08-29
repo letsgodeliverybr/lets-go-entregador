@@ -40,11 +40,10 @@ class NotificationService {
   static const String _channelIndicacaoId = 'letsgo_indicacao';
   static const String _channelIndicacaoName = 'Indicação';
   static const String _channelIndicacaoDesc = 'Convite pra indicar motoboy/loja nova';
-  // Login do painel real (sistema.letsgodelivery.com.br) — a mesma tela
-  // tem o botão "Ainda não é parceiro? Cadastre sua loja", que abre o
-  // cadastro. Não é o wa.me de suporte — o motoboy indica levando a loja
-  // direto pra esse link, não abrindo conversa de WhatsApp.
-  static const String _linkIndicacao = 'https://sistema.letsgodelivery.com.br/login';
+  // wa.me com número já em formato internacional (55 + DDD 11 + número) —
+  // mesmo (11) 99170-2772 usado em todo o resto do app pra contato/suporte.
+  // Trocado de "abrir link de cadastro" pra "abrir WhatsApp" a pedido.
+  static const String _whatsappIndicacao = '5511991702772';
 
   static bool _initialized = false;
 
@@ -67,6 +66,7 @@ class NotificationService {
       onDidReceiveNotificationResponse: (details) {
         debugPrint('Notificação tocada: ${details.payload}');
         if (details.payload == 'avaliar_app') abrirAvaliacaoPlayStore();
+        if (details.payload == 'indicacao') abrirLinkIndicacao();
       },
     );
 
@@ -221,14 +221,17 @@ class NotificationService {
     }
   }
 
-  // Abre o link de cadastro/login (sistema.letsgodelivery.com.br/login) —
-  // essa mesma tela tem o botão "Ainda não é parceiro? Cadastre sua loja",
-  // então é o destino certo pra quem tá indicando uma loja nova.
+  // Abre o WhatsApp de contato (mesmo número usado no resto do app) com
+  // uma mensagem pré-preenchida — pedido explícito do usuário no lugar do
+  // link de cadastro/login que era aberto antes.
   static Future<void> abrirLinkIndicacao() async {
+    final msg = Uri.encodeComponent(
+        'Olá! Quero indicar um motoboy ou uma loja nova pra Let\'s Go Delivery.');
     try {
-      await launchUrl(Uri.parse(_linkIndicacao), mode: LaunchMode.externalApplication);
+      await launchUrl(Uri.parse('https://wa.me/$_whatsappIndicacao?text=$msg'),
+          mode: LaunchMode.externalApplication);
     } catch (e) {
-      debugPrint('[indicacao] falhou ao abrir link: $e');
+      debugPrint('[indicacao] falhou ao abrir WhatsApp: $e');
     }
   }
 
