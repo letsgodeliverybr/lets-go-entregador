@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Causa raiz real e confirmada do "notificação chega sem som": o shrinker de
+  recursos do Android (ativo por padrão no build de release do Flutter pra
+  App Bundle) removia letsgo_notification.wav e letsgo.wav de res/raw/ no
+  APK final — confirmado extraindo o APK instalado no aparelho de teste
+  (base.apk, versionCode=50): zero entradas em res/raw/, mesmo os arquivos
+  existindo no código-fonte e no git. Os mesmos arquivos em
+  assets/flutter_assets/assets/sounds/ (usados pelo just_audio/SomPedidoService)
+  sobreviviam normalmente, porque assets Flutter não passam por esse shrinker.
+
+  RawResourceAndroidNotificationSound('letsgo_notification') (notification_service.dart)
+  resolve o nome pra R.raw.letsgo_notification em runtime, via string — o
+  shrinker não consegue provar estaticamente que esse recurso é usado (não
+  tem nenhuma referência direta tipo R.raw.letsgo_notification em código
+  Kotlin/Java), então cortava como "não utilizado". Resultado: o canal de
+  notificação era criado com um som que não existia mais no APK — Android
+  cai pro silêncio em vez de dar erro visível pro usuário.
+
+  Esta é a solução oficial documentada pelo Android pra esse exato problema
+  (developer.android.com/build/shrink-code#keep-resources): declara os
+  recursos que o shrinker nunca deve remover, independente de detecção
+  estática de uso.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/letsgo_notification,@raw/letsgo" />
