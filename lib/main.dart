@@ -16,6 +16,7 @@ import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
+import 'screens/device_setup_screen.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
 import 'utils/cla_helper.dart' as cla;
@@ -517,7 +518,22 @@ class _AuthGateState extends State<AuthGate> {
     );
   }
 
+  // Wrapper fino: aplica o gate obrigatório de DeviceSetupScreen (bateria +
+  // autoinício MIUI) por cima de qualquer resultado — vale tanto pra quem
+  // ainda vai logar quanto pra quem reabre o app com sessão já existente
+  // (esse segundo caminho pula direto pra EntregadorHomeScreen/HomeScreen
+  // sem passar por PermissoesScreen nenhuma, então sem esse wrapper aqui o
+  // gate nunca apareceria de novo depois do primeiro login). Só mostra uma
+  // vez — DeviceSetupScreen.jaConcluido() vira true depois da 1ª conclusão.
   Future<Widget> _resolverTela() async {
+    final tela = await _resolverTelaSemSetup();
+    if (!await DeviceSetupScreen.jaConcluido()) {
+      return DeviceSetupScreen(next: tela);
+    }
+    return tela;
+  }
+
+  Future<Widget> _resolverTelaSemSetup() async {
     final locPerm = await Geolocator.checkPermission();
     final locFaltando = locPerm == LocationPermission.denied ||
         locPerm == LocationPermission.deniedForever;

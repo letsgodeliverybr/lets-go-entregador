@@ -1,6 +1,7 @@
 package com.letsgodelivery.entregador
 
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val dndChannel = "letsgo/dnd"
     private val fullScreenIntentChannel = "letsgo/fullscreen_intent"
+    private val miuiAutostartChannel = "letsgo/miui_autostart"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -51,6 +53,54 @@ class MainActivity: FlutterActivity() {
                         startActivity(intent)
                     }
                     result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Autoiniciar da MIUI: sem API pública do Android pra isso (é um
+        // recurso próprio da Xiaomi, por fora do sistema padrão de bateria/
+        // notificação) — sem essa permissão, o processo do app é morto
+        // agressivamente pelo gerenciador de bateria da MIUI assim que sai
+        // de primeiro plano, e nenhuma notificação FCM (nem data-only, nem
+        // com bloco `notification`) consegue tocar som depois disso.
+        // Componente descoberto por engenharia reversa da comunidade —
+        // muda entre versões da MIUI, por isso a lista de candidatos +
+        // fallback pra tela de detalhes do app se nenhum abrir.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, miuiAutostartChannel).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getManufacturer" -> result.success(Build.MANUFACTURER ?: "")
+                "getBrand" -> result.success(Build.BRAND ?: "")
+                "openAutostartSettings" -> {
+                    val candidatos = listOf(
+                        ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+                        ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity_")
+                    )
+                    var aberto = false
+                    for (componente in candidatos) {
+                        try {
+                            val intent = Intent().apply {
+                                component = componente
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                            aberto = true
+                            break
+                        } catch (e: Exception) {
+                            // Esse componente não existe nesta versão da MIUI — tenta o próximo.
+                        }
+                    }
+                    if (!aberto) {
+                        try {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                .setData(Uri.parse("package:$packageName"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            // Nada mais a tentar.
+                        }
+                    }
+                    result.success(aberto)
                 }
                 else -> result.notImplemented()
             }
