@@ -44,12 +44,27 @@ const _firebaseOptions = FirebaseOptions(
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: _firebaseOptions);
-  final tipo = message.data['tipo']?.toString() ?? '';
-  if (tipo == 'nova_rota') {
-    await NotificationService.showNovaRotaLocal();
-  } else {
-    await NotificationService.showNovoPedidoLocal();
+  try {
+    // O Android pode reaproveitar o mesmo isolate de background pra mais de
+    // uma mensagem seguida sem matá-lo — Firebase.initializeApp() de novo
+    // nesse caso derruba com "[core/duplicate-app]" (app "[DEFAULT]" já
+    // existe), e como isso corre sem try/catch nenhum ao redor, a exceção
+    // mata a função inteira ANTES de chegar em showNovoPedidoLocal() — som
+    // e notificação simplesmente não acontecem, em silêncio. Guarda padrão
+    // recomendada pelo FlutterFire pra background handler.
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(options: _firebaseOptions);
+    }
+    final tipo = message.data['tipo']?.toString() ?? '';
+    if (tipo == 'nova_rota') {
+      await NotificationService.showNovaRotaLocal();
+    } else {
+      await NotificationService.showNovoPedidoLocal();
+    }
+  } catch (e, st) {
+    // Nunca deixar isso morrer em silêncio de novo — se voltar a falhar,
+    // pelo menos fica rastro em `adb logcat` (grep por "_firebaseBackgroundHandler").
+    debugPrint('[_firebaseBackgroundHandler] erro: $e\n$st');
   }
 }
 
@@ -231,6 +246,13 @@ class _MyAppState extends State<MyApp> {
     if (_primeiraEmissao) {
       _idsConhecidos = idsAtuais;
       _primeiraEmissao = false;
+      // Bug (regressão): antes só registrava idsAtuais como "já conhecido"
+      // e saía em silêncio — se o app abre com um pedido já esperando
+      // aceite (não é novidade nenhuma pro stream, é a primeira coisa que
+      // ele vê), o som nunca tocava. Abrir o app direto na tela
+      // Disponíveis com pedido já lá precisa tocar igual a qualquer outro
+      // pedido disponível.
+      if (idsAtuais.isNotEmpty) SomPedidoService.tocarLoop();
       return;
     }
 
