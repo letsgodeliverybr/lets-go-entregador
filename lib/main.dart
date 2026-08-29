@@ -59,6 +59,16 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
     final tipo = message.data['tipo']?.toString() ?? '';
     if (tipo == 'nova_rota') {
       await NotificationService.showNovaRotaLocal();
+      // Além da notificação do sistema (canal, som já ajustado — ver
+      // notification_service.dart), também dispara o mesmo player/loop
+      // usado em foreground (SomPedidoService) — força volume de mídia pro
+      // máximo e toca o mesmo áudio, igual comportamento do iFood. Awaited
+      // (não fire-and-forget) de propósito: dá mais chance do isolate de
+      // background continuar vivo até o player pelo menos começar a tocar.
+      // Melhor esforço mesmo assim — se o isolate morrer antes disso, o
+      // pior caso é só não tocar esse som extra; a notificação do sistema
+      // acima já garante o alerta básico.
+      await SomPedidoService.tocarLoop();
     } else if (tipo == 'avaliar_app') {
       await NotificationService.showAvaliarAppLocal(
         titulo: message.data['titulo']?.toString(),
@@ -71,6 +81,9 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       );
     } else {
       await NotificationService.showNovoPedidoLocal();
+      // Mesmo motivo do branch 'nova_rota' acima — força volume de mídia +
+      // toca via SomPedidoService, além da notificação do sistema.
+      await SomPedidoService.tocarLoop();
     }
   } catch (e, st) {
     // Nunca deixar isso morrer em silêncio de novo — se voltar a falhar,

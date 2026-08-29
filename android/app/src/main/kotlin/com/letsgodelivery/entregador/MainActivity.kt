@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -15,6 +16,7 @@ class MainActivity: FlutterActivity() {
     private val dndChannel = "letsgo/dnd"
     private val fullScreenIntentChannel = "letsgo/fullscreen_intent"
     private val miuiAutostartChannel = "letsgo/miui_autostart"
+    private val volumeChannel = "letsgo/volume"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -101,6 +103,43 @@ class MainActivity: FlutterActivity() {
                         }
                     }
                     result.success(aberto)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // DECISÃO DE PRODUTO deliberada, não é bug: força o volume de MÍDIA
+        // (STREAM_MUSIC) pro máximo quando um pedido/rota novo chega, mesmo
+        // com o aparelho no silencioso — mesmo comportamento do app do
+        // iFood pra entregadores. Ciente do precedente: esse comportamento
+        // já gerou reclamação de usuários do iFood (perda de controle sobre
+        // o próprio volume do aparelho) — decisão consciente do negócio
+        // mesmo assim, porque um entregador que não ouve o pedido chegando
+        // perde a corrida pro próximo da fila. flags=0 (sem
+        // FLAG_SHOW_UI/FLAG_PLAY_SOUND) — sobe o volume em silêncio, sem
+        // mostrar a barra de volume do sistema na tela.
+        //
+        // Não restaura o volume depois (igual iFood) — fica no máximo até
+        // o próprio usuário abaixar na mão.
+        //
+        // Chamado de 2 pontos no Dart (som_pedido_service.dart, dentro de
+        // tocarLoop() — cobre tanto o loop em foreground/tela Disponíveis
+        // quanto uma eventual chamada vinda do handler de notificação em
+        // background), centralizado aqui como única implementação nativa.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, volumeChannel).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "forcarVolumeMidiaMaximo" -> {
+                    try {
+                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                        val atual = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                        if (atual < max) {
+                            am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("volume_error", e.message, null)
+                    }
                 }
                 else -> result.notImplemented()
             }
