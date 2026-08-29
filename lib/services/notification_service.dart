@@ -55,6 +55,14 @@ class NotificationService {
   static const String _channelIndicacaoId = 'letsgo_indicacao';
   static const String _channelIndicacaoName = 'Indicação';
   static const String _channelIndicacaoDesc = 'Convite pra indicar motoboy/loja nova';
+
+  // Canal genérico pros 10 cards de lembrete periódico (dia útil + horário
+  // fixo, ver aba Disparar Notificações) — mesmo motivo/padrão neutro do
+  // canal de avaliação: sem som customizado, sem insistência. É lembrete,
+  // não "pedido chegando", nunca deve soar como alarme.
+  static const String _channelPeriodicoId = 'letsgo_periodico';
+  static const String _channelPeriodicoName = 'Lembretes';
+  static const String _channelPeriodicoDesc = 'Lembretes periódicos (dia útil/horário fixo)';
   // wa.me com número já em formato internacional (55 + DDD 11 + número) —
   // mesmo (11) 99170-2772 usado em todo o resto do app pra contato/suporte.
   // Trocado de "abrir link de cadastro" pra "abrir WhatsApp" a pedido.
@@ -161,6 +169,15 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
       ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelPeriodicoId,
+        _channelPeriodicoName,
+        description: _channelPeriodicoDesc,
+        importance: Importance.defaultImportance,
+        playSound: true,
+        enableVibration: true,
+      ));
     }
 
     _initialized = true;
@@ -188,6 +205,11 @@ class NotificationService {
         );
       } else if (tipo == 'indicacao') {
         await showIndicacaoLocal(
+          titulo: msg.data['titulo']?.toString(),
+          corpo: msg.data['corpo']?.toString(),
+        );
+      } else if (tipo == 'periodico') {
+        await showPeriodicoLocal(
           titulo: msg.data['titulo']?.toString(),
           corpo: msg.data['corpo']?.toString(),
         );
@@ -331,6 +353,42 @@ class NotificationService {
       corpoFinal,
       NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'indicacao',
+    );
+  }
+
+  // ── Notificação local: lembrete periódico (10 cards, dia útil/horário) ──
+  // Diferente de avaliar_app/indicacao, esse tipo não tem texto padrão
+  // hardcoded — os 10 cards nascem vazios no painel (texto é preenchido
+  // depois, um por um) e a Edge Function (lembrete-periodico) já evita
+  // mandar push com texto vazio. Essa guarda aqui é só reforço, cobre
+  // qualquer chamada direta que escape dessa checagem.
+  static Future<void> showPeriodicoLocal({String? titulo, String? corpo}) async {
+    if (!_initialized) await initLocal();
+    if (titulo == null || titulo.isEmpty || corpo == null || corpo.isEmpty) return;
+
+    final androidDetails = AndroidNotificationDetails(
+      _channelPeriodicoId,
+      _channelPeriodicoName,
+      channelDescription: _channelPeriodicoDesc,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      playSound: true,
+      icon: '@mipmap/ic_launcher',
+      styleInformation: BigTextStyleInformation(corpo),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      3003,
+      titulo,
+      corpo,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'periodico',
     );
   }
 

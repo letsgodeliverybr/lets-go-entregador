@@ -14,6 +14,12 @@
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+<!-- Causa raiz confirmada do "volume não sobe": AudioManager.setStreamVolume()
+     exige essa permissão (documentado pelo próprio Android) — sem ela, a
+     chamada nativa (letsgo/volume, MainActivity.kt) falha em silêncio (o
+     Kotlin captura a exceção e retorna erro pro Dart, mas nada trava/
+     crasha visivelmente, então passava despercebido nos testes). -->
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <queries>
         <intent>

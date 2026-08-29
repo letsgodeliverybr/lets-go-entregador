@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'services/som_pedido_service.dart';
+import 'services/volume_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/permissoes_screen.dart';
 import 'screens/home_screen.dart';
@@ -57,18 +58,38 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       await Firebase.initializeApp(options: _firebaseOptions);
     }
     final tipo = message.data['tipo']?.toString() ?? '';
-    if (tipo == 'nova_rota') {
-      await NotificationService.showNovaRotaLocal();
-      // Além da notificação do sistema (canal, som já ajustado — ver
-      // notification_service.dart), também dispara o mesmo player/loop
-      // usado em foreground (SomPedidoService) — força volume de mídia pro
-      // máximo e toca o mesmo áudio, igual comportamento do iFood. Awaited
-      // (não fire-and-forget) de propósito: dá mais chance do isolate de
-      // background continuar vivo até o player pelo menos começar a tocar.
-      // Melhor esforço mesmo assim — se o isolate morrer antes disso, o
-      // pior caso é só não tocar esse som extra; a notificação do sistema
-      // acima já garante o alerta básico.
-      await SomPedidoService.tocarLoop();
+    if (tipo != 'avaliar_app' && tipo != 'indicacao' && tipo != 'periodico') {
+      // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
+      // mesmo fallback de sempre (else final antigo).
+      //
+      // REGRESSÃO CORRIGIDA (era o build anterior): chamar
+      // SomPedidoService.tocarLoop() aqui, além da notificação do sistema,
+      // causava 3 alertas simultâneos nunca terminando num teste real. Causa
+      // raiz: cada mensagem em background pode rodar num isolate/engine
+      // NOVO — o guard estático _loopAtivo de SomPedidoService não persiste
+      // entre invocações separadas, então cada mensagem tocava seu próprio
+      // loop independente, sem nada ali capaz de pará-lo depois (quem chama
+      // pararLoop() é _MyAppState, que só existe com o app realmente
+      // aberto). Resultado: loops órfãos se acumulando.
+      //
+      // Comportamento correto (um único alerta, que já repete sozinho via
+      // FLAG_INSISTENT — ver showNovoPedidoLocal/showNovaRotaLocal): só a
+      // notificação do sistema, sem chamar SomPedidoService aqui. O volume
+      // é forçado (Mídia E Alarme, ver VolumeService/MainActivity.kt) ANTES
+      // de mostrar a notificação, pro canal (stream de Alarme) já tocar no
+      // volume máximo.
+      //
+      // Handoff pro loop de foreground: ao tocar a notificação, ela some
+      // sozinha (autoCancel:true, padrão do pacote) — o que já para o som
+      // insistente — e o app abre; _MyAppState reavalia o estado real
+      // (despacho_fila/pedidos) e assume o loop normal se o pedido ainda
+      // estiver disponível (ver _primeiraEmissao em _onPedidosUpdate).
+      await VolumeService.forcarVolumeMidiaMaximo();
+      if (tipo == 'nova_rota') {
+        await NotificationService.showNovaRotaLocal();
+      } else {
+        await NotificationService.showNovoPedidoLocal();
+      }
     } else if (tipo == 'avaliar_app') {
       await NotificationService.showAvaliarAppLocal(
         titulo: message.data['titulo']?.toString(),
@@ -79,11 +100,11 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
         titulo: message.data['titulo']?.toString(),
         corpo: message.data['corpo']?.toString(),
       );
-    } else {
-      await NotificationService.showNovoPedidoLocal();
-      // Mesmo motivo do branch 'nova_rota' acima — força volume de mídia +
-      // toca via SomPedidoService, além da notificação do sistema.
-      await SomPedidoService.tocarLoop();
+    } else if (tipo == 'periodico') {
+      await NotificationService.showPeriodicoLocal(
+        titulo: message.data['titulo']?.toString(),
+        corpo: message.data['corpo']?.toString(),
+      );
     }
   } catch (e, st) {
     // Nunca deixar isso morrer em silêncio de novo — se voltar a falhar,

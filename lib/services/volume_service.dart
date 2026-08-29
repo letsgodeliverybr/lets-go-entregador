@@ -1,19 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Força o volume de MÍDIA (STREAM_MUSIC) pro máximo antes de tocar o som
-/// de pedido novo/rota nova — DECISÃO DE PRODUTO deliberada, não é bug:
-/// mesmo comportamento do app do iFood pra entregadores, ciente das
-/// reclamações que esse comportamento já gerou lá (perda de controle sobre
-/// o próprio volume do aparelho). Decisão consciente mesmo assim: um
-/// entregador que não ouve o pedido chegando (aparelho no silencioso, mídia
-/// baixa) perde a corrida pro próximo da fila. Não restaura o volume
-/// depois — fica no máximo até o usuário abaixar na mão, igual iFood.
+/// Força o volume MÁXIMO (streams de Mídia E Alarme — ver comentário
+/// completo em MainActivity.kt) antes de tocar o som de pedido novo/rota
+/// nova — DECISÃO DE PRODUTO deliberada, não é bug: mesmo comportamento do
+/// app do iFood pra entregadores, ciente das reclamações que esse
+/// comportamento já gerou lá (perda de controle sobre o próprio volume do
+/// aparelho). Decisão consciente mesmo assim: um entregador que não ouve o
+/// pedido chegando (aparelho no silencioso, volume baixo) perde a corrida
+/// pro próximo da fila. Não restaura o volume depois — fica no máximo até
+/// o usuário abaixar na mão, igual iFood.
+///
+/// Chamado de 2 pontos: início de SomPedidoService.tocarLoop() (cobre o
+/// stream de Mídia, loop em foreground) e direto no
+/// _firebaseBackgroundHandler antes de mostrar a notificação de
+/// pedido/rota (cobre o stream de Alarme, canal em background) — ver
+/// main.dart. Um único método nativo força os dois streams de uma vez, não
+/// importa de qual dos 2 pontos foi chamado.
 ///
 /// Implementação real é nativa (Kotlin, MainActivity.kt) — AudioManager não
 /// tem equivalente nos pacotes Flutter já usados neste projeto
 /// (just_audio/flutter_local_notifications só mexem em volume relativo do
-/// próprio player, nunca no volume do stream do sistema).
+/// próprio player, nunca no volume do stream do sistema). Precisa da
+/// permissão MODIFY_AUDIO_SETTINGS no AndroidManifest.xml — sem ela,
+/// setStreamVolume() falha em silêncio (era a causa raiz real de o volume
+/// não subir num teste anterior).
 class VolumeService {
   static const MethodChannel _channel = MethodChannel('letsgo/volume');
 

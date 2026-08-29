@@ -108,33 +108,50 @@ class MainActivity: FlutterActivity() {
             }
         }
 
-        // DECISÃO DE PRODUTO deliberada, não é bug: força o volume de MÍDIA
-        // (STREAM_MUSIC) pro máximo quando um pedido/rota novo chega, mesmo
-        // com o aparelho no silencioso — mesmo comportamento do app do
-        // iFood pra entregadores. Ciente do precedente: esse comportamento
-        // já gerou reclamação de usuários do iFood (perda de controle sobre
-        // o próprio volume do aparelho) — decisão consciente do negócio
+        // DECISÃO DE PRODUTO deliberada, não é bug: força o volume MÁXIMO
+        // quando um pedido/rota novo chega, mesmo com o aparelho no
+        // silencioso — mesmo comportamento do app do iFood pra
+        // entregadores. Ciente do precedente: esse comportamento já gerou
+        // reclamação de usuários do iFood (perda de controle sobre o
+        // próprio volume do aparelho) — decisão consciente do negócio
         // mesmo assim, porque um entregador que não ouve o pedido chegando
         // perde a corrida pro próximo da fila. flags=0 (sem
         // FLAG_SHOW_UI/FLAG_PLAY_SOUND) — sobe o volume em silêncio, sem
         // mostrar a barra de volume do sistema na tela.
         //
+        // Força os DOIS streams que esse app usa pra som de pedido, não só
+        // um: STREAM_MUSIC (SomPedidoService/just_audio, loop em
+        // foreground na tela Disponíveis) E STREAM_ALARM (o canal de
+        // notificação do sistema em background usa
+        // AudioAttributesUsage.alarm — ver notification_service.dart).
+        // Forçar só um dos dois deixaria o outro caminho ainda sujeito ao
+        // volume manual do usuário.
+        //
+        // Requer android.permission.MODIFY_AUDIO_SETTINGS no
+        // AndroidManifest.xml — sem ela, setStreamVolume() falha e a
+        // exceção é engolida pelo try/catch abaixo (silencioso, sem crash),
+        // causa raiz real de um teste anterior onde o volume simplesmente
+        // não subiu.
+        //
         // Não restaura o volume depois (igual iFood) — fica no máximo até
         // o próprio usuário abaixar na mão.
         //
         // Chamado de 2 pontos no Dart (som_pedido_service.dart, dentro de
-        // tocarLoop() — cobre tanto o loop em foreground/tela Disponíveis
-        // quanto uma eventual chamada vinda do handler de notificação em
-        // background), centralizado aqui como única implementação nativa.
+        // tocarLoop() — cobre o loop em foreground/tela Disponíveis — e
+        // main.dart, direto no _firebaseBackgroundHandler antes de mostrar
+        // a notificação — cobre o canal de background), centralizado aqui
+        // como única implementação nativa.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, volumeChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "forcarVolumeMidiaMaximo" -> {
                     try {
                         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                        val atual = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-                        if (atual < max) {
-                            am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
+                        for (stream in intArrayOf(AudioManager.STREAM_MUSIC, AudioManager.STREAM_ALARM)) {
+                            val max = am.getStreamMaxVolume(stream)
+                            val atual = am.getStreamVolume(stream)
+                            if (atual < max) {
+                                am.setStreamVolume(stream, max, 0)
+                            }
                         }
                         result.success(true)
                     } catch (e: Exception) {
