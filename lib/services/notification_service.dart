@@ -13,11 +13,26 @@ class NotificationService {
   // mudar via código uma vez que o canal já existe no aparelho) — troca de
   // ID força o Android a criar um canal novo do zero com o som certo,
   // em vez de manter travado um canal antigo criado sem som customizado.
-  static const String _channelPedidoId = 'letsgo_novo_pedido_v3';
+  //
+  // _v4: som chegava baixo E cortado (só "1 Let's Go", nunca o áudio
+  // completo) — confirmado ao vivo (Gabriel, app fechado). Causa raiz:
+  // AndroidNotificationChannel sem audioAttributesUsage cai no padrão do
+  // pacote (AudioAttributesUsage.notification = USAGE_NOTIFICATION), que
+  // o Android trata como "aviso curto": toca no stream de volume de
+  // Notificação (geralmente bem mais baixo que mídia/alarme no aparelho) E
+  // aplica política de duração curta pra esse uso — explica os dois
+  // sintomas de uma vez. Trocado pra AudioAttributesUsage.alarm
+  // (USAGE_ALARM), o mesmo "uso" que o despertador do Android usa: toca no
+  // stream de Alarme (alto, não fica preso ao volume de notificação do
+  // usuário) e sem truncamento de duração — bate com a intenção que já
+  // existia aqui (FLAG_INSISTENT, som insistente tipo ligação). Precisou
+  // subir o ID do canal de novo (canal é imutável) pra forçar recriação
+  // com esse AudioAttributes novo.
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v4';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
-  static const String _channelRotaId = 'letsgo_nova_rota_v3';
+  static const String _channelRotaId = 'letsgo_nova_rota_v4';
   static const String _channelRotaName = 'Nova Rota';
   static const String _channelRotaDesc = 'Alerta de rota com múltiplas entregas';
 
@@ -102,6 +117,7 @@ class NotificationService {
         importance: Importance.max,
         playSound: true,
         sound: RawResourceAndroidNotificationSound('letsgo_notification'),
+        audioAttributesUsage: AudioAttributesUsage.alarm,
         enableVibration: true,
         enableLights: true,
       ));
@@ -113,6 +129,7 @@ class NotificationService {
         importance: Importance.max,
         playSound: true,
         sound: RawResourceAndroidNotificationSound('letsgo_notification'),
+        audioAttributesUsage: AudioAttributesUsage.alarm,
         enableVibration: true,
         enableLights: true,
       ));
