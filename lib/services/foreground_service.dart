@@ -125,7 +125,7 @@ class LocationTaskHandler extends TaskHandler {
   Future<void> _verificarProximidade(double distM) async {
     if (_pedidoId == null || _clienteLat == null || _clienteLng == null || _chegadaDetectada) return;
 
-    if (distM <= 50) {
+    if (distM <= 100) {
       _chegadaDetectada = true;
       debugPrint('[ForegroundTask|PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m pedido=$_pedidoId');
       try {
