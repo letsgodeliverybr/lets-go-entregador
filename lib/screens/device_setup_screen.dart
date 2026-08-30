@@ -203,9 +203,10 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
               border: Border.all(color: const Color(0xFF7F1D1D)),
             ),
             child: const Text(
-              'Ainda não foi ativado. Isso é obrigatório — sem essa permissão, '
-              'você pode perder pedidos novos sem perceber. Toca em "Ativar" '
-              'de novo e escolhe "Permitir" na tela do sistema.',
+              'Ainda não foi ativado. Recomendado — sem essa permissão, você '
+              'pode perder pedidos novos sem perceber. Toca em "Ativar" de '
+              'novo e escolhe "Permitir" na tela do sistema, ou continua sem '
+              'ativar (não recomendado).',
               style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
             ),
           ),
@@ -226,6 +227,25 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                 : const Text('Ativar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           ),
         ),
+        // Escape hatch — CRÍTICO: sem isso, qualquer aparelho onde
+        // FlutterForegroundTask.isIgnoringBatteryOptimizations não reflita
+        // corretamente a concessão (comportamento varia entre fabricantes/
+        // versões de Android) trava o usuário PERMANENTEMENTE nessa tela,
+        // antes até de conseguir ver o login — bug real já relatado (login
+        // bloqueado em aparelhos não-Xiaomi). Só aparece depois de uma
+        // tentativa (pra não incentivar pular sem nem tentar), some=continua
+        // pedindo de novo se recusar de novo, nunca bloqueia pra sempre.
+        if (_bateriaNegadaUmaVez)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TextButton(
+              onPressed: _processando ? null : _avancarParaAutostartOuFim,
+              child: const Text(
+                'Continuar sem ativar por enquanto',
+                style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+              ),
+            ),
+          ),
         const SizedBox(height: 32),
       ],
     );
