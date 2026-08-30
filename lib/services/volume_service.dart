@@ -11,12 +11,13 @@ import 'package:flutter/services.dart';
 /// pro próximo da fila. Não restaura o volume depois — fica no máximo até
 /// o usuário abaixar na mão, igual iFood.
 ///
-/// Chamado de 2 pontos: início de SomPedidoService.tocarLoop() (cobre o
-/// stream de Mídia, loop em foreground) e direto no
-/// _firebaseBackgroundHandler antes de mostrar a notificação de
-/// pedido/rota (cobre o stream de Alarme, canal em background) — ver
-/// main.dart. Um único método nativo força os dois streams de uma vez, não
-/// importa de qual dos 2 pontos foi chamado.
+/// Chamado direto no _firebaseBackgroundHandler (main.dart), antes de
+/// mostrar a notificação de pedido/rota — cobre o stream de Alarme, único
+/// som do fluxo de pedido hoje (a tela Disponíveis em foreground não toca
+/// som próprio nenhum, decisão de produto — ver comentário em main.dart).
+/// Continua forçando os dois streams (Mídia E Alarme) mesmo assim — não
+/// custa nada forçar um stream que não está em uso agora, e cobre de graça
+/// qualquer som futuro que volte a usar o stream de Mídia.
 ///
 /// Implementação real é nativa (Kotlin, MainActivity.kt) — AudioManager não
 /// tem equivalente nos pacotes Flutter já usados neste projeto

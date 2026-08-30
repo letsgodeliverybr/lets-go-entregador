@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'services/som_pedido_service.dart';
 import 'services/volume_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/permissoes_screen.dart';
@@ -62,28 +61,19 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
       // mesmo fallback de sempre (else final antigo).
       //
-      // REGRESSÃO CORRIGIDA (era o build anterior): chamar
-      // SomPedidoService.tocarLoop() aqui, além da notificação do sistema,
-      // causava 3 alertas simultâneos nunca terminando num teste real. Causa
-      // raiz: cada mensagem em background pode rodar num isolate/engine
-      // NOVO — o guard estático _loopAtivo de SomPedidoService não persiste
-      // entre invocações separadas, então cada mensagem tocava seu próprio
-      // loop independente, sem nada ali capaz de pará-lo depois (quem chama
-      // pararLoop() é _MyAppState, que só existe com o app realmente
-      // aberto). Resultado: loops órfãos se acumulando.
+      // Único alerta sonoro do fluxo de pedido: essa notificação do
+      // sistema, que já repete sozinha via FLAG_INSISTENT (ver
+      // showNovoPedidoLocal/showNovaRotaLocal) até o usuário tocar/
+      // dispensar. Volume forçado (Mídia E Alarme, ver
+      // VolumeService/MainActivity.kt) ANTES de mostrar, pro canal (stream
+      // de Alarme) já tocar no máximo.
       //
-      // Comportamento correto (um único alerta, que já repete sozinho via
-      // FLAG_INSISTENT — ver showNovoPedidoLocal/showNovaRotaLocal): só a
-      // notificação do sistema, sem chamar SomPedidoService aqui. O volume
-      // é forçado (Mídia E Alarme, ver VolumeService/MainActivity.kt) ANTES
-      // de mostrar a notificação, pro canal (stream de Alarme) já tocar no
-      // volume máximo.
-      //
-      // Handoff pro loop de foreground: ao tocar a notificação, ela some
-      // sozinha (autoCancel:true, padrão do pacote) — o que já para o som
-      // insistente — e o app abre; _MyAppState reavalia o estado real
-      // (despacho_fila/pedidos) e assume o loop normal se o pedido ainda
-      // estiver disponível (ver _primeiraEmissao em _onPedidosUpdate).
+      // A tela Disponíveis (foreground) é silenciosa de propósito — não
+      // toca nenhum som próprio (SomPedidoService foi removido, decisão de
+      // produto: o alerta já acontece aqui, duplicar som na tela era
+      // incômodo). Ao tocar a notificação, ela some sozinha
+      // (autoCancel:true, padrão do pacote), o que já para o alerta
+      // insistente.
       await VolumeService.forcarVolumeMidiaMaximo();
       if (tipo == 'nova_rota') {
         await NotificationService.showNovaRotaLocal();
@@ -140,12 +130,9 @@ class _MyAppState extends State<MyApp> {
   final _supabase = Supabase.instance.client;
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
-  RealtimeChannel? _channelDespachoFila;
-  RealtimeChannel? _channelPedidosRemocao;
   OverlayEntry? _overlayEntry;
   Timer? _overlayTimer;
   Set<String> _idsConhecidos = {};
-  final Set<String> _despachoAtivos = {};
   bool _primeiraEmissao = true;
 
   @override
@@ -171,106 +158,16 @@ class _MyAppState extends State<MyApp> {
     _cancelarStream();
     _primeiraEmissao = true;
     _idsConhecidos = {};
-    _despachoAtivos.clear();
     _streamSub = _supabase
         .from('pedidos')
         .stream(primaryKey: ['id'])
         .eq('status', 'pronto')
         .listen(_onPedidosUpdate);
-    _assinarRealtimeDespachoFila();
-    _assinarRemocaoPedidos();
   }
 
   void _cancelarStream() {
     _streamSub?.cancel();
     _streamSub = null;
-    _channelDespachoFila?.unsubscribe();
-    _channelDespachoFila = null;
-    _channelPedidosRemocao?.unsubscribe();
-    _channelPedidosRemocao = null;
-    SomPedidoService.pararLoop();
-  }
-
-  // `.stream().eq('status','pronto')` (acima) passa o filtro pro Realtime
-  // do lado do servidor — e o Realtime só entrega UPDATE quando a linha
-  // NOVA ainda bate com o filtro. Quando um pedido é aceito (status sai de
-  // 'pronto'), a linha deixa de bater e o evento nunca chega nessa
-  // assinatura filtrada: o cache do stream fica com a cópia antiga pra
-  // sempre, e o loop de som nunca para. Por isso essa segunda assinatura,
-  // SEM filtro (mesmo padrão já usado em pedidos_disponiveis_screen.dart),
-  // só pra detectar quando um pedido sai do conjunto disponível.
-  void _assinarRemocaoPedidos() {
-    _channelPedidosRemocao = _supabase
-        .channel('pedidos-remocao-global')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'pedidos',
-          callback: (payload) {
-            final novo = payload.newRecord;
-            final id = novo['id']?.toString() ?? '';
-            if (id.isEmpty) return;
-            final aindaDisponivel = novo['status']?.toString() == 'pronto' &&
-                (novo['motoboy_id']?.toString() ?? '').isEmpty;
-            if (!aindaDisponivel && _idsConhecidos.remove(id)) {
-              _pararSomSeNadaDisponivel();
-            }
-          },
-        )
-        .subscribe();
-  }
-
-  void _assinarRealtimeDespachoFila() {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
-
-    _channelDespachoFila = _supabase
-        .channel('despacho-fila-global-${user.id}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'despacho_fila',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'entregador_id',
-            value: user.id,
-          ),
-          callback: (payload) {
-            final status = payload.newRecord['status']?.toString() ?? '';
-            final id = payload.newRecord['id']?.toString() ?? '';
-            if (status == 'aguardando' && id.isNotEmpty) {
-              _despachoAtivos.add(id);
-              SomPedidoService.tocarLoop();
-            }
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'despacho_fila',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'entregador_id',
-            value: user.id,
-          ),
-          callback: (payload) {
-            final status = payload.newRecord['status']?.toString() ?? '';
-            final id = payload.newRecord['id']?.toString() ?? '';
-            if (status != 'aguardando' && id.isNotEmpty) {
-              _despachoAtivos.remove(id);
-              _pararSomSeNadaDisponivel();
-            }
-          },
-        )
-        .subscribe();
-  }
-
-  // Loop só para quando não sobrar nenhum pedido/despacho ativo — evita
-  // cortar o som se um pedido foi aceito/expirou mas outro ainda espera.
-  void _pararSomSeNadaDisponivel() {
-    if (_idsConhecidos.isEmpty && _despachoAtivos.isEmpty) {
-      SomPedidoService.pararLoop();
-    }
   }
 
   Future<void> _onPedidosUpdate(List<Map<String, dynamic>> lista) async {
@@ -291,27 +188,21 @@ class _MyAppState extends State<MyApp> {
     if (_primeiraEmissao) {
       _idsConhecidos = idsAtuais;
       _primeiraEmissao = false;
-      // Bug (regressão): antes só registrava idsAtuais como "já conhecido"
-      // e saía em silêncio — se o app abre com um pedido já esperando
-      // aceite (não é novidade nenhuma pro stream, é a primeira coisa que
-      // ele vê), o som nunca tocava. Abrir o app direto na tela
-      // Disponíveis com pedido já lá precisa tocar igual a qualquer outro
-      // pedido disponível.
-      if (idsAtuais.isNotEmpty) SomPedidoService.tocarLoop();
+      // Sem som aqui de propósito — tela Disponíveis é silenciosa agora
+      // (decisão de produto: o alerta sonoro já acontece na notificação/
+      // alarme de pedido novo, que é suficiente; ver _firebaseBackgroundHandler
+      // e notification_service.dart). Esse bloco só continua existindo pra
+      // manter _idsConhecidos correto (usado no diff de novosIds abaixo) e
+      // pro overlay visual (_mostrarOverlay), que continuam funcionando.
       return;
     }
 
     final novosIds = idsAtuais.difference(_idsConhecidos);
     _idsConhecidos = idsAtuais;
 
-    if (idsAtuais.isEmpty) {
-      _pararSomSeNadaDisponivel();
-      return;
-    }
+    if (idsAtuais.isEmpty) return;
 
     if (novosIds.isEmpty) return;
-
-    SomPedidoService.tocarLoop();
 
     // Fetch the first new pedido with lojas join (só pro overlay visual)
     try {
