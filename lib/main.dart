@@ -509,7 +509,25 @@ class _AuthGateState extends State<AuthGate> {
       final status = e['status']?.toString() ?? '';
 
       if (aprovado || status == 'ativo' || statusCadastro == 'aprovado') {
-        if (e['disponivel'] == true) return const EntregadorHomeScreen();
+        if (e['disponivel'] == true) {
+          // App estava fechado/morto e foi aberto pelo fullScreenIntent da
+          // notificação de novo pedido (não por toque manual) — nesse caso
+          // onDidReceiveNotificationResponse (notification_service.dart)
+          // não dispara, porque o plugin de notificações locais ainda não
+          // tinha listener registrado no momento em que o Android lançou a
+          // Activity. getNotificationAppLaunchDetails() é o jeito
+          // documentado do flutter_local_notifications de recuperar esse
+          // dado depois, direto no cold start.
+          try {
+            final detalhes = await FlutterLocalNotificationsPlugin()
+                .getNotificationAppLaunchDetails();
+            if (detalhes?.didNotificationLaunchApp == true &&
+                detalhes?.notificationResponse?.payload == 'novo_pedido') {
+              return const PedidosDisponiveisScreen();
+            }
+          } catch (_) {}
+          return const EntregadorHomeScreen();
+        }
         return const HomeScreen();
       }
 

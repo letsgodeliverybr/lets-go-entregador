@@ -23,4 +23,4 @@
   estática de uso.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/letsgo_notification,@raw/letsgo" />
+    tools:keep="@raw/letsgo_notification,@raw/letsgo,@raw/moeda_caindo" />

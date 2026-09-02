@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../main.dart' show navigatorKey;
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -28,7 +29,17 @@ class NotificationService {
   // existia aqui (FLAG_INSISTENT, som insistente tipo ligação). Precisou
   // subir o ID do canal de novo (canal é imutável) pra forçar recriação
   // com esse AudioAttributes novo.
-  static const String _channelPedidoId = 'letsgo_novo_pedido_v4';
+  //
+  // _v5: MUDANÇA DE PRODUTO (não é fix de bug) — o alerta insistente tipo
+  // alarme/ligação (FLAG_INSISTENT + AudioAttributesUsage.alarm) foi
+  // substituído por um toque curto (~1,5s, "moeda caindo") sem loop, só
+  // vibração padrão. A insistência sonora agora fica pro loop de
+  // "letsgo.wav" que só começa DEPOIS que a tela Disponíveis abre de
+  // verdade (ver pedidos_disponiveis_screen.dart) — não faz mais sentido
+  // repetir a notificação em si. Canal de novo com ID novo (imutável,
+  // mesmo motivo do _v4) pra forçar recriação sem o som/comportamento
+  // antigo grudado no aparelho de quem já tinha o app instalado.
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v5';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
@@ -90,6 +101,13 @@ class NotificationService {
         debugPrint('Notificação tocada: ${details.payload}');
         if (details.payload == 'avaliar_app') abrirAvaliacaoPlayStore();
         if (details.payload == 'indicacao') abrirLinkIndicacao();
+        // App já rodando (foreground ou background-mas-vivo) quando o
+        // fullScreenIntent trouxe a Activity de volta — cold start (app
+        // morto) é tratado à parte, em main.dart, via
+        // getNotificationAppLaunchDetails() (esse callback aqui não dispara
+        // nesse caso porque o plugin ainda não tinha um listener registrado
+        // no momento em que o Android lançou a Activity).
+        if (details.payload == 'novo_pedido') _abrirTelaPedidosDisponiveis();
       },
     );
 
@@ -118,14 +136,17 @@ class NotificationService {
         debugPrint('[NotificationService] requestNotificationsPermission falhou (provável isolate sem Activity): $e');
       }
 
+      // Sem audioAttributesUsage customizado de propósito (v5) — cai no
+      // padrão do pacote (USAGE_NOTIFICATION), o "uso" certo pra um toque
+      // curto normal, não mais um alarme. enableVibration:true sem
+      // vibrationPattern customizado = vibração padrão do sistema.
       await plugin?.createNotificationChannel(const AndroidNotificationChannel(
         _channelPedidoId,
         _channelPedidoName,
         description: _channelPedidoDesc,
         importance: Importance.max,
         playSound: true,
-        sound: RawResourceAndroidNotificationSound('letsgo_notification'),
-        audioAttributesUsage: AudioAttributesUsage.alarm,
+        sound: RawResourceAndroidNotificationSound('moeda_caindo'),
         enableVibration: true,
         enableLights: true,
       ));
@@ -217,6 +238,11 @@ class NotificationService {
         await showNovaRotaLocal();
       } else {
         await showNovoPedidoLocal();
+        // App já em foreground de verdade — fullScreenIntent não faz nada
+        // aqui (só age fora do foreground), então a navegação automática
+        // pra Disponíveis precisa ser disparada direto, sem depender de
+        // toque na notificação.
+        _abrirTelaPedidosDisponiveis();
       }
     });
 
@@ -242,6 +268,21 @@ class NotificationService {
     final tipo = data['tipo']?.toString() ?? '';
     if (tipo == 'avaliar_app') abrirAvaliacaoPlayStore();
     if (tipo == 'indicacao') abrirLinkIndicacao();
+  }
+
+  // Navega direto pra tela Disponíveis usando a rota nomeada '/pedidos'
+  // (já registrada em main.dart) via o navigatorKey global — chamado tanto
+  // daqui (toque/fullScreenIntent com app já vivo) quanto de
+  // FirebaseMessaging.onMessage (app em foreground de verdade) abaixo.
+  // pushNamed simples (não remove a pilha) — se o entregador já estava em
+  // outra tela, some ao voltar/sair da tela Disponíveis, comportamento
+  // aceitável pra esse caso de uso.
+  static void _abrirTelaPedidosDisponiveis() {
+    try {
+      navigatorKey.currentState?.pushNamed('/pedidos');
+    } catch (e) {
+      debugPrint('[NotificationService] falha ao navegar pra /pedidos: $e');
+    }
   }
 
   // market://details abre o app da Play Store direto na ficha do app com
@@ -460,26 +501,31 @@ class NotificationService {
   }
 
   // ── Notificação local: novo pedido ──────────────────────────────────────
+  // v5: toque único (moeda caindo, ~1,5s) + vibração padrão, SEM
+  // FLAG_INSISTENT — a insistência sonora agora é responsabilidade do loop
+  // de "letsgo.wav" na tela Disponíveis (pedidos_disponiveis_screen.dart),
+  // não da notificação em si. fullScreenIntent:true continua — é o que
+  // abre o app sozinho (mesmo com ele fechado/em background). payload:
+  // 'novo_pedido' é o que permite o app, ao abrir (cold start via
+  // getNotificationAppLaunchDetails() em main.dart, ou já rodando via
+  // onDidReceiveNotificationResponse abaixo), saber que deve navegar
+  // direto pra tela Disponíveis em vez da tela padrão.
   static Future<void> showNovoPedidoLocal() async {
     if (!_initialized) await initLocal();
 
-    final androidDetails = AndroidNotificationDetails(
+    const androidDetails = AndroidNotificationDetails(
       _channelPedidoId,
       _channelPedidoName,
       channelDescription: _channelPedidoDesc,
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
-      sound: RawResourceAndroidNotificationSound('letsgo_notification'),
+      sound: RawResourceAndroidNotificationSound('moeda_caindo'),
       enableVibration: true,
       enableLights: true,
       ticker: 'Novo pedido disponível',
       icon: '@mipmap/ic_launcher',
       fullScreenIntent: true,
-      // FLAG_INSISTENT (valor 4, nativo do Android Notification) — repete o
-      // som/vibração em loop até o entregador abrir ou dispensar a
-      // notificação, igual uma ligação. Sem isso o som toca só uma vez.
-      additionalFlags: Int32List.fromList(<int>[4]),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -492,7 +538,8 @@ class NotificationService {
       1001,
       "LET'S GO MOTOCA 🛵",
       "Pedidos na tela! Vem Pra Rua! Aproveite Alta Demanda Para Faturar Mais Com A Let's Go Delivery!",
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'novo_pedido',
     );
   }
 
