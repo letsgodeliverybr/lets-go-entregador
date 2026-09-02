@@ -457,6 +457,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
           await _supabase.from('pedidos').update({
             'status': 'no_local',
             'status_detalhado': 'no_local',
+            'chegou_local_em': DateTime.now().toIso8601String(),
             'updated_at': DateTime.now().toIso8601String(),
           }).eq('id', _pedidoId);
           setState(() => _etapa = EtapaEntrega.chegouLocal);
