@@ -10,12 +10,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // esse serviço não.
 //
 // Contrato (pedido do usuário, 2026-09-02):
-// 1. Vibração + som de moeda (isso já é a notificação local, ver
-//    notification_service.dart) + início do loop disparam JUNTOS, não
-//    sequencial — por isso iniciar() é chamado direto de onde a notificação
-//    chega (foreground: junto com showNovoPedidoLocal(); cold-start via
-//    fullScreenIntent: assim que o app está de fato vivo, no AuthGate), não
-//    esperando a tela Disponíveis montar e buscar dado pra só então tocar.
+// 1. Vibração + moeda caindo 5x (efeito "alerta chegando") + loop contínuo
+//    do Let's Go em seguida — tudo dentro de iniciar(), disparado direto de
+//    onde a notificação chega (foreground: junto com showNovoPedidoLocal();
+//    cold-start via fullScreenIntent: assim que o app está de fato vivo, no
+//    AuthGate), não esperando a tela Disponíveis montar e buscar dado pra
+//    só então tocar.
 // 2. Toca em qualquer tela — por isso é um singleton global, não algo preso
 //    ao ciclo de vida de PedidosDisponiveisScreen.
 // 3. Só 1 loop por vez — iniciar() é no-op se _tocando já for true. Um
@@ -89,11 +89,28 @@ class AlertaPedidoService {
   // Requisito 1 (vibra + moeda + loop juntos) e 3 (só 1 por vez): chamar
   // direto de onde a notificação chega. Sem await bloqueante no vibrar —
   // dispara e já segue pro áudio, os dois ficam praticamente simultâneos.
+  //
+  // Refinamento 2026-09-02: moeda toca 5x (curta, ~1s cada) ANTES do loop
+  // contínuo do Let's Go começar — efeito de "alerta chegando" antes do
+  // loop principal. play() do just_audio já espera a faixa terminar
+  // sozinho (sem LoopMode nenhum aplicado = toca uma vez e completa), por
+  // isso dá pra usar um for simples em vez de escutar processingState na
+  // mão. Confere _tocando entre cada repetição e antes de trocar pro loop
+  // — se parar() for chamado no meio (aceitou no meio das 5 moedas), para
+  // ali mesmo, não espera as repetições restantes nem entra no loop.
   Future<void> iniciar() async {
     if (_tocando) return; // trava do "só 1 loop por vez"
     _tocando = true;
     HapticFeedback.heavyImpact();
     try {
+      await _player.setLoopMode(LoopMode.off);
+      await _player.setAsset('assets/sounds/moeda_caindo.mp3');
+      for (var i = 0; i < 5; i++) {
+        if (!_tocando) return;
+        await _player.seek(Duration.zero);
+        await _player.play();
+      }
+      if (!_tocando) return;
       await _player.setLoopMode(LoopMode.one);
       await _player.setAsset('assets/sounds/letsgo.wav');
       await _player.play();
