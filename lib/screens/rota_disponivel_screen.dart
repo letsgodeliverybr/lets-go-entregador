@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/alerta_pedido_service.dart';
 import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
@@ -152,6 +153,18 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             .eq('entregador_id', user.id)
             .eq('status', 'aguardando');
       } catch (_) {}
+      // Achado testando o AAB anterior: essa é a tela real onde a MAIORIA
+      // dos aceites acontece (tap no card individual em
+      // pedidos_disponiveis_screen.dart, convite direto de rota vindo de
+      // entregador_home_screen.dart) — nunca tinha sido conectada ao
+      // AlertaPedidoService na consolidação, só _aceitar()/_aceitarRota()
+      // de pedidos_disponiveis_screen.dart (que na prática quase não são
+      // chamados, o fluxo real passa por aqui). Loop continuava tocando
+      // depois do aceite até a assinatura realtime do serviço reagir (ou
+      // nunca, se ainda sobrasse outro pedido 'aguardando' na fila de
+      // OUTRO pedido). Parada explícita aqui, direto após confirmar.
+      // ignore: unawaited_futures
+      AlertaPedidoService.instance.parar();
       if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: _pedido)));
     } catch (e) {
