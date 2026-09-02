@@ -13,6 +13,7 @@ import '../services/location_service.dart';
 import '../services/notification_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import 'ifood_confirmacao_webview_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 
 enum EtapaEntrega { aceito, chegouLocal, emRota, chegouDestino, retornando, aguardandoPagamento, finalizado }
@@ -634,6 +635,30 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                   if (_erro != null)
                     Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
+                  // Só pra pedido que veio do iFood — visível por origem
+                  // (o sistema já sabe de onde veio o pedido, não faz
+                  // sentido mostrar isso pra pedido criado direto no
+                  // nosso painel/app). Independente do que acontecer na
+                  // WebView, o fluxo de finalizar no NOSSO sistema
+                  // continua normal depois — essa confirmação é só um
+                  // passo A MAIS, não substitui nada do que já fazíamos.
+                  if (widget.pedido['origem']?.toString() == 'ifood') ...[
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFEA1D2C),
+                        side: const BorderSide(color: Color(0xFFEA1D2C)),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const IfoodConfirmacaoWebviewScreen()),
+                      ),
+                      icon: const Icon(Icons.storefront, size: 18),
+                      label: const Text('Confirmar no iFood', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ] else ...[
                   Container(
                     width: double.infinity,
