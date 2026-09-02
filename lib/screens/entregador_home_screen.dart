@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/alerta_pedido_service.dart';
 import '../services/location_permission_flow.dart';
+// flutter/services.dart não é mais necessário aqui — HapticFeedback do
+// convite de rota foi removido (AlertaPedidoService.iniciar() já vibra
+// sozinho, ver _assinarRealtimeRota abaixo).
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -28,7 +30,6 @@ class EntregadorHomeScreen extends StatefulWidget {
 
 class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   final _supabase = Supabase.instance.client;
-  final AudioPlayer _audioPlayer = AudioPlayer();
   Map<String, dynamic>? _entregador;
   Timer? _statsTimer;
   bool _online = TrackingService.ativo;
@@ -276,15 +277,16 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                   .eq('id', novaNotif.toString())
                   .maybeSingle();
               if (!mounted || rota == null) return;
-              // Tocar som 10x
-              HapticFeedback.heavyImpact();
-              try {
-                await _audioPlayer.stop();
-                await _audioPlayer.setAudioSource(ConcatenatingAudioSource(
-                  children: List.generate(10, (_) => AudioSource.asset('assets/sounds/letsgo.wav')),
-                ));
-                await _audioPlayer.play();
-              } catch (_) {}
+              // Convite direto de rota é a 4ª origem do mesmo alerta
+              // sonoro — consolidado no AlertaPedidoService (mesma trava
+              // de "só 1 loop por vez" dos outros 3 pontos de entrada:
+              // notificação de pedido novo em foreground/background/cold
+              // start). Antes disso, isso tinha seu próprio AudioPlayer
+              // tocando o mesmo asset 10x fixas (sem trava nenhuma contra
+              // sobrepor um loop de pedido já tocando). iniciar() já vibra
+              // sozinho, não precisa de HapticFeedback duplicado aqui.
+              // ignore: unawaited_futures
+              AlertaPedidoService.instance.iniciar();
               setState(() => _rotaAtual = rota);
               _rotaAutorecusaTimer?.cancel();
               _rotaAutorecusaTimer = Timer(const Duration(seconds: 60), _recusarRotaTimeout);
@@ -296,6 +298,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   Future<void> _recusarRotaTimeout() async {
     if (_rotaAtual == null) return;
+    // AlertaPedidoService toca em loop contínuo agora (LoopMode.one), não
+    // mais as 10 repetições finitas de antes — sem isso, o alerta ficaria
+    // tocando pra sempre depois do timeout, já que nada mais ia pará-lo.
+    // ignore: unawaited_futures
+    AlertaPedidoService.instance.parar();
     final user = _supabase.auth.currentUser;
     if (user != null) {
       try { await _supabase.from('entregadores').update({'notificacao_rota': null}).eq('id', user.id); } catch (_) {}
@@ -308,7 +315,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     _statsTimer?.cancel();
     _rotaAutorecusaTimer?.cancel();
     _channelRota?.unsubscribe();
-    _audioPlayer.dispose();
+    // NÃO para/dispõe o AlertaPedidoService aqui — é singleton de app,
+    // precisa sobreviver a essa tela fechar (mesmo raciocínio já aplicado
+    // em pedidos_disponiveis_screen.dart).
     super.dispose();
   }
 
@@ -609,7 +618,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     return GestureDetector(
       onTap: () {
         _rotaAutorecusaTimer?.cancel();
-        _audioPlayer.stop();
+        // ignore: unawaited_futures
+        AlertaPedidoService.instance.parar();
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: rota)),
