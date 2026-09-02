@@ -636,14 +636,20 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                   if (_erro != null)
                     Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  // Só pra pedido que veio do iFood — visível por origem
-                  // (o sistema já sabe de onde veio o pedido, não faz
-                  // sentido mostrar isso pra pedido criado direto no
-                  // nosso painel/app). Independente do que acontecer na
-                  // WebView, o fluxo de finalizar no NOSSO sistema
-                  // continua normal depois — essa confirmação é só um
-                  // passo A MAIS, não substitui nada do que já fazíamos.
-                  if (widget.pedido['origem']?.toString() == 'ifood') ...[
+                  // Só pra pedido MANUAL que veio originalmente do iFood
+                  // mas a loja não é integrada (atendente digitou na mão
+                  // um pedido que chegou no app do iFood da loja, com
+                  // notinha impressa/código de confirmação) — sinalizado
+                  // pelo campo plataforma_origem, escolhido no formulário
+                  // "Novo Pedido" do painel. NÃO usa mais origem=='ifood':
+                  // esse campo é reservado pro pedido automático de verdade
+                  // (webhook/polling da integração real), que já confirma a
+                  // entrega sozinho via API — mostrar o botão nesse caso
+                  // seria redundante e confuso. Independente do que
+                  // acontecer na WebView, o fluxo de finalizar no NOSSO
+                  // sistema continua normal depois — essa confirmação é só
+                  // um passo A MAIS, não substitui nada do que já fazíamos.
+                  if (widget.pedido['plataforma_origem']?.toString() == 'ifood_manual') ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFEA1D2C),
