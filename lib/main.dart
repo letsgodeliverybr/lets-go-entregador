@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
@@ -34,6 +36,32 @@ const _firebaseOptions = FirebaseOptions(
   storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
 );
 
+// Vibração + moeda 5x tocadas direto no isolate de background, na
+// CHEGADA da notificação — ver comentário grande dentro de
+// _firebaseBackgroundHandler sobre por que isso não pode ser
+// AlertaPedidoService.instance (isolate diferente). AudioPlayer avulso,
+// descartado no final — não precisa sobreviver além dessas 5 repetições.
+// Silencioso em qualquer erro (ex: 5s de execução em background negados
+// pelo SO em algum aparelho específico) — nunca deve derrubar o resto do
+// handler (a notificação em si já foi mostrada antes desta chamada).
+Future<void> _tocarAlertaChegada() async {
+  try {
+    HapticFeedback.heavyImpact();
+  } catch (_) {}
+  AudioPlayer? player;
+  try {
+    player = AudioPlayer();
+    await player.setAsset('assets/sounds/moeda_caindo.mp3');
+    for (var i = 0; i < 5; i++) {
+      await player.seek(Duration.zero);
+      await player.play();
+    }
+  } catch (_) {
+  } finally {
+    await player?.dispose();
+  }
+}
+
 // O payload do despacho-engine agora é data-only, de propósito (sem bloco
 // `notification`) — exatamente pra SEMPRE cair aqui, mesmo com o app em
 // background ou morto, em vez de deixar o Android renderizar a
@@ -64,27 +92,41 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
       // mesmo fallback de sempre (else final antigo).
       //
-      // Vibração + som curto de moeda vêm daqui (canal da notificação,
-      // showNovoPedidoLocal/showNovaRotaLocal — sem FLAG_INSISTENT, toca
-      // uma vez só). Volume forçado (Mídia E Alarme, ver
-      // VolumeService/MainActivity.kt) ANTES de mostrar, pro canal já
-      // tocar no máximo.
+      // Volume forçado (Mídia E Alarme, ver VolumeService/MainActivity.kt)
+      // ANTES de mostrar, pro canal já tocar no máximo.
       //
       // O loop "Let's Go Let's Go" (AlertaPedidoService) NÃO é iniciado
       // aqui de propósito: esse handler roda num isolate Dart separado da
       // UI (entry point próprio, ver @pragma acima) — o singleton
       // AlertaPedidoService.instance daqui seria uma instância DIFERENTE
-      // da que a tela realmente usa, morta junto com esse isolate.
-      // iniciar() só é chamado onde o isolate principal já está de
+      // da que a tela realmente usa, morta junto com esse isolate. Loop
+      // contínuo só é iniciado onde o isolate principal já está de
       // verdade rodando: AuthGate (cold start via fullScreenIntent) ou
       // onDidReceiveNotificationResponse (app só pausado/background) — ver
       // notification_service.dart.
+      //
+      // MAS a vibração + moeda 5x da CHEGADA (não do toque) precisam
+      // acontecer AQUI mesmo — achado em auditoria (NOTIFICACOES_MAPA.md,
+      // 2026-09-03): sem isso, nada tocava até o entregador tocar a
+      // notificação na mão, porque showNovoPedidoLocal() não tem som
+      // próprio desde a v6 (ver notification_service.dart — o som virou
+      // 100% responsabilidade do AlertaPedidoService, mas o serviço nunca
+      // rodava em background). _tocarAlertaChegada() usa um AudioPlayer
+      // avulso (não o singleton — não sobrevive além desse isolate, nem
+      // precisa: só toca as 5 moedas e é descartado). O loop contínuo
+      // some com esse isolate quando ele morre — só de fato persiste
+      // quando o app abre de verdade (fullScreenIntent ou toque manual),
+      // que aí sim chama AlertaPedidoService.instance.iniciar() (que
+      // também repete as 5 moedas antes do loop — redundância mínima e
+      // aceitável se o app abrir bem rápido em seguida, bem melhor que o
+      // silêncio total de antes).
       await VolumeService.forcarVolumeMidiaMaximo();
       if (tipo == 'nova_rota') {
         await NotificationService.showNovaRotaLocal();
       } else {
         await NotificationService.showNovoPedidoLocal();
       }
+      await _tocarAlertaChegada();
     } else if (tipo == 'avaliar_app') {
       await NotificationService.showAvaliarAppLocal(
         titulo: message.data['titulo']?.toString(),

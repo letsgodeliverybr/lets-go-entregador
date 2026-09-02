@@ -618,8 +618,15 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     return GestureDetector(
       onTap: () {
         _rotaAutorecusaTimer?.cancel();
-        // ignore: unawaited_futures
-        AlertaPedidoService.instance.parar();
+        // NÃO chama AlertaPedidoService.instance.parar() aqui — achado em
+        // auditoria (NOTIFICACOES_MAPA.md, 2026-09-03): isso parava o loop
+        // só por ABRIR o card pra olhar os detalhes, antes de aceitar ou
+        // recusar de verdade. Sobra do modelo antigo (som de 10x
+        // repetições finitas, fazia sentido calar ao abrir); no modelo
+        // atual (loop contínuo até decisão) isso corta o alerta cedo
+        // demais — o loop deve continuar tocando enquanto o convite segue
+        // pendente, só parando em RotaDisponivelScreen._aceitar() (aceite
+        // de verdade) ou _recusarRotaTimeout() (60s sem resposta).
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: rota)),
