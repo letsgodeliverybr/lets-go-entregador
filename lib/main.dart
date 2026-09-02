@@ -16,6 +16,7 @@ import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
+import 'services/alerta_pedido_service.dart';
 import 'screens/device_setup_screen.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
@@ -61,19 +62,21 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
       // mesmo fallback de sempre (else final antigo).
       //
-      // Único alerta sonoro do fluxo de pedido: essa notificação do
-      // sistema, que já repete sozinha via FLAG_INSISTENT (ver
-      // showNovoPedidoLocal/showNovaRotaLocal) até o usuário tocar/
-      // dispensar. Volume forçado (Mídia E Alarme, ver
-      // VolumeService/MainActivity.kt) ANTES de mostrar, pro canal (stream
-      // de Alarme) já tocar no máximo.
+      // Vibração + som curto de moeda vêm daqui (canal da notificação,
+      // showNovoPedidoLocal/showNovaRotaLocal — sem FLAG_INSISTENT, toca
+      // uma vez só). Volume forçado (Mídia E Alarme, ver
+      // VolumeService/MainActivity.kt) ANTES de mostrar, pro canal já
+      // tocar no máximo.
       //
-      // A tela Disponíveis (foreground) é silenciosa de propósito — não
-      // toca nenhum som próprio (SomPedidoService foi removido, decisão de
-      // produto: o alerta já acontece aqui, duplicar som na tela era
-      // incômodo). Ao tocar a notificação, ela some sozinha
-      // (autoCancel:true, padrão do pacote), o que já para o alerta
-      // insistente.
+      // O loop "Let's Go Let's Go" (AlertaPedidoService) NÃO é iniciado
+      // aqui de propósito: esse handler roda num isolate Dart separado da
+      // UI (entry point próprio, ver @pragma acima) — o singleton
+      // AlertaPedidoService.instance daqui seria uma instância DIFERENTE
+      // da que a tela realmente usa, morta junto com esse isolate.
+      // iniciar() só é chamado onde o isolate principal já está de
+      // verdade rodando: AuthGate (cold start via fullScreenIntent) ou
+      // onDidReceiveNotificationResponse (app só pausado/background) — ver
+      // notification_service.dart.
       await VolumeService.forcarVolumeMidiaMaximo();
       if (tipo == 'nova_rota') {
         await NotificationService.showNovaRotaLocal();
@@ -497,6 +500,15 @@ class _AuthGateState extends State<AuthGate> {
 
     await NotificationService.saveFcmToken(session.user.id);
 
+    // Assinatura realtime do alerta sonoro (nível de app, não de tela) —
+    // precisa existir desde já, independente de qual tela vai ser mostrada
+    // a seguir, senão o loop nunca saberia sozinho quando "não sobra mais
+    // pedido disponível" se o entregador estiver em Home/Aceitos/Vagas no
+    // momento em que o último pedido expira. Idempotente, seguro chamar
+    // toda vez que o AuthGate resolve a tela.
+    // ignore: unawaited_futures
+    AlertaPedidoService.instance.escutar(session.user.id);
+
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
@@ -523,6 +535,13 @@ class _AuthGateState extends State<AuthGate> {
                 .getNotificationAppLaunchDetails();
             if (detalhes?.didNotificationLaunchApp == true &&
                 detalhes?.notificationResponse?.payload == 'novo_pedido') {
+              // App estava morto/background e só ficou "vivo" de verdade
+              // agora — é aqui, o mais cedo possível, que dá pra iniciar o
+              // loop (antes disso não existia engine Flutter rodando pra
+              // tocar nada). Sem await: não atrasa a navegação esperando o
+              // player carregar.
+              // ignore: unawaited_futures
+              AlertaPedidoService.instance.iniciar();
               return const PedidosDisponiveisScreen();
             }
           } catch (_) {}

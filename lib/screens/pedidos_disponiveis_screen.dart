@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/alerta_pedido_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
@@ -44,18 +44,12 @@ class _State extends State<PedidosDisponiveisScreen> {
   bool _buscando = false;
   int _geracaoBusca = 0;
 
-  // Loop do "Let's Go Let's Go" — condicionado a: estar NESSA tela E ter
-  // pelo menos 1 pedido/rota na lista. Diferente do alarme antigo da
-  // notificação (removido, ver notification_service.dart _v5): esse loop
-  // só começa depois que a tela já abriu de verdade, e para sozinho ao
-  // sair da tela (dispose) ou quando a lista esvazia (pedido expirou/foi
-  // pego por outro entregador) — _atualizarSomLoop() central, chamada do
-  // fim de build() a cada rebuild, cobre todos os caminhos que mexem em
-  // _pedidos/_rotasAgrupadas sem precisar espalhar chamada manual em cada
-  // um deles.
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  bool _tocandoLoop = false;
-
+  // Loop do "Let's Go Let's Go" virou serviço de nível de app (ver
+  // alerta_pedido_service.dart) — toca em qualquer tela, começa junto com
+  // a notificação (vibração+moeda+loop simultâneos) e para sozinho via
+  // realtime próprio dele. Essa tela não é mais dona do player nem decide
+  // quando tocar — só chama AlertaPedidoService.instance.parar() no
+  // momento do aceite (ver _aceitar/_aceitarRota).
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
 
@@ -113,32 +107,10 @@ class _State extends State<PedidosDisponiveisScreen> {
     _timersContadores.clear();
     _channel?.unsubscribe();
     _channelDespachoFila?.unsubscribe();
-    _audioPlayer.dispose(); // para o loop sozinho ao sair da tela
+    // NÃO para/dispõe o AlertaPedidoService aqui — ele é um singleton de
+    // app, precisa sobreviver a essa tela fechar (loop pode continuar
+    // tocando enquanto o entregador navega pra outro lugar até aceitar).
     super.dispose();
-  }
-
-  // Central: chamada do fim de build() a cada rebuild — compara o estado
-  // atual (tem item? já está tocando?) e só age na TRANSIÇÃO, nunca
-  // reinicia o loop do zero enquanto os itens continuam os mesmos.
-  void _atualizarSomLoop() {
-    final temItens = _pedidos.isNotEmpty || _rotasAgrupadas.isNotEmpty;
-    if (temItens && !_tocandoLoop) {
-      _tocandoLoop = true;
-      _iniciarLoopSom();
-    } else if (!temItens && _tocandoLoop) {
-      _tocandoLoop = false;
-      _audioPlayer.stop();
-    }
-  }
-
-  Future<void> _iniciarLoopSom() async {
-    try {
-      await _audioPlayer.setLoopMode(LoopMode.one);
-      await _audioPlayer.setAsset('assets/sounds/letsgo.wav');
-      await _audioPlayer.play();
-    } catch (_) {
-      _tocandoLoop = false;
-    }
   }
 
   Future<void> _obterPosicao() async {
@@ -572,8 +544,8 @@ class _State extends State<PedidosDisponiveisScreen> {
         }
       }
 
-      _tocandoLoop = false;
-      _audioPlayer.stop();
+      // ignore: unawaited_futures
+      AlertaPedidoService.instance.parar();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -624,8 +596,8 @@ class _State extends State<PedidosDisponiveisScreen> {
       _timersContadores.remove(key);
       if (mounted) setState(() => _contadores.remove(key));
 
-      _tocandoLoop = false;
-      _audioPlayer.stop();
+      // ignore: unawaited_futures
+      AlertaPedidoService.instance.parar();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -644,13 +616,6 @@ class _State extends State<PedidosDisponiveisScreen> {
   @override
   Widget build(BuildContext context) {
     final totalItens = _pedidos.length + _rotasAgrupadas.length;
-    // addPostFrameCallback: mexe no player DEPOIS do frame renderizar, não
-    // durante build() — evita side-effect no meio da construção da árvore
-    // de widgets, e cobre todo caminho que altera _pedidos/_rotasAgrupadas
-    // (busca periódica, realtime, expiração de contador) num lugar só.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _atualizarSomLoop();
-    });
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
       bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),

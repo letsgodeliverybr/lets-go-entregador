@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../main.dart' show navigatorKey;
+import 'alerta_pedido_service.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -107,7 +108,15 @@ class NotificationService {
         // getNotificationAppLaunchDetails() (esse callback aqui não dispara
         // nesse caso porque o plugin ainda não tinha um listener registrado
         // no momento em que o Android lançou a Activity).
-        if (details.payload == 'novo_pedido') _abrirTelaPedidosDisponiveis();
+        if (details.payload == 'novo_pedido') {
+          // App já vivo nesse caso (só pausado/background) — o engine
+          // Flutter já existe, então já dá pra tocar o loop aqui, junto
+          // com a navegação (cold-start de verdade é tratado à parte, ver
+          // comentário acima e AuthGate em main.dart).
+          // ignore: unawaited_futures
+          AlertaPedidoService.instance.iniciar();
+          _abrirTelaPedidosDisponiveis();
+        }
       },
     );
 
@@ -236,7 +245,17 @@ class NotificationService {
         );
       } else if (tipo == 'nova_rota') {
         await showNovaRotaLocal();
+        // ignore: unawaited_futures
+        AlertaPedidoService.instance.iniciar();
       } else {
+        // Vibração (dentro de iniciar())+ som de moeda (showNovoPedidoLocal,
+        // canal já tem o som curto) + início do loop Let's Go disparados
+        // juntos, sem esperar a navegação — requisito explícito de tudo
+        // acontecer ao mesmo tempo, não em sequência. Sem await no
+        // iniciar() de propósito: não faz sentido atrasar a navegação
+        // esperando o player carregar o asset.
+        // ignore: unawaited_futures
+        AlertaPedidoService.instance.iniciar();
         await showNovoPedidoLocal();
         // App já em foreground de verdade — fullScreenIntent não faz nada
         // aqui (só age fora do foreground), então a navegação automática
