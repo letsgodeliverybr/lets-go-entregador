@@ -28,6 +28,21 @@ class _State extends State<PedidosDisponiveisScreen> {
   RealtimeChannel? _channel;
   RealtimeChannel? _channelDespachoFila;
 
+  // Causa raiz de um bug real (pedido "piscando" na lista): _buscar() é
+  // disparado tanto pelo timer de 8s quanto por QUALQUER mudança em
+  // QUALQUER pedido do sistema inteiro (o canal realtime abaixo não filtra
+  // por loja/entregador) — em período de bastante movimento, isso dispara
+  // em rajada. _buscar() faz uma cadeia de ~5 consultas sequenciais; sem
+  // proteção, duas chamadas podiam se sobrepor e a mais LENTA (com dado
+  // mais velho) responder DEPOIS da mais rápida, sobrescrevendo a lista
+  // atual com uma desatualizada até a busca seguinte corrigir — o pedido
+  // sumia e voltava. _buscando trava novas chamadas enquanto uma já está
+  // em andamento; _geracaoBusca é reforço extra — mesmo que a trava falhe
+  // por algum caminho futuro, uma resposta de geração antiga nunca
+  // sobrescreve o estado depois de uma mais nova já ter sido aplicada.
+  bool _buscando = false;
+  int _geracaoBusca = 0;
+
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
 
@@ -109,6 +124,9 @@ class _State extends State<PedidosDisponiveisScreen> {
 
   Future<void> _buscar() async {
     if (!_disponivel) return;
+    if (_buscando) return; // trava de concorrência — já tem uma busca em andamento
+    _buscando = true;
+    final minhaGeracao = ++_geracaoBusca;
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
@@ -233,7 +251,9 @@ class _State extends State<PedidosDisponiveisScreen> {
           }
         }
 
-        if (mounted) setState(() => _rotasAgrupadas = novasRotas);
+        if (mounted && minhaGeracao == _geracaoBusca) {
+          setState(() => _rotasAgrupadas = novasRotas);
+        }
       } else {
         // Pedidos ofertados individualmente (pra qualquer motoboy) agora —
         // não devem aparecer no broadcast geral pra quem não é o alvo.
@@ -279,7 +299,7 @@ class _State extends State<PedidosDisponiveisScreen> {
         }
       }
 
-      if (mounted) {
+      if (mounted && minhaGeracao == _geracaoBusca) {
         setState(() {
           _pedidos = lista;
           _precoDinamico = precoDinamico;
@@ -288,7 +308,9 @@ class _State extends State<PedidosDisponiveisScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _carregando = false);
+      if (mounted && minhaGeracao == _geracaoBusca) setState(() => _carregando = false);
+    } finally {
+      _buscando = false;
     }
   }
 
@@ -658,6 +680,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     );
 
     return Container(
+      key: ValueKey(key),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
@@ -859,6 +882,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     final isSequencial = _modoDespacho == 'sequencial';
 
     return GestureDetector(
+      key: ValueKey(pedidoId),
       onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
