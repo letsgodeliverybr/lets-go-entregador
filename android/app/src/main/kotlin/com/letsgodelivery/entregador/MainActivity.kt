@@ -7,7 +7,9 @@ import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,6 +19,47 @@ class MainActivity: FlutterActivity() {
     private val fullScreenIntentChannel = "letsgo/fullscreen_intent"
     private val miuiAutostartChannel = "letsgo/miui_autostart"
     private val volumeChannel = "letsgo/volume"
+
+    // setFullScreenIntent() (flutter_local_notifications, ver
+    // notification_service.dart) só faz o Android TENTAR lançar a Activity
+    // por cima de tudo — sem essas duas flags, com o aparelho bloqueado o
+    // sistema pode não conseguir de fato desenhar a tela sobre o lock
+    // screen. setShowWhenLocked/setTurnScreenOn (API 27+, com fallback via
+    // WindowManager pra versões mais antigas, minSdk 21) são o que
+    // completa esse comportamento — mesmo mecanismo que app de ligação/
+    // despertador usa. Restrito ao payload 'novo_pedido' de propósito (via
+    // action=SELECT_NOTIFICATION + extra 'payload', que o próprio plugin
+    // já grava no Intent — ver PendingIntent em
+    // FlutterLocalNotificationsPlugin.createNotification) — não pode
+    // aplicar isso incondicional em TODO lançamento do app, senão até
+    // abrir manualmente com o celular desbloqueado passaria a mostrar o
+    // conteúdo por cima da tela de bloqueio sempre.
+    private fun aplicarFlagsTelaBloqueadaSeNecessario(intent: Intent?) {
+        if (intent?.getStringExtra("payload") != "novo_pedido") return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                        or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        aplicarFlagsTelaBloqueadaSeNecessario(intent)
+    }
+
+    // App já vivo (background, Activity existente reaproveitada) quando a
+    // notificação de novo pedido dispara — onCreate() não roda de novo
+    // nesse caso, só onNewIntent().
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        aplicarFlagsTelaBloqueadaSeNecessario(intent)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

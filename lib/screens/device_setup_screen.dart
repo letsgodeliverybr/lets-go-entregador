@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/miui_autostart_service.dart';
+import '../services/fullscreen_intent_permission_service.dart';
 
 /// Tela obrigatória de configuração do aparelho — mostrada uma vez, antes
 /// do entregador poder ver pedidos, bloqueando até confirmar. Diferente de
@@ -15,7 +16,15 @@ import '../services/miui_autostart_service.dart';
 /// de verdade via FlutterForegroundTask.isIgnoringBatteryOptimizations
 /// (já usada em main.dart pro cold-start check; aqui reconfere depois do
 /// pedido e não deixa passar se recusado).
-/// Passo 2 (só Xiaomi/MIUI): Início automático — sem API do Android pra
+/// Passo 2 (Android 14+/API 34+, resto pula direto — ver
+/// FullScreenIntentPermissionService/MainActivity.kt isGranted(), que já
+/// retorna true incondicional em versões mais antigas): acesso especial
+/// de Full-Screen Intent — sem ele, o Android 14+ rebaixa a notificação de
+/// pedido novo pra um heads-up comum, sem abrir o app sozinho por cima de
+/// outro app/tela bloqueada. Achado real: essa permissão e o serviço pra
+/// pedir ela já existiam no código, mas nunca tinham sido conectados aqui
+/// — por isso o app nunca abria sozinho de verdade.
+/// Passo 3 (só Xiaomi/MIUI): Início automático — sem API do Android pra
 /// isso, então a confirmação é manual (checkbox), depois de abrir a tela
 /// nativa da MIUI.
 ///
@@ -37,12 +46,13 @@ class DeviceSetupScreen extends StatefulWidget {
   State<DeviceSetupScreen> createState() => _DeviceSetupScreenState();
 }
 
-enum _Etapa { carregando, bateria, autostart }
+enum _Etapa { carregando, bateria, fullScreenIntent, autostart }
 
 class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
   _Etapa _etapa = _Etapa.carregando;
   bool _isXiaomi = false;
   bool _bateriaNegadaUmaVez = false;
+  bool _fullScreenIntentNegadoUmaVez = false;
   bool _autostartAbriu = false;
   bool _autostartCheckbox = false;
   bool _processando = false;
@@ -61,7 +71,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
   Future<void> _checarBateria() async {
     final ignorando = await _isIgnoringBatteryOptimizations();
     if (ignorando) {
-      _avancarParaAutostartOuFim();
+      _checarFullScreenIntent();
     } else if (mounted) {
       setState(() => _etapa = _Etapa.bateria);
     }
@@ -72,6 +82,15 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
       return await FlutterForegroundTask.isIgnoringBatteryOptimizations;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<void> _checarFullScreenIntent() async {
+    final concedida = await FullScreenIntentPermissionService.isGranted();
+    if (concedida) {
+      _avancarParaAutostartOuFim();
+    } else if (mounted) {
+      setState(() => _etapa = _Etapa.fullScreenIntent);
     }
   }
 
@@ -104,9 +123,26 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     if (!mounted) return;
     setState(() => _processando = false);
     if (ignorando) {
-      _avancarParaAutostartOuFim();
+      _checarFullScreenIntent();
     } else {
       setState(() => _bateriaNegadaUmaVez = true);
+    }
+  }
+
+  Future<void> _pedirFullScreenIntent() async {
+    if (_processando) return;
+    setState(() {
+      _processando = true;
+      _fullScreenIntentNegadoUmaVez = false;
+    });
+    await FullScreenIntentPermissionService.abrirConfiguracoes();
+    final concedida = await _esperarRetornoDoApp(FullScreenIntentPermissionService.isGranted);
+    if (!mounted) return;
+    setState(() => _processando = false);
+    if (concedida) {
+      _avancarParaAutostartOuFim();
+    } else {
+      setState(() => _fullScreenIntentNegadoUmaVez = true);
     }
   }
 
@@ -150,6 +186,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                 child: CircularProgressIndicator(color: Color(0xFF1A56DB)),
               ),
             _Etapa.bateria => _buildBateria(),
+            _Etapa.fullScreenIntent => _buildFullScreenIntent(),
             _Etapa.autostart => _buildAutostart(),
           },
         ),
@@ -236,6 +273,73 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
         // tentativa (pra não incentivar pular sem nem tentar), some=continua
         // pedindo de novo se recusar de novo, nunca bloqueia pra sempre.
         if (_bateriaNegadaUmaVez)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: TextButton(
+              onPressed: _processando ? null : _avancarParaAutostartOuFim,
+              child: const Text(
+                'Continuar sem ativar por enquanto',
+                style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+              ),
+            ),
+          ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _buildFullScreenIntent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _cabecalho(
+          Icons.notifications_active,
+          const Color(0xFF1A56DB),
+          'Deixa o pedido aparecer na hora',
+          'Pra tela de "Pedidos Disponíveis" abrir sozinha quando um pedido '
+              'novo chegar — mesmo com o celular bloqueado ou outro app '
+              'aberto — o Android pede uma permissão especial. Sem ela, '
+              'você só vê o pedido se tocar na notificação na mão.',
+        ),
+        if (_fullScreenIntentNegadoUmaVez)
+          Container(
+            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C0A0A),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF7F1D1D)),
+            ),
+            child: const Text(
+              'Ainda não foi ativado. Recomendado — sem essa permissão, o '
+              'pedido só aparece se você abrir o app na mão a cada '
+              'notificação. Toca em "Ativar" de novo e permite na tela do '
+              'sistema, ou continua sem ativar (não recomendado).',
+              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
+            ),
+          ),
+        const Spacer(),
+        SizedBox(
+          height: 52,
+          child: ElevatedButton(
+            onPressed: _processando ? null : _pedirFullScreenIntent,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1A56DB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: _processando
+                ? const SizedBox(
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                : const Text('Ativar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+        ),
+        // Mesmo escape hatch da tela de bateria, mesmo motivo: essa
+        // checagem depende de uma API que pode não refletir certo em todo
+        // aparelho/fabricante — sem isso, um caso assim travaria o
+        // entregador pra sempre antes de conseguir ver o login.
+        if (_fullScreenIntentNegadoUmaVez)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: TextButton(

@@ -25,6 +25,17 @@ class FullScreenIntentPermissionService {
     }
   }
 
+  // Abre a tela de configurações direto, sem passar pelo gate de "já
+  // solicitei antes, não pergunta de novo" do garantir() abaixo — usado
+  // pelo DeviceSetupScreen (gate obrigatório, ação explícita de toque no
+  // botão "Ativar"), onde faz sentido sempre reabrir a tela quando pedido,
+  // diferente de uma checagem oportunista em background.
+  static Future<void> abrirConfiguracoes() async {
+    try {
+      await _channel.invokeMethod('openSettings');
+    } catch (_) {}
+  }
+
   static Future<bool> _jaSolicitado() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_chaveJaSolicitado) ?? false;
