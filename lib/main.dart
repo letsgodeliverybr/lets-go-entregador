@@ -18,6 +18,8 @@ import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
 import 'services/alerta_pedido_service.dart';
 import 'screens/device_setup_screen.dart';
+import 'screens/fullscreen_intent_reprompt_screen.dart';
+import 'services/fullscreen_intent_permission_service.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
 import 'utils/cla_helper.dart' as cla;
@@ -467,6 +469,25 @@ class _AuthGateState extends State<AuthGate> {
     final tela = await _resolverTelaSemSetup();
     if (!await DeviceSetupScreen.jaConcluido()) {
       return DeviceSetupScreen(next: tela);
+    }
+    // Entregador já concluiu o setup obrigatório ANTES da etapa de
+    // Full-Screen-Intent existir (jaConcluido() é uma flag única e global
+    // — quem já passou por ela nunca mais vê DeviceSetupScreen, e por
+    // consequência nunca seria perguntado sobre essa permissão
+    // especificamente). Achado em auditoria 2026-09-02: pra apps não
+    // classificados como chamada/alarme (nosso caso), o Google NÃO
+    // concede essa permissão automaticamente desde 22/01/2025 — sem
+    // perguntar ativamente, boa parte da base instalada nunca teria essa
+    // permissão, mesmo com todo o resto do fluxo (som/vibração/loop)
+    // funcionando normal. Não-bloqueante — "Agora não" sempre disponível,
+    // ver fullscreen_intent_reprompt_screen.dart. Só perguntado uma vez
+    // (jaFoiPerguntado()), independente de session != null aqui porque
+    // não faz sentido perguntar antes do login existir.
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session != null &&
+        !await FullScreenIntentPermissionService.isGranted() &&
+        !await FullScreenIntentPermissionService.jaFoiPerguntado()) {
+      return FullScreenIntentRepromptScreen(next: tela);
     }
     return tela;
   }

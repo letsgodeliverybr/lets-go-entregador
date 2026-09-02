@@ -41,10 +41,21 @@ class FullScreenIntentPermissionService {
     return prefs.getBool(_chaveJaSolicitado) ?? false;
   }
 
+  // Público — usado por main.dart (AuthGate) pra decidir se mostra
+  // FullScreenIntentRepromptScreen pra um entregador que já passou pelo
+  // DeviceSetupScreen antes dessa etapa existir (ver comentário grande em
+  // fullscreen_intent_reprompt_screen.dart).
+  static Future<bool> jaFoiPerguntado() => _jaSolicitado();
+
   static Future<void> _marcarSolicitado(bool valor) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_chaveJaSolicitado, valor);
   }
+
+  // Público, usado por FullScreenIntentRepromptScreen quando o entregador
+  // toca "Agora não" — marca como já perguntado mesmo sem ter aberto as
+  // configurações, pra não repetir esse prompt em toda abertura do app.
+  static Future<void> marcarJaPerguntado() => _marcarSolicitado(true);
 
   /// Pede o acesso especial se ainda não concedido. Abre a tela de
   /// configurações do Android e espera o usuário voltar pro app pra
