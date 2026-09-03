@@ -11,13 +11,26 @@ import 'package:flutter/services.dart';
 /// pro próximo da fila. Não restaura o volume depois — fica no máximo até
 /// o usuário abaixar na mão, igual iFood.
 ///
-/// Chamado direto no _firebaseBackgroundHandler (main.dart), antes de
-/// mostrar a notificação de pedido/rota — cobre o stream de Alarme, único
-/// som do fluxo de pedido hoje (a tela Disponíveis em foreground não toca
-/// som próprio nenhum, decisão de produto — ver comentário em main.dart).
-/// Continua forçando os dois streams (Mídia E Alarme) mesmo assim — não
-/// custa nada forçar um stream que não está em uso agora, e cobre de graça
-/// qualquer som futuro que volte a usar o stream de Mídia.
+/// Chamado de 3 pontos: _firebaseBackgroundHandler (main.dart, app
+/// background/morto) e os 2 branches de FirebaseMessaging.onMessage
+/// (notification_service.dart, app em foreground) — achado em auditoria
+/// (2026-09-03): o caminho de foreground nunca chamava isso, só o de
+/// background. AudioAttributesUsage.alarm (canal) sozinho decide QUAL
+/// stream toca, não força o volume DAQUELE stream — sem essa chamada, um
+/// usuário com o volume de alarme abaixado manualmente ouviria o alerta
+/// insistente nesse volume baixo, mesmo com o canal certo. Continua
+/// forçando os dois streams (Mídia E Alarme) mesmo assim — não custa nada
+/// forçar um stream que não está em uso agora, e cobre de graça qualquer
+/// som futuro que volte a usar o stream de Mídia.
+///
+/// Dúvida em aberto, nunca confirmada ao vivo (mesma incerteza documentada
+/// no catch abaixo): a chamada de dentro do _firebaseBackgroundHandler
+/// depende do MethodChannel 'letsgo/volume' estar registrado na engine
+/// headless de background — que só é garantidamente registrado na engine
+/// da MainActivity. Se não estiver, essa chamada específica (app
+/// background/morto) falha em silêncio e SÓ o canal nativo (alarm stream,
+/// no volume que já estava) toca — os 2 branches de foreground não têm
+/// esse risco, rodam com a MainActivity viva de verdade.
 ///
 /// Implementação real é nativa (Kotlin, MainActivity.kt) — AudioManager não
 /// tem equivalente nos pacotes Flutter já usados neste projeto

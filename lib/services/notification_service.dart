@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../main.dart' show navigatorKey;
 import 'battery_service.dart';
+import 'volume_service.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -290,13 +291,22 @@ class NotificationService {
           corpo: msg.data['corpo']?.toString(),
         );
       } else if (tipo == 'nova_rota') {
+        // Volume forçado ANTES de mostrar — achado em auditoria
+        // (2026-09-03): esse caminho (app em foreground) nunca chamava
+        // VolumeService, só o _firebaseBackgroundHandler (main.dart)
+        // chamava. AudioAttributesUsage.alarm sozinho NÃO basta pra tocar
+        // no máximo — só decide QUAL stream toca (Alarme), não força o
+        // volume DAQUELE stream; se o usuário abaixou o volume de alarme
+        // manualmente, o canal toca nesse volume baixo sem isso aqui.
+        await VolumeService.forcarVolumeMidiaMaximo();
         await showNovaRotaLocal();
       } else {
         // App em foreground de verdade — a notificação em si já cobre som
         // (insistente, canal+FLAG_INSISTENT) e vibração sozinha, sem
         // precisar de nenhum player de app em paralelo (AlertaPedidoService
         // removido do projeto, 2026-09-03 — ver notification_service.dart
-        // v8).
+        // v8). Volume forçado antes, mesmo motivo do caso nova_rota acima.
+        await VolumeService.forcarVolumeMidiaMaximo();
         await showNovoPedidoLocal();
         // App já em foreground de verdade — fullScreenIntent não faz nada
         // aqui (só age fora do foreground), então a navegação automática
