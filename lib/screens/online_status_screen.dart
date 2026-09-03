@@ -129,18 +129,24 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
     } on Exception catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '');
+      // Título dinâmico — mesmo diálogo cobre "entrega em andamento" (tentou
+      // ficar offline) e "bateria baixa" (tentou ficar online), ver mesmo
+      // padrão em entregador_home_screen.dart.
+      final titulo = msg.toLowerCase().contains('bateria')
+          ? 'Bateria baixa'
+          : 'Entrega em andamento';
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF161820),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(children: [
-            Icon(Icons.warning_amber_rounded,
+          title: Row(children: [
+            const Icon(Icons.warning_amber_rounded,
                 color: Color(0xFFf59e0b), size: 22),
-            SizedBox(width: 8),
-            Text('Entrega em andamento',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
+            const SizedBox(width: 8),
+            Text(titulo,
+                style: const TextStyle(color: Colors.white, fontSize: 16)),
           ]),
           content: Text(msg,
               style:

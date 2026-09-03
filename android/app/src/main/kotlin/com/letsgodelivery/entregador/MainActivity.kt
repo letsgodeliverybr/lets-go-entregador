@@ -1,17 +1,21 @@
 package com.letsgodelivery.entregador
 
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
@@ -19,6 +23,8 @@ class MainActivity: FlutterActivity() {
     private val fullScreenIntentChannel = "letsgo/fullscreen_intent"
     private val miuiAutostartChannel = "letsgo/miui_autostart"
     private val volumeChannel = "letsgo/volume"
+    private val batteryLevelChannel = "letsgo/battery_level"
+    private var batteryReceiver: BroadcastReceiver? = null
 
     // setFullScreenIntent() (flutter_local_notifications, ver
     // notification_service.dart) só faz o Android TENTAR lançar a Activity
@@ -204,5 +210,39 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Nível de bateria em tempo real (regra de negócio: entregador com
+        // bateria < 15% não pode ficar/permanecer Disponível, 2026-09-03).
+        // ACTION_BATTERY_CHANGED é um "sticky broadcast" — o Android só
+        // entrega pra quem registra em runtime (registerReceiver), nunca
+        // via <receiver> declarado no Manifest. Registrado no
+        // applicationContext (não no Context da Activity) de propósito:
+        // sobrevive a Activity pausada/recriada, cobrindo o app minimizado
+        // mas com o processo vivo — mesma janela em que o rastreamento GPS
+        // (TrackingService/ForegroundService) já roda hoje enquanto o
+        // entregador está online.
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, batteryLevelChannel).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    val receiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context, intent: Intent) {
+                            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                            if (level >= 0 && scale > 0) {
+                                events?.success(level * 100 / scale)
+                            }
+                        }
+                    }
+                    batteryReceiver = receiver
+                    applicationContext.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                }
+                override fun onCancel(arguments: Any?) {
+                    batteryReceiver?.let {
+                        try { applicationContext.unregisterReceiver(it) } catch (e: Exception) { /* já desregistrado */ }
+                    }
+                    batteryReceiver = null
+                }
+            }
+        )
     }
 }

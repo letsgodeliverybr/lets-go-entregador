@@ -5,7 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../main.dart' show navigatorKey;
-import 'alerta_pedido_service.dart';
+import 'battery_service.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
@@ -34,13 +34,18 @@ class NotificationService {
   // _v5: MUDANÇA DE PRODUTO (não é fix de bug) — o alerta insistente tipo
   // alarme/ligação (FLAG_INSISTENT + AudioAttributesUsage.alarm) foi
   // substituído por um toque curto (~1,5s, "moeda caindo") sem loop, só
-  // vibração padrão. A insistência sonora agora fica pro loop de
-  // "letsgo.wav" que só começa DEPOIS que a tela Disponíveis abre de
-  // verdade (ver pedidos_disponiveis_screen.dart) — não faz mais sentido
-  // repetir a notificação em si. Canal de novo com ID novo (imutável,
-  // mesmo motivo do _v4) pra forçar recriação sem o som/comportamento
-  // antigo grudado no aparelho de quem já tinha o app instalado.
-  static const String _channelPedidoId = 'letsgo_novo_pedido_v7';
+  // vibração padrão. A insistência sonora ficou pro loop de "letsgo.wav"
+  // que só começava DEPOIS que a tela Disponíveis abria de verdade.
+  //
+  // _v6/_v7: mecanismo de insistência migrou pra um serviço de app
+  // (AlertaPedidoService, just_audio) — histórico só, removido do projeto.
+  //
+  // _v8 (2026-09-03): REVERSÃO pra insistência 100% nativa — volta a ser
+  // FLAG_INSISTENT + AudioAttributesUsage.alarm, igual era antes da _v5,
+  // decisão do usuário de não depender de processo de app vivo pra manter
+  // o alerta soando. Ver comentário completo no createNotificationChannel
+  // abaixo (som novo, alerta_insistente_pedido).
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v8';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
@@ -75,6 +80,15 @@ class NotificationService {
   static const String _channelPeriodicoId = 'letsgo_periodico';
   static const String _channelPeriodicoName = 'Lembretes';
   static const String _channelPeriodicoDesc = 'Lembretes periódicos (dia útil/horário fixo)';
+
+  // Aviso de "ficou indisponível por bateria baixa" (2026-09-03) — mesmo
+  // motivo neutro do canal de lembretes: é um AVISO, não "pedido chegando",
+  // nunca deve soar como alarme/insistente. Precisa ser uma notificação de
+  // verdade (não só um diálogo em tela) porque o entregador pode estar de
+  // fato sem olhar o app quando a bateria cruza o limite.
+  static const String _channelBateriaId = 'letsgo_bateria_baixa';
+  static const String _channelBateriaName = 'Bateria baixa';
+  static const String _channelBateriaDesc = 'Aviso quando fica indisponível por bateria baixa';
   // wa.me com número já em formato internacional (55 + DDD 11 + número) —
   // mesmo (11) 99170-2772 usado em todo o resto do app pra contato/suporte.
   // Trocado de "abrir link de cadastro" pra "abrir WhatsApp" a pedido.
@@ -109,12 +123,10 @@ class NotificationService {
         // nesse caso porque o plugin ainda não tinha um listener registrado
         // no momento em que o Android lançou a Activity).
         if (details.payload == 'novo_pedido') {
-          // App já vivo nesse caso (só pausado/background) — o engine
-          // Flutter já existe, então já dá pra tocar o loop aqui, junto
-          // com a navegação (cold-start de verdade é tratado à parte, ver
-          // comentário acima e AuthGate em main.dart).
-          // ignore: unawaited_futures
-          AlertaPedidoService.instance.iniciar();
+          // Toque na notificação = autoCancel (padrão do pacote) já cancela
+          // o alerta insistente sozinho, sem precisar de nenhuma chamada
+          // aqui. Só resta navegar (cold-start de verdade é tratado à
+          // parte, ver comentário acima e AuthGate em main.dart).
           _abrirTelaPedidosDisponiveis();
         }
       },
@@ -145,21 +157,33 @@ class NotificationService {
         debugPrint('[NotificationService] requestNotificationsPermission falhou (provável isolate sem Activity): $e');
       }
 
-      // v7: som volta pro canal nativo (moeda_caindo_5x, arquivo com 5
-      // repetições já concatenadas — ver res/raw/) — achado em auditoria
-      // (2026-09-03): a v6 tinha tirado o som do canal e movido pra
-      // AlertaPedidoService (just_audio) rodando dentro do isolate de
-      // background (_tocarAlertaChegada, main.dart), que é o suspeito
-      // número 1 pra "vibração/moeda não tocam na chegada" — just_audio
-      // não tem garantia de funcionar nesse isolate limitado (diferente
-      // de flutter_local_notifications, que já é o mecanismo comprovado —
-      // é o que mostra a notificação/vibração de verdade em background
-      // hoje). Redesenho: o CANAL (nativo, confiável em qualquer estado
-      // do app) fica dono do alerta de chegada (vibração + moeda 5x);
-      // AlertaPedidoService (ver alerta_pedido_service.dart) fica só com
-      // o loop contínuo do Let's Go, sem repetir a moeda — elimina o
-      // risco de sobreposição sem precisar de coordenação entre isolates.
-      // Canal versionado de novo (_v6→_v7) porque canal do Android é
+      // v8: MUDANÇA DE ARQUITETURA (2026-09-03) — volta pro alerta
+      // insistente nativo (igual builds 55-58, removido no meio do caminho
+      // em favor de um loop de app via AlertaPedidoService/just_audio).
+      // Motivo da reversão: decisão do usuário de não depender de processo
+      // de app vivo pra manter a insistência — o canal (nativo, funciona em
+      // qualquer estado do app, inclusive morto) fica 100% responsável
+      // sozinho, sem AlertaPedidoService nenhum mais (removido do projeto).
+      //
+      // audioAttributesUsage: alarm — toca no stream de Alarme (alto, não
+      // preso ao volume de notificação do usuário), mesmo racional já usado
+      // no canal de rota.
+      //
+      // sound: alerta_insistente_pedido — arquivo novo (res/raw/), NÃO é
+      // som puro: é "Let's Go (2s) + moeda caindo (1,5s)" concatenados e
+      // repetidos 51x (~3min de áudio), gerado porque o canal só suporta 1
+      // som FIXO por notificação — pra dar a sensação de "Let's Go, moeda,
+      // Let's Go, moeda..." alternando, a alternância precisa estar gravada
+      // dentro do arquivo (não dá pra trocar de som a cada repetição do
+      // FLAG_INSISTENT). ~3min de áudio pré-gravado também evita depender
+      // de como cada fabricante implementa o intervalo entre repetições do
+      // FLAG_INSISTENT (a mesma dúvida que já gerou bug de OEM nesta sessão
+      // — MIUI, latência de entrega FCM).
+      //
+      // FLAG_INSISTENT em si vai em additionalFlags, no AndroidNotificationDetails
+      // de showNovoPedidoLocal() abaixo (não é propriedade do canal).
+      //
+      // Canal versionado de novo (_v7→_v8) porque canal do Android é
       // imutável pra quem já tem o app instalado.
       await plugin?.createNotificationChannel(const AndroidNotificationChannel(
         _channelPedidoId,
@@ -167,7 +191,8 @@ class NotificationService {
         description: _channelPedidoDesc,
         importance: Importance.max,
         playSound: true,
-        sound: RawResourceAndroidNotificationSound('moeda_caindo_5x'),
+        sound: RawResourceAndroidNotificationSound('alerta_insistente_pedido'),
+        audioAttributesUsage: AudioAttributesUsage.alarm,
         enableVibration: true,
         enableLights: true,
       ));
@@ -220,6 +245,15 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
       ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelBateriaId,
+        _channelBateriaName,
+        description: _channelBateriaDesc,
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      ));
     }
 
     _initialized = true;
@@ -256,23 +290,13 @@ class NotificationService {
           corpo: msg.data['corpo']?.toString(),
         );
       } else if (tipo == 'nova_rota') {
-        // Mesma ordem do caso 'novo_pedido' abaixo — iniciar() dispara sem
-        // await, ANTES do show, pra não esperar a notificação terminar de
-        // ser postada antes de começar o loop (achado em revisão,
-        // 2026-09-03: essa ordem estava invertida aqui, diferente do outro
-        // caso — inconsistência corrigida).
-        // ignore: unawaited_futures
-        AlertaPedidoService.instance.iniciar();
         await showNovaRotaLocal();
       } else {
-        // Vibração (dentro de iniciar())+ som de moeda (showNovoPedidoLocal,
-        // canal já tem o som curto) + início do loop Let's Go disparados
-        // juntos, sem esperar a navegação — requisito explícito de tudo
-        // acontecer ao mesmo tempo, não em sequência. Sem await no
-        // iniciar() de propósito: não faz sentido atrasar a navegação
-        // esperando o player carregar o asset.
-        // ignore: unawaited_futures
-        AlertaPedidoService.instance.iniciar();
+        // App em foreground de verdade — a notificação em si já cobre som
+        // (insistente, canal+FLAG_INSISTENT) e vibração sozinha, sem
+        // precisar de nenhum player de app em paralelo (AlertaPedidoService
+        // removido do projeto, 2026-09-03 — ver notification_service.dart
+        // v8).
         await showNovoPedidoLocal();
         // App já em foreground de verdade — fullScreenIntent não faz nada
         // aqui (só age fora do foreground), então a navegação automática
@@ -305,6 +329,16 @@ class NotificationService {
     if (tipo == 'avaliar_app') abrirAvaliacaoPlayStore();
     if (tipo == 'indicacao') abrirLinkIndicacao();
   }
+
+  // Cancela o alerta insistente (canal + FLAG_INSISTENT) quando o
+  // entregador decide através do app (aceitar, timeout de recusa, pedido/
+  // rota que sumiu da fila dele) — autoCancel (padrão do pacote) só cobre
+  // o caminho de TOCAR na notificação; qualquer decisão tomada por dentro
+  // do app precisa cancelar explicitamente, senão o som insistente continua
+  // tocando para algo que já não está mais disponível. IDs batem com os
+  // usados em showNovoPedidoLocal() (1001) e showNovaRotaLocal() (1002).
+  static Future<void> cancelarAlertaPedido() => _localNotifications.cancel(1001);
+  static Future<void> cancelarAlertaRota() => _localNotifications.cancel(1002);
 
   // Navega direto pra tela Disponíveis usando a rota nomeada '/pedidos'
   // (já registrada em main.dart) via o navigatorKey global — chamado tanto
@@ -469,6 +503,43 @@ class NotificationService {
     );
   }
 
+  // ── Notificação local: ficou indisponível por bateria baixa ─────────────
+  // Chamada por TrackingService quando a bateria cruza o limite mínimo
+  // (BatteryService.limiteMinimo) enquanto o entregador já está online e ele
+  // é forçado pra indisponível — precisa explicar o motivo (pedido
+  // explícito do usuário: "não pode simplesmente desconectar sem avisar").
+  // Notificação simples, sem som insistente/FLAG_INSISTENT — é um aviso,
+  // não uma oferta de pedido.
+  static Future<void> showBateriaBaixaLocal(int nivel) async {
+    if (!_initialized) await initLocal();
+
+    const androidDetails = AndroidNotificationDetails(
+      _channelBateriaId,
+      _channelBateriaName,
+      channelDescription: _channelBateriaDesc,
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      1003,
+      '🔋 Você ficou indisponível',
+      'Bateria em $nivel% (abaixo de ${BatteryService.limiteMinimo}%). '
+          'Carregue o celular para ficar disponível de novo.',
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'bateria_baixa',
+    );
+  }
+
   // ── Salva token FCM na tabela entregadores ──────────────────────────────
   // Chamado sempre que o app abre com sessão válida (main.dart) e após login
   // (login_screen.dart) — sempre sobrescreve com o token atual do Firebase,
@@ -537,33 +608,39 @@ class NotificationService {
   }
 
   // ── Notificação local: novo pedido ──────────────────────────────────────
-  // v7: canal (nativo, confiável em qualquer estado do app) toca vibração +
-  // moeda_caindo_5x na chegada — ver comentário grande em initLocal() sobre
-  // a troca. AlertaPedidoService (chamado em paralelo, nos pontos que já
-  // têm o isolate principal vivo) cuida só do loop contínuo do Let's Go,
-  // sem repetir a moeda — sem risco de sobrepor com o som do canal.
-  // fullScreenIntent:true é o que abre o app sozinho (mesmo com ele
-  // fechado/em background). payload: 'novo_pedido' é o que permite o app,
-  // ao abrir (cold start via getNotificationAppLaunchDetails() em
+  // v8: canal (nativo, confiável em qualquer estado do app, inclusive
+  // morto) é 100% responsável pelo alerta — vibração + som insistente
+  // (FLAG_INSISTENT, ver comentário grande em initLocal() sobre a
+  // reversão). Nenhum serviço de app em paralelo (AlertaPedidoService
+  // removido do projeto). fullScreenIntent:true é o que abre o app sozinho
+  // (mesmo com ele fechado/em background). payload: 'novo_pedido' é o que
+  // permite o app, ao abrir (cold start via getNotificationAppLaunchDetails() em
   // main.dart, ou já rodando via onDidReceiveNotificationResponse abaixo),
   // saber que deve navegar direto pra tela Disponíveis em vez da tela
   // padrão.
   static Future<void> showNovoPedidoLocal() async {
     if (!_initialized) await initLocal();
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       _channelPedidoId,
       _channelPedidoName,
       channelDescription: _channelPedidoDesc,
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
-      sound: RawResourceAndroidNotificationSound('moeda_caindo_5x'),
+      sound: const RawResourceAndroidNotificationSound('alerta_insistente_pedido'),
       enableVibration: true,
       enableLights: true,
       ticker: 'Novo pedido disponível',
       icon: '@mipmap/ic_launcher',
       fullScreenIntent: true,
+      // FLAG_INSISTENT (valor 4, nativo do Android Notification) — repete o
+      // som/vibração em loop até o entregador abrir ou dispensar a
+      // notificação, igual uma ligação. Restaurado (existia nos builds
+      // 55-58, removido em 5da5f439 em favor do loop de app — ver
+      // AlertaPedidoService, removido do projeto). Mesmo mecanismo já usado
+      // no canal de rota (showNovaRotaLocal, logo abaixo).
+      additionalFlags: Int32List.fromList(<int>[4]),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -576,7 +653,7 @@ class NotificationService {
       1001,
       "LET'S GO MOTOCA 🛵",
       "Pedidos na tela! Vem Pra Rua! Aproveite Alta Demanda Para Faturar Mais Com A Let's Go Delivery!",
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'novo_pedido',
     );
   }

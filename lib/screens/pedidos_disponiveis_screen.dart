@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/alerta_pedido_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
@@ -44,12 +44,14 @@ class _State extends State<PedidosDisponiveisScreen> {
   bool _buscando = false;
   int _geracaoBusca = 0;
 
-  // Loop do "Let's Go Let's Go" virou serviço de nível de app (ver
-  // alerta_pedido_service.dart) — toca em qualquer tela, começa junto com
-  // a notificação (vibração+moeda+loop simultâneos) e para sozinho via
-  // realtime próprio dele. Essa tela não é mais dona do player nem decide
-  // quando tocar — só chama AlertaPedidoService.instance.parar() no
-  // momento do aceite (ver _aceitar/_aceitarRota).
+  // Som/vibração/insistência são 100% do canal nativo agora (FLAG_INSISTENT
+  // + AudioAttributesUsage.alarm, ver notification_service.dart) — essa
+  // tela não toca nada por conta própria. Só cancela o alerta explicitamente
+  // quando o pedido/rota deixa de estar disponível por dentro do app: no
+  // aceite (ver _aceitar/_aceitarRota) e quando a fila do próprio
+  // entregador indica que esse pedido/rota já não está mais 'aguardando'
+  // (ver _assinarRealtimeDespachoFila) — autoCancel do pacote só cobre
+  // quem toca na notificação em si.
   Position? _posicaoAtual;
   double _precoDinamico = 0.0;
 
@@ -107,8 +109,8 @@ class _State extends State<PedidosDisponiveisScreen> {
     _timersContadores.clear();
     _channel?.unsubscribe();
     _channelDespachoFila?.unsubscribe();
-    // NÃO para/dispõe o AlertaPedidoService aqui — ele é um singleton de
-    // app, precisa sobreviver a essa tela fechar (loop pode continuar
+    // Não cancela nenhum alerta aqui — o alerta insistente é do canal
+    // nativo, sobrevive a essa tela fechar por conta própria (continua
     // tocando enquanto o entregador navega pra outro lugar até aceitar).
     super.dispose();
   }
@@ -482,6 +484,15 @@ class _State extends State<PedidosDisponiveisScreen> {
                   _contadores.remove(key);
                   _rotasAgrupadas.removeWhere((r) => r['rota_agrupada_id'] == rotaId);
                 });
+                // A fila do próprio entregador pra essa rota não está mais
+                // 'aguardando' (expirou ou foi aceita/cancelada) — cancela o
+                // alerta insistente, senão continuaria tocando pra uma rota
+                // que já não está mais disponível pra ele. Cobre o gap
+                // conhecido desde os builds 55-58 (alarme nunca era
+                // cancelado remotamente); aqui cobre sempre que o app está
+                // vivo e essa tela assinada, que é o caso comum.
+                // ignore: unawaited_futures
+                NotificationService.cancelarAlertaRota();
               } else if (pedidoId.isNotEmpty) {
                 _timersContadores[pedidoId]?.cancel();
                 _timersContadores.remove(pedidoId);
@@ -489,6 +500,8 @@ class _State extends State<PedidosDisponiveisScreen> {
                   _contadores.remove(pedidoId);
                   _pedidos.removeWhere((p) => p['id']?.toString() == pedidoId);
                 });
+                // ignore: unawaited_futures
+                NotificationService.cancelarAlertaPedido();
               }
             }
           },
@@ -559,7 +572,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       }
 
       // ignore: unawaited_futures
-      AlertaPedidoService.instance.parar();
+      NotificationService.cancelarAlertaPedido();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -611,7 +624,7 @@ class _State extends State<PedidosDisponiveisScreen> {
       if (mounted) setState(() => _contadores.remove(key));
 
       // ignore: unawaited_futures
-      AlertaPedidoService.instance.parar();
+      NotificationService.cancelarAlertaRota();
 
       if (mounted) {
         Navigator.pushReplacement(

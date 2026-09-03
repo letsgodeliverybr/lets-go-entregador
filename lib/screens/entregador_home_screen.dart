@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/alerta_pedido_service.dart';
+import '../services/notification_service.dart';
 import '../services/location_permission_flow.dart';
 // flutter/services.dart não é mais necessário aqui — HapticFeedback do
-// convite de rota foi removido (AlertaPedidoService.iniciar() já vibra
-// sozinho, ver _assinarRealtimeRota abaixo).
+// convite de rota foi removido (showNovaRotaLocal() já vibra sozinho via
+// canal nativo, ver _assinarRealtimeRota abaixo).
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
@@ -216,16 +216,23 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       if (!mounted) return;
       setState(() => _online = !value); // reverte o switch
       final msg = e.toString().replaceFirst('Exception: ', '');
+      // Diálogo compartilhado por 2 motivos de bloqueio distintos (entrega
+      // em andamento ao tentar ficar offline, bateria baixa ao tentar ficar
+      // online) — título dinâmico, senão um bloqueio de bateria mostraria
+      // "Entrega em andamento" incorretamente.
+      final titulo = msg.toLowerCase().contains('bateria')
+          ? 'Bateria baixa'
+          : 'Entrega em andamento';
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: const Color(0xFF161820),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(children: [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFf59e0b), size: 22),
-            SizedBox(width: 8),
-            Text('Entrega em andamento',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
+          title: Row(children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFf59e0b), size: 22),
+            const SizedBox(width: 8),
+            Text(titulo,
+                style: const TextStyle(color: Colors.white, fontSize: 16)),
           ]),
           content: Text(msg,
               style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
@@ -277,16 +284,17 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                   .eq('id', novaNotif.toString())
                   .maybeSingle();
               if (!mounted || rota == null) return;
-              // Convite direto de rota é a 4ª origem do mesmo alerta
-              // sonoro — consolidado no AlertaPedidoService (mesma trava
-              // de "só 1 loop por vez" dos outros 3 pontos de entrada:
-              // notificação de pedido novo em foreground/background/cold
-              // start). Antes disso, isso tinha seu próprio AudioPlayer
-              // tocando o mesmo asset 10x fixas (sem trava nenhuma contra
-              // sobrepor um loop de pedido já tocando). iniciar() já vibra
-              // sozinho, não precisa de HapticFeedback duplicado aqui.
+              // Convite direto de rota (mudança em entregadores.notificacao_rota,
+              // não vem de FCM) — dispara a mesma notificação nativa
+              // insistente do canal de rota (FLAG_INSISTENT +
+              // AudioAttributesUsage.alarm, ver notification_service.dart),
+              // reaproveitando o mecanismo já usado pelos outros 3 pontos de
+              // entrada (pedido novo em foreground/background/cold start).
+              // showNovaRotaLocal() já cobre vibração+som+fullScreenIntent
+              // sozinha, sem precisar de HapticFeedback nem player separado
+              // aqui.
               // ignore: unawaited_futures
-              AlertaPedidoService.instance.iniciar();
+              NotificationService.showNovaRotaLocal();
               setState(() => _rotaAtual = rota);
               _rotaAutorecusaTimer?.cancel();
               _rotaAutorecusaTimer = Timer(const Duration(seconds: 60), _recusarRotaTimeout);
@@ -298,11 +306,12 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   Future<void> _recusarRotaTimeout() async {
     if (_rotaAtual == null) return;
-    // AlertaPedidoService toca em loop contínuo agora (LoopMode.one), não
-    // mais as 10 repetições finitas de antes — sem isso, o alerta ficaria
-    // tocando pra sempre depois do timeout, já que nada mais ia pará-lo.
+    // Cancela o alerta insistente (canal, FLAG_INSISTENT) explicitamente —
+    // sem isso ele ficaria tocando pra sempre depois do timeout, já que
+    // nada mais ia pará-lo (autoCancel do pacote só cobre quem toca na
+    // notificação em si).
     // ignore: unawaited_futures
-    AlertaPedidoService.instance.parar();
+    NotificationService.cancelarAlertaRota();
     final user = _supabase.auth.currentUser;
     if (user != null) {
       try { await _supabase.from('entregadores').update({'notificacao_rota': null}).eq('id', user.id); } catch (_) {}
@@ -315,9 +324,9 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     _statsTimer?.cancel();
     _rotaAutorecusaTimer?.cancel();
     _channelRota?.unsubscribe();
-    // NÃO para/dispõe o AlertaPedidoService aqui — é singleton de app,
-    // precisa sobreviver a essa tela fechar (mesmo raciocínio já aplicado
-    // em pedidos_disponiveis_screen.dart).
+    // Não cancela nenhum alerta aqui — o alerta insistente é do canal
+    // nativo, sobrevive a essa tela fechar por conta própria (mesmo
+    // raciocínio já aplicado em pedidos_disponiveis_screen.dart).
     super.dispose();
   }
 
@@ -618,15 +627,11 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     return GestureDetector(
       onTap: () {
         _rotaAutorecusaTimer?.cancel();
-        // NÃO chama AlertaPedidoService.instance.parar() aqui — achado em
-        // auditoria (NOTIFICACOES_MAPA.md, 2026-09-03): isso parava o loop
-        // só por ABRIR o card pra olhar os detalhes, antes de aceitar ou
-        // recusar de verdade. Sobra do modelo antigo (som de 10x
-        // repetições finitas, fazia sentido calar ao abrir); no modelo
-        // atual (loop contínuo até decisão) isso corta o alerta cedo
-        // demais — o loop deve continuar tocando enquanto o convite segue
-        // pendente, só parando em RotaDisponivelScreen._aceitar() (aceite
-        // de verdade) ou _recusarRotaTimeout() (60s sem resposta).
+        // NÃO cancela o alerta insistente aqui — só por ABRIR o card pra
+        // olhar os detalhes, antes de aceitar ou recusar de verdade. O
+        // alerta deve continuar tocando enquanto o convite segue pendente,
+        // só parando em RotaDisponivelScreen._aceitar() (aceite de verdade)
+        // ou _recusarRotaTimeout() (60s sem resposta).
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => RotaDisponivelScreen(pedido: rota)),

@@ -3,18 +3,43 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'battery_service.dart';
 import 'location_service.dart';
 import 'foreground_service.dart';
+import 'notification_service.dart';
 
 class TrackingService {
   static final _supabase = Supabase.instance.client;
   static StreamSubscription<Position>? _sub;
+  static StreamSubscription<int>? _batterySub;
   static bool _ativo = false;
+  static bool _forcandoOfflinePorBateria = false;
   static Position? _ultimaPosicao;
   static String? _entregadorId;
 
+  /// Lança [Exception] se a bateria estiver abaixo do limite mínimo
+  /// (BatteryService.limiteMinimo) — chamado no início de [ficarOnline] E
+  /// [iniciar] (não só um dos dois): ambos os fluxos de toggle do app
+  /// (entregador_home_screen.dart, online_status_screen.dart) chamam os
+  /// dois em sequência, e checar só em um deixaria uma janela onde
+  /// `disponivel=true` já foi gravado no banco antes do outro barrar —
+  /// estado inconsistente (banco diz disponível, ninguém rastreando de
+  /// verdade). nivel==null (falha de leitura) NÃO bloqueia — não faz
+  /// sentido impedir o entregador de trabalhar por uma falha de leitura,
+  /// não da bateria em si.
+  static Future<void> _exigirBateriaOk() async {
+    final nivel = await BatteryService.nivelAtual();
+    if (nivel != null && nivel < BatteryService.limiteMinimo) {
+      throw Exception(
+        'Bateria abaixo de ${BatteryService.limiteMinimo}%. '
+        'Carregue o celular antes de ficar disponível.',
+      );
+    }
+  }
+
   static Future<void> iniciar(String entregadorId) async {
     if (_ativo) return;
+    await _exigirBateriaOk();
     _ativo = true;
     _entregadorId = entregadorId;
 
@@ -22,6 +47,7 @@ class TrackingService {
 
     WakelockPlus.enable();
     await ForegroundService.iniciar(entregadorId);
+    _assinarBateria(entregadorId);
 
     // 1. Posição inicial imediata
     final posInicial = await LocationService.getCurrentPosition();
@@ -54,6 +80,42 @@ class TrackingService {
       await Future.delayed(const Duration(seconds: 5));
     }
     if (_ativo) _loopEnvio(entregadorId);
+  }
+
+  // Stream contínua (ACTION_BATTERY_CHANGED nativo, ver BatteryService) —
+  // reage assim que o Android informa o nível cruzando o limite, sem
+  // esperar nenhum ciclo de verificação próprio. Assinada só enquanto
+  // online (chamada em iniciar(), cancelada em parar()) — não faz sentido
+  // gastar esse listener com o entregador offline.
+  static void _assinarBateria(String entregadorId) {
+    _batterySub?.cancel();
+    _batterySub = BatteryService.onLevelChanged.listen((nivel) {
+      if (nivel >= BatteryService.limiteMinimo) return;
+      _forcarOfflinePorBateria(entregadorId, nivel);
+    });
+  }
+
+  // Força indisponível por bateria baixa enquanto já online. NÃO força se
+  // houver entrega ativa — ficarOffline() já lança Exception nesse caso
+  // (mesma checagem usada pro toggle manual), e aqui só engolimos o erro:
+  // não faz sentido barrar/avisar quem já foi barrado, o entregador
+  // continua com o pedido em mãos, indisponível pra NOVAS ofertas só
+  // depois de finalizar. _forcandoOfflinePorBateria evita disparo
+  // duplicado se o stream emitir mais de um valor abaixo do limite antes
+  // da primeira chamada terminar (ficarOffline é assíncrono).
+  static Future<void> _forcarOfflinePorBateria(String entregadorId, int nivel) async {
+    if (_forcandoOfflinePorBateria) return;
+    _forcandoOfflinePorBateria = true;
+    try {
+      await ficarOffline(entregadorId);
+      debugPrint('[TrackingService] 🔋 Forçado indisponível — bateria em $nivel%');
+      // ignore: unawaited_futures
+      NotificationService.showBateriaBaixaLocal(nivel);
+    } catch (e) {
+      debugPrint('[TrackingService] 🔋 Bateria baixa ($nivel%), mas entrega em andamento — não força offline: $e');
+    } finally {
+      _forcandoOfflinePorBateria = false;
+    }
   }
 
   static void _assinarStream(String entregadorId) {
@@ -95,6 +157,8 @@ class TrackingService {
     _ativo = false;
     await _sub?.cancel();
     _sub = null;
+    await _batterySub?.cancel();
+    _batterySub = null;
     _ultimaPosicao = null;
     _entregadorId = null;
     WakelockPlus.disable();
@@ -109,6 +173,7 @@ class TrackingService {
   }
 
   static Future<void> ficarOnline(String entregadorId) async {
+    await _exigirBateriaOk();
     final pos = await LocationService.getCurrentPosition();
     try {
       await _supabase.from('entregadores').update({

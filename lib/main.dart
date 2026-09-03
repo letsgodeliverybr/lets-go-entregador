@@ -16,7 +16,6 @@ import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
-import 'services/alerta_pedido_service.dart';
 import 'screens/device_setup_screen.dart';
 import 'screens/fullscreen_intent_reprompt_screen.dart';
 import 'services/fullscreen_intent_permission_service.dart';
@@ -67,27 +66,16 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       // Volume forçado (Mídia E Alarme, ver VolumeService/MainActivity.kt)
       // ANTES de mostrar, pro canal já tocar no máximo.
       //
-      // O loop "Let's Go Let's Go" (AlertaPedidoService) NÃO é iniciado
-      // aqui de propósito: esse handler roda num isolate Dart separado da
-      // UI (entry point próprio, ver @pragma acima) — o singleton
-      // AlertaPedidoService.instance daqui seria uma instância DIFERENTE
-      // da que a tela realmente usa, morta junto com esse isolate. Loop
-      // contínuo só é iniciado onde o isolate principal já está de
-      // verdade rodando: AuthGate (cold start via fullScreenIntent) ou
-      // onDidReceiveNotificationResponse (app só pausado/background) — ver
-      // notification_service.dart.
-      //
-      // Vibração + moeda 5x da CHEGADA (não do toque) são responsabilidade
-      // do CANAL da notificação agora (moeda_caindo_5x, ver
-      // notification_service.dart v7) — não mais de um AudioPlayer avulso
-      // rodando aqui dentro. Achado em auditoria (2026-09-03): esse
-      // AudioPlayer (just_audio) era o suspeito nº1 pro bug "vibração/
-      // moeda não tocam na chegada, só ao tocar na notificação" — just_audio
-      // não tem garantia de funcionar de forma confiável nesse isolate
-      // limitado, diferente de flutter_local_notifications (mecanismo já
-      // comprovado, é o que mostra a notificação com fullScreenIntent
-      // funcionando). showNovoPedidoLocal()/showNovaRotaLocal() já cobrem
-      // o alerta de chegada sozinhas agora.
+      // MUDANÇA DE ARQUITETURA (2026-09-03): som/vibração/insistência são
+      // 100% responsabilidade do CANAL nativo agora (FLAG_INSISTENT +
+      // AudioAttributesUsage.alarm, ver notification_service.dart v8) —
+      // toca sozinho, sem depender de nenhum processo de app vivo pra
+      // manter o alerta soando. AlertaPedidoService (loop de app via
+      // just_audio) foi removido do projeto por causa disso — não existe
+      // mais loop nenhum pra iniciar aqui nem em lugar nenhum.
+      // showNovoPedidoLocal()/showNovaRotaLocal() cobrem o alerta inteiro
+      // sozinhas, incluindo com o app morto (é exatamente pra isso que
+      // esse handler existe).
       await VolumeService.forcarVolumeMidiaMaximo();
       if (tipo == 'nova_rota') {
         await NotificationService.showNovaRotaLocal();
@@ -530,15 +518,6 @@ class _AuthGateState extends State<AuthGate> {
 
     await NotificationService.saveFcmToken(session.user.id);
 
-    // Assinatura realtime do alerta sonoro (nível de app, não de tela) —
-    // precisa existir desde já, independente de qual tela vai ser mostrada
-    // a seguir, senão o loop nunca saberia sozinho quando "não sobra mais
-    // pedido disponível" se o entregador estiver em Home/Aceitos/Vagas no
-    // momento em que o último pedido expira. Idempotente, seguro chamar
-    // toda vez que o AuthGate resolve a tela.
-    // ignore: unawaited_futures
-    AlertaPedidoService.instance.escutar(session.user.id);
-
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
@@ -566,12 +545,10 @@ class _AuthGateState extends State<AuthGate> {
             if (detalhes?.didNotificationLaunchApp == true &&
                 detalhes?.notificationResponse?.payload == 'novo_pedido') {
               // App estava morto/background e só ficou "vivo" de verdade
-              // agora — é aqui, o mais cedo possível, que dá pra iniciar o
-              // loop (antes disso não existia engine Flutter rodando pra
-              // tocar nada). Sem await: não atrasa a navegação esperando o
-              // player carregar.
-              // ignore: unawaited_futures
-              AlertaPedidoService.instance.iniciar();
+              // agora via fullScreenIntent — o alerta insistente (canal
+              // nativo, FLAG_INSISTENT) já estava tocando sozinho desde a
+              // chegada da notificação, sem depender disso; só resta
+              // navegar direto pra tela certa.
               return const PedidosDisponiveisScreen();
             }
           } catch (_) {}
