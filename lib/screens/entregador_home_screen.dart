@@ -79,12 +79,24 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (user == null) return;
     try {
       final response = await _supabase.from('entregadores').select().eq('id', user.id).single();
+      var online = response['disponivel'] == true;
+      if (!TrackingService.ativo) {
+        // Regra de bateria reconsultada toda vez que essa tela aparece de
+        // novo (voltar de outra aba, ex: Disponíveis -> Home) — não confia
+        // cegamente no que o banco diz sozinho; mesma fonte central
+        // (TrackingService) usada no gate do toggle e no listener
+        // contínuo, sem duplicar a regra aqui.
+        online = await TrackingService.verificarBateriaEForcarOffline(
+          user.id,
+          aindaOnlineSegundoBanco: online,
+        );
+      }
+      if (!mounted) return;
       setState(() {
         _entregador = response;
-        if (!TrackingService.ativo) _online = response['disponivel'] == true;
+        if (!TrackingService.ativo) _online = online;
       });
       if (_online && !TrackingService.ativo) {
-        if (!mounted) return;
         final ok = await LocationPermissionFlow.garantir(context);
         if (ok && mounted) await TrackingService.iniciar(user.id);
       }

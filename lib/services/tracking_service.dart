@@ -45,6 +45,17 @@ class TrackingService {
 
     debugPrint('[TrackingService] ▶ Iniciando rastreamento para $entregadorId');
 
+    // Marca disponivel:true explicitamente aqui (não mais como efeito
+    // colateral do primeiro ping de GPS, ver _enviar) — entregador_home_screen.dart
+    // chama iniciar() direto, sem passar por ficarOnline() antes.
+    try {
+      await _supabase.from('entregadores').update({
+        'disponivel': true,
+        'status': 'disponivel',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', entregadorId);
+    } catch (_) {}
+
     WakelockPlus.enable();
     await ForegroundService.iniciar(entregadorId);
     _assinarBateria(entregadorId);
@@ -138,13 +149,21 @@ class TrackingService {
     );
   }
 
+  // NÃO reafirma disponivel:true/status:'disponivel' aqui — bug real
+  // encontrado em auditoria (2026-09-03): um ping de GPS já em voo (esse
+  // request) podia responder DEPOIS do UPDATE disponivel:false de
+  // ficarOffline() (ex: forçado por bateria baixa, ver
+  // _forcarOfflinePorBateria), sobrescrevendo o offline de volta pra
+  // online — sem nenhuma outra causa, o entregador "voltava sozinho pra
+  // online" simplesmente por causa da corrida entre esses dois updates
+  // independentes. disponivel/status são responsabilidade exclusiva de
+  // ficarOnline/ficarOffline/iniciar/parar — o ping de posição só deve
+  // mexer em lat/lng.
   static Future<void> _enviar(String entregadorId, Position pos) async {
     try {
       await _supabase.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
-        'disponivel': true,
-        'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
       debugPrint('[TrackingService] ✓ GPS: ${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}');
@@ -214,6 +233,40 @@ class TrackingService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
     } catch (_) {}
+  }
+
+  /// Reconsulta a bateria atual e força offline se estiver abaixo do
+  /// limite — usado pelas telas que exibem o toggle (Home, Status) toda
+  /// vez que aparecem de novo (voltar de outra aba), não só no momento do
+  /// toque. Fonte de verdade única: mesma [BatteryService]/[ficarOffline]
+  /// usados no gate do toggle e no listener contínuo — nenhuma tela
+  /// duplica a regra, só chama isso antes de confiar no `disponivel` lido
+  /// do banco.
+  ///
+  /// Retorna `false` (e força offline, respeitando a exceção de entrega
+  /// ativa de [ficarOffline]) se a bateria estiver baixa; `true` caso
+  /// contrário (bateria ok ou leitura falhou — não bloqueia por falha de
+  /// leitura, mesmo racional de [_exigirBateriaOk]). Só chama a rede se
+  /// [aindaOnlineSegundoBanco] for true — não faz sentido forçar offline
+  /// de quem já está offline.
+  static Future<bool> verificarBateriaEForcarOffline(
+    String entregadorId, {
+    required bool aindaOnlineSegundoBanco,
+  }) async {
+    if (!aindaOnlineSegundoBanco) return false;
+    final nivel = await BatteryService.nivelAtual();
+    if (nivel == null || nivel >= BatteryService.limiteMinimo) return true;
+    try {
+      await ficarOffline(entregadorId);
+      debugPrint('[TrackingService] 🔋 Offline mantido/forçado ao reabrir a tela — bateria em $nivel%');
+      // ignore: unawaited_futures
+      NotificationService.showBateriaBaixaLocal(nivel);
+      return false;
+    } catch (_) {
+      // Entrega ativa — ficarOffline já recusou, entregador continua
+      // online de verdade (exceção da regra, ver ponto 5 já implementado).
+      return true;
+    }
   }
 
   static bool get ativo => _ativo;

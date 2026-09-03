@@ -73,10 +73,20 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
             s + (double.tryParse(p['taxa_entrega']?.toString() ?? '0') ?? 0),
       );
 
+      var online = e['disponivel'] == true;
+      if (!TrackingService.ativo) {
+        // Mesma regra de bateria reconsultada em entregador_home_screen.dart
+        // — fonte central única (TrackingService), sem duplicar aqui.
+        online = await TrackingService.verificarBateriaEForcarOffline(
+          _uid,
+          aindaOnlineSegundoBanco: online,
+        );
+      }
+
       if (mounted) {
         setState(() {
           _entregador = e;
-          _online = e['disponivel'] == true;
+          if (!TrackingService.ativo) _online = online;
           _entregasHoje = lista.length;
           _saldoDia = total;
         });

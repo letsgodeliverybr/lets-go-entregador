@@ -98,12 +98,18 @@ class LocationTaskHandler extends TaskHandler {
       'status_pedido:${_pedidoId != null ? (_statusAtual.isNotEmpty ? _statusAtual : 'em_rota') : 'sem_pedido_ativo'}',
     );
 
+    // NÃO reafirma disponivel:true/status:'disponivel' aqui — mesmo bug de
+    // corrida já encontrado e corrigido em TrackingService._enviar()
+    // (2026-09-03): esse ping roda no isolate próprio do foreground task,
+    // independente do isolate principal — um ping já em voo respondendo
+    // DEPOIS do UPDATE disponivel:false de ficarOffline() (ex: forçado por
+    // bateria baixa) sobrescrevia o offline de volta pra online sozinho.
+    // disponivel/status são responsabilidade exclusiva de
+    // TrackingService.ficarOnline/ficarOffline/iniciar/parar.
     try {
       await Supabase.instance.client.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
-        'disponivel': true,
-        'status': 'disponivel',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _entregadorId!);
     } catch (e) {

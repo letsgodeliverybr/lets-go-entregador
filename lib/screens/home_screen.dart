@@ -248,16 +248,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
 
-      await _supabase.from('entregadores').update({
-        'disponivel': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', _uid);
+      // Não escreve disponivel:true direto aqui (bug real encontrado em
+      // auditoria, 2026-09-03: essa escrita bypassava por completo o gate
+      // de bateria — mesmo com iniciar() lançando Exception logo depois
+      // por bateria < 15%, o banco já tinha sido marcado online antes,
+      // sem nenhum jeito de reverter no catch abaixo). iniciar() já marca
+      // disponivel:true sozinho, DEPOIS de passar pelo gate — única fonte
+      // de verdade, mesma usada em entregador_home_screen.dart/online_status_screen.dart.
       await TrackingService.iniciar(_uid);
 
       if (mounted) {
         Navigator.pushReplacement(context,
             MaterialPageRoute(builder: (_) => const EntregadorHomeScreen()));
       }
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _carregando = false);
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF161820),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFf59e0b), size: 22),
+            const SizedBox(width: 8),
+            Text(msg.toLowerCase().contains('bateria') ? 'Bateria baixa' : 'Não foi possível continuar',
+                style: const TextStyle(color: Colors.white, fontSize: 16)),
+          ]),
+          content: Text(msg,
+              style: const TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido', style: TextStyle(color: Color(0xFF1A56DB))),
+            ),
+          ],
+        ),
+      );
     } catch (_) {
       if (mounted) setState(() => _carregando = false);
     }
