@@ -297,13 +297,27 @@ class _State extends State<PedidosDisponiveisScreen> {
         lista = [...pedidosFila, ...resto];
       }
 
-      final idsFila = pedidosFila.map((p) => p['id'].toString()).toSet();
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
       if (novos.isNotEmpty) {
         for (final pedido in novos) {
           final id = pedido['id'].toString();
-          if (modoDespacho == 'sequencial' || idsFila.contains(id)) {
+          // Causa raiz do bug "pedido some sozinho" (achado em auditoria,
+          // 2026-09-03, caso real #24): esse timer de 29s é a semântica do
+          // modo SEQUENCIAL (janela de resposta de UM entregador por vez,
+          // depois passa pro próximo). No modo TODOS, todo pedido que
+          // aparece pra um entregador SEMPRE está na fila individual dele
+          // (é assim que "Todos" entrega — uma linha por entregador, só
+          // que todas de uma vez) — a condição antiga (`|| idsFila.
+          // contains(id)`) disparava esse timer pra QUALQUER pedido,
+          // mesmo em modo Todos, onde a oferta deveria ficar visível até
+          // expira_em (12min, controlado pelo servidor) ou aceite —  não
+          // 29s fixos decididos pelo cliente. Servidor já cuida da
+          // remoção certa via UPDATE em despacho_fila (trigger
+          // tg_expirar_despacho_fila_pedido_nao_pronto + timeout natural
+          // de expira_em), que o realtime já escuta e remove da lista —
+          // esse timer local só faz sentido pra sequencial.
+          if (modoDespacho == 'sequencial') {
             _iniciarContador(id);
           }
         }
