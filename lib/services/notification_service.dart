@@ -40,7 +40,7 @@ class NotificationService {
   // repetir a notificação em si. Canal de novo com ID novo (imutável,
   // mesmo motivo do _v4) pra forçar recriação sem o som/comportamento
   // antigo grudado no aparelho de quem já tinha o app instalado.
-  static const String _channelPedidoId = 'letsgo_novo_pedido_v6';
+  static const String _channelPedidoId = 'letsgo_novo_pedido_v7';
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 
@@ -145,22 +145,29 @@ class NotificationService {
         debugPrint('[NotificationService] requestNotificationsPermission falhou (provável isolate sem Activity): $e');
       }
 
-      // v6: SEM som próprio de canal (playSound:false) — o som agora é
-      // 100% responsabilidade do AlertaPedidoService (5x moeda + loop do
-      // Let's Go, ver alerta_pedido_service.dart), disparado junto com essa
-      // notificação. Com o canal tocando moeda_caindo por conta própria
-      // TAMBÉM, ficava uma 6ª moeda se sobrepondo bem no início das 5 do
-      // serviço — o mesmo tipo de duplicação que já causou o bug do build
-      // 58 antes. Canal versionado de novo (_v5→_v6) porque canal do
-      // Android é imutável pra quem já tem o app instalado — sem isso,
-      // quem já tinha o v5 continuaria ouvindo a moeda antiga do canal.
-      // Vibração continua no canal (visual/tátil não conflita com áudio).
+      // v7: som volta pro canal nativo (moeda_caindo_5x, arquivo com 5
+      // repetições já concatenadas — ver res/raw/) — achado em auditoria
+      // (2026-09-03): a v6 tinha tirado o som do canal e movido pra
+      // AlertaPedidoService (just_audio) rodando dentro do isolate de
+      // background (_tocarAlertaChegada, main.dart), que é o suspeito
+      // número 1 pra "vibração/moeda não tocam na chegada" — just_audio
+      // não tem garantia de funcionar nesse isolate limitado (diferente
+      // de flutter_local_notifications, que já é o mecanismo comprovado —
+      // é o que mostra a notificação/vibração de verdade em background
+      // hoje). Redesenho: o CANAL (nativo, confiável em qualquer estado
+      // do app) fica dono do alerta de chegada (vibração + moeda 5x);
+      // AlertaPedidoService (ver alerta_pedido_service.dart) fica só com
+      // o loop contínuo do Let's Go, sem repetir a moeda — elimina o
+      // risco de sobreposição sem precisar de coordenação entre isolates.
+      // Canal versionado de novo (_v6→_v7) porque canal do Android é
+      // imutável pra quem já tem o app instalado.
       await plugin?.createNotificationChannel(const AndroidNotificationChannel(
         _channelPedidoId,
         _channelPedidoName,
         description: _channelPedidoDesc,
         importance: Importance.max,
-        playSound: false,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('moeda_caindo_5x'),
         enableVibration: true,
         enableLights: true,
       ));
@@ -525,11 +532,12 @@ class NotificationService {
   }
 
   // ── Notificação local: novo pedido ──────────────────────────────────────
-  // v6: SEM som próprio (playSound:false) — som e vibração de verdade agora
-  // são 100% do AlertaPedidoService (5x moeda + loop do Let's Go),
-  // disparado em paralelo a essa notificação, não por ela. Notificação em
-  // si só cuida do visual (banner/ícone/vibração leve do sistema) e do
-  // fullScreenIntent:true — é o que abre o app sozinho (mesmo com ele
+  // v7: canal (nativo, confiável em qualquer estado do app) toca vibração +
+  // moeda_caindo_5x na chegada — ver comentário grande em initLocal() sobre
+  // a troca. AlertaPedidoService (chamado em paralelo, nos pontos que já
+  // têm o isolate principal vivo) cuida só do loop contínuo do Let's Go,
+  // sem repetir a moeda — sem risco de sobrepor com o som do canal.
+  // fullScreenIntent:true é o que abre o app sozinho (mesmo com ele
   // fechado/em background). payload: 'novo_pedido' é o que permite o app,
   // ao abrir (cold start via getNotificationAppLaunchDetails() em
   // main.dart, ou já rodando via onDidReceiveNotificationResponse abaixo),
@@ -544,7 +552,8 @@ class NotificationService {
       channelDescription: _channelPedidoDesc,
       importance: Importance.max,
       priority: Priority.max,
-      playSound: false,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('moeda_caindo_5x'),
       enableVibration: true,
       enableLights: true,
       ticker: 'Novo pedido disponível',

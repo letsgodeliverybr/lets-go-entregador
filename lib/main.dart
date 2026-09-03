@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
@@ -35,32 +33,6 @@ const _firebaseOptions = FirebaseOptions(
   projectId: 'lets-go-delivery-df74d',
   storageBucket: 'lets-go-delivery-df74d.firebasestorage.app',
 );
-
-// Vibração + moeda 5x tocadas direto no isolate de background, na
-// CHEGADA da notificação — ver comentário grande dentro de
-// _firebaseBackgroundHandler sobre por que isso não pode ser
-// AlertaPedidoService.instance (isolate diferente). AudioPlayer avulso,
-// descartado no final — não precisa sobreviver além dessas 5 repetições.
-// Silencioso em qualquer erro (ex: 5s de execução em background negados
-// pelo SO em algum aparelho específico) — nunca deve derrubar o resto do
-// handler (a notificação em si já foi mostrada antes desta chamada).
-Future<void> _tocarAlertaChegada() async {
-  try {
-    HapticFeedback.heavyImpact();
-  } catch (_) {}
-  AudioPlayer? player;
-  try {
-    player = AudioPlayer();
-    await player.setAsset('assets/sounds/moeda_caindo.mp3');
-    for (var i = 0; i < 5; i++) {
-      await player.seek(Duration.zero);
-      await player.play();
-    }
-  } catch (_) {
-  } finally {
-    await player?.dispose();
-  }
-}
 
 // O payload do despacho-engine agora é data-only, de propósito (sem bloco
 // `notification`) — exatamente pra SEMPRE cair aqui, mesmo com o app em
@@ -105,28 +77,23 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       // onDidReceiveNotificationResponse (app só pausado/background) — ver
       // notification_service.dart.
       //
-      // MAS a vibração + moeda 5x da CHEGADA (não do toque) precisam
-      // acontecer AQUI mesmo — achado em auditoria (NOTIFICACOES_MAPA.md,
-      // 2026-09-03): sem isso, nada tocava até o entregador tocar a
-      // notificação na mão, porque showNovoPedidoLocal() não tem som
-      // próprio desde a v6 (ver notification_service.dart — o som virou
-      // 100% responsabilidade do AlertaPedidoService, mas o serviço nunca
-      // rodava em background). _tocarAlertaChegada() usa um AudioPlayer
-      // avulso (não o singleton — não sobrevive além desse isolate, nem
-      // precisa: só toca as 5 moedas e é descartado). O loop contínuo
-      // some com esse isolate quando ele morre — só de fato persiste
-      // quando o app abre de verdade (fullScreenIntent ou toque manual),
-      // que aí sim chama AlertaPedidoService.instance.iniciar() (que
-      // também repete as 5 moedas antes do loop — redundância mínima e
-      // aceitável se o app abrir bem rápido em seguida, bem melhor que o
-      // silêncio total de antes).
+      // Vibração + moeda 5x da CHEGADA (não do toque) são responsabilidade
+      // do CANAL da notificação agora (moeda_caindo_5x, ver
+      // notification_service.dart v7) — não mais de um AudioPlayer avulso
+      // rodando aqui dentro. Achado em auditoria (2026-09-03): esse
+      // AudioPlayer (just_audio) era o suspeito nº1 pro bug "vibração/
+      // moeda não tocam na chegada, só ao tocar na notificação" — just_audio
+      // não tem garantia de funcionar de forma confiável nesse isolate
+      // limitado, diferente de flutter_local_notifications (mecanismo já
+      // comprovado, é o que mostra a notificação com fullScreenIntent
+      // funcionando). showNovoPedidoLocal()/showNovaRotaLocal() já cobrem
+      // o alerta de chegada sozinhas agora.
       await VolumeService.forcarVolumeMidiaMaximo();
       if (tipo == 'nova_rota') {
         await NotificationService.showNovaRotaLocal();
       } else {
         await NotificationService.showNovoPedidoLocal();
       }
-      await _tocarAlertaChegada();
     } else if (tipo == 'avaliar_app') {
       await NotificationService.showAvaliarAppLocal(
         titulo: message.data['titulo']?.toString(),

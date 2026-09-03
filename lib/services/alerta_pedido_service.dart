@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,13 +8,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // precisa sobreviver a troca de tela — um State de tela morre no dispose(),
 // esse serviço não.
 //
-// Contrato (pedido do usuário, 2026-09-02):
-// 1. Vibração + moeda caindo 5x (efeito "alerta chegando") + loop contínuo
-//    do Let's Go em seguida — tudo dentro de iniciar(), disparado direto de
-//    onde a notificação chega (foreground: junto com showNovoPedidoLocal();
-//    cold-start via fullScreenIntent: assim que o app está de fato vivo, no
-//    AuthGate), não esperando a tela Disponíveis montar e buscar dado pra
-//    só então tocar.
+// Contrato (pedido do usuário, 2026-09-02, redesenhado 2026-09-03):
+// 1. Vibração + moeda caindo 5x (efeito "alerta chegando") ficaram por
+//    conta do CANAL nativo da notificação (moeda_caindo_5x, ver
+//    notification_service.dart v7) — não mais tocadas aqui via just_audio.
+//    Motivo: just_audio não tem garantia de funcionar de forma confiável
+//    no isolate de background do FCM (suspeito nº1 pro bug "vibração/moeda
+//    não tocam na chegada, só ao tocar na notificação" — achado em
+//    auditoria 2026-09-03); o canal, por outro lado, é o mecanismo já
+//    comprovado (é o que mostra a notificação em si, com fullScreenIntent
+//    funcionando, em qualquer estado do app). iniciar() agora só cuida do
+//    loop contínuo do Let's Go, disparado direto de onde o isolate
+//    principal já está de verdade rodando (onMessage em foreground,
+//    onDidReceiveNotificationResponse com app pausado, AuthGate no cold
+//    start) — sem repetir a moeda, que já tocou via canal no momento da
+//    chegada, evitando qualquer sobreposição entre os dois mecanismos.
 // 2. Toca em qualquer tela — por isso é um singleton global, não algo preso
 //    ao ciclo de vida de PedidosDisponiveisScreen.
 // 3. Só 1 loop por vez — iniciar() é no-op se _tocando já for true. Um
@@ -86,31 +93,19 @@ class AlertaPedidoService {
     } catch (_) {}
   }
 
-  // Requisito 1 (vibra + moeda + loop juntos) e 3 (só 1 por vez): chamar
-  // direto de onde a notificação chega. Sem await bloqueante no vibrar —
-  // dispara e já segue pro áudio, os dois ficam praticamente simultâneos.
+  // Requisito 3 (só 1 por vez): chamar direto de onde a notificação chega
+  // ou o app abre por causa dela. _tocando marcado de forma SÍNCRONA antes
+  // de qualquer await — garante que uma segunda chamada concorrente (2º
+  // pedido chegando antes do 1º ser aceito) vê a flag já true e não inicia
+  // um segundo player por cima.
   //
-  // Refinamento 2026-09-02: moeda toca 5x (curta, ~1s cada) ANTES do loop
-  // contínuo do Let's Go começar — efeito de "alerta chegando" antes do
-  // loop principal. play() do just_audio já espera a faixa terminar
-  // sozinho (sem LoopMode nenhum aplicado = toca uma vez e completa), por
-  // isso dá pra usar um for simples em vez de escutar processingState na
-  // mão. Confere _tocando entre cada repetição e antes de trocar pro loop
-  // — se parar() for chamado no meio (aceitou no meio das 5 moedas), para
-  // ali mesmo, não espera as repetições restantes nem entra no loop.
+  // Sem moeda repetida aqui desde 2026-09-03 — isso já tocou via canal da
+  // notificação (moeda_caindo_5x) no momento em que ela chegou, antes
+  // desse método ser chamado. Só entra direto no loop contínuo.
   Future<void> iniciar() async {
     if (_tocando) return; // trava do "só 1 loop por vez"
     _tocando = true;
-    HapticFeedback.heavyImpact();
     try {
-      await _player.setLoopMode(LoopMode.off);
-      await _player.setAsset('assets/sounds/moeda_caindo.mp3');
-      for (var i = 0; i < 5; i++) {
-        if (!_tocando) return;
-        await _player.seek(Duration.zero);
-        await _player.play();
-      }
-      if (!_tocando) return;
       await _player.setLoopMode(LoopMode.one);
       await _player.setAsset('assets/sounds/letsgo.wav');
       await _player.play();

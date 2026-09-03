@@ -75,7 +75,7 @@
         <!-- FCM: canal padrão de alta prioridade -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="letsgo_novo_pedido_v6" />
+            android:value="letsgo_novo_pedido_v7" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
