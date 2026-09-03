@@ -256,9 +256,14 @@ class NotificationService {
           corpo: msg.data['corpo']?.toString(),
         );
       } else if (tipo == 'nova_rota') {
-        await showNovaRotaLocal();
+        // Mesma ordem do caso 'novo_pedido' abaixo — iniciar() dispara sem
+        // await, ANTES do show, pra não esperar a notificação terminar de
+        // ser postada antes de começar o loop (achado em revisão,
+        // 2026-09-03: essa ordem estava invertida aqui, diferente do outro
+        // caso — inconsistência corrigida).
         // ignore: unawaited_futures
         AlertaPedidoService.instance.iniciar();
+        await showNovaRotaLocal();
       } else {
         // Vibração (dentro de iniciar())+ som de moeda (showNovoPedidoLocal,
         // canal já tem o som curto) + início do loop Let's Go disparados
