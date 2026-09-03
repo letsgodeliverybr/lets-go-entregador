@@ -311,14 +311,16 @@ class _State extends State<PedidosDisponiveisScreen> {
           // aparece pra um entregador SEMPRE está na fila individual dele
           // (é assim que "Todos" entrega — uma linha por entregador, só
           // que todas de uma vez) — a condição antiga (`|| idsFila.
-          // contains(id)`) disparava esse timer pra QUALQUER pedido,
-          // mesmo em modo Todos, onde a oferta deveria ficar visível até
-          // expira_em (12min, controlado pelo servidor) ou aceite —  não
-          // 29s fixos decididos pelo cliente. Servidor já cuida da
-          // remoção certa via UPDATE em despacho_fila (trigger
-          // tg_expirar_despacho_fila_pedido_nao_pronto + timeout natural
-          // de expira_em), que o realtime já escuta e remove da lista —
-          // esse timer local só faz sentido pra sequencial.
+          // contains(id)`) disparava esse timer pra QUALQUER pedido, mesmo
+          // em modo Todos.
+          //
+          // Atualização (2026-09-04, pedido do usuário): modo Todos não
+          // tem NENHUM timeout de expira_em mais — a oferta fica visível
+          // pra sempre até alguém aceitar ou o pedido ser cancelado, os
+          // dois via trigger SQL tg_expirar_despacho_fila_pedido_nao_pronto
+          // (dispara quando pedidos.status sai de 'pronto'), que o realtime
+          // já escuta e remove da lista. Esse timer local de 29s continua
+          // fazendo sentido só pra sequencial, nunca pra Todos.
           if (modoDespacho == 'sequencial') {
             _iniciarContador(id);
           }
