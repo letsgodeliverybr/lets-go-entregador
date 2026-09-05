@@ -161,6 +161,11 @@ class _State extends State<PedidosDisponiveisScreen> {
             .select('valor')
             .eq('chave', 'preco_dinamico_entregador')
             .maybeSingle(),
+        _supabase
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'despacho_raio_busca_km')
+            .maybeSingle(),
       ]);
 
       final modoDespacho =
@@ -168,6 +173,12 @@ class _State extends State<PedidosDisponiveisScreen> {
       final precoDinamico = double.tryParse(
               (configs[1] as Map<String, dynamic>?)?['valor']?.toString() ?? '0') ??
           0.0;
+      // Mesma chave/mesmo default (32) que o despacho-engine usa — ver
+      // filtro de raio client-side logo abaixo, no bucket "resto" do modo
+      // Todos.
+      final raioBuscaKm = double.tryParse(
+              (configs[2] as Map<String, dynamic>?)?['valor']?.toString() ?? '32') ??
+          32.0;
 
       // ── Despacho individual direcionado a mim (despacho_fila), sempre —
       //    independente do modo_despacho global. Cobre tanto o modo
@@ -293,6 +304,23 @@ class _State extends State<PedidosDisponiveisScreen> {
           final id = p['id'].toString();
           if (idsFila.contains(id)) return false; // já incluído via pedidosFila
           if (idsOfertados.contains(id)) return false; // exclui oferta exclusiva de outro motoboy
+          // Segunda camada de proteção por raio (bug real, 2026-09-05:
+          // pedido de Recife apareceu pra entregador a 2000km) — despacho_
+          // fila só existe depois do próximo tick do despacho-engine (cron
+          // de 1 min); nos até ~60s entre o pedido virar 'pronto' e esse
+          // tick rodar, idsOfertados ainda está vazio pra TODO mundo e esse
+          // pedido passaria direto pra qualquer entregador no país, sem
+          // checar distância nenhuma. Filtra aqui com a mesma config
+          // (despacho_raio_busca_km) que o backend usa. Fail-closed: sem
+          // posição própria ainda resolvida ou sem lat/lng do pedido, não
+          // mostra — mais seguro esconder um pedido elegível por alguns
+          // segundos (até o GPS resolver) do que vazar um a 2000km.
+          final lat = double.tryParse(p['latitude']?.toString() ?? '');
+          final lng = double.tryParse(p['longitude']?.toString() ?? '');
+          if (_posicaoAtual == null || lat == null || lng == null) return false;
+          final distKm = _calcularDistancia(
+              _posicaoAtual!.latitude, _posicaoAtual!.longitude, lat, lng);
+          if (distKm > raioBuscaKm) return false;
           return cla.pedidoElegivelParaMeuCla(p['loja_id']?.toString());
         }).toList();
 
