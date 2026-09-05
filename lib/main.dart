@@ -215,6 +215,45 @@ class _MyAppState extends State<MyApp> {
           .eq('status', 'pronto')
           .maybeSingle();
       if (data == null) return;
+
+      // Filtro de raio (bug real, 2026-09-05): esse overlay é um segundo
+      // caminho de "novo pedido disponível", totalmente separado da tela
+      // Disponíveis (pedidos_disponiveis_screen.dart, já corrigida) —
+      // reage a QUALQUER pedido pronto do sistema, sem checar distância
+      // nenhuma (a distância calculada em _PedidoOverlayState é só pra
+      // EXIBIR "X km", nunca filtrou nada). Mesma config/fórmula usada lá
+      // (despacho_raio_busca_km via Geolocator.distanceBetween). Fail-
+      // closed: sem lat/lng do pedido ou sem posição própria resolvida,
+      // não mostra o overlay.
+      final lat = double.tryParse(data['latitude']?.toString() ?? '');
+      final lng = double.tryParse(data['longitude']?.toString() ?? '');
+      if (lat == null || lng == null) return;
+
+      final Position pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium);
+      } catch (_) {
+        return;
+      }
+
+      double raioBuscaKm = 32.0;
+      try {
+        final cfg = await _supabase
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'despacho_raio_busca_km')
+            .maybeSingle();
+        raioBuscaKm =
+            double.tryParse((cfg as Map?)?['valor']?.toString() ?? '32') ??
+                32.0;
+      } catch (_) {}
+
+      final distKm =
+          Geolocator.distanceBetween(pos.latitude, pos.longitude, lat, lng) /
+              1000;
+      if (distKm > raioBuscaKm) return;
+
       _mostrarOverlay(data);
     } catch (_) {}
   }
