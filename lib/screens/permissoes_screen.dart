@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import '../services/dnd_permission_service.dart';
 import '../services/fullscreen_intent_permission_service.dart';
 import '../services/location_permission_flow.dart';
 
@@ -58,12 +57,6 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
         cor: const Color(0xFF059669),
       ),
       _Item(
-        icone: Icons.do_not_disturb_on_outlined,
-        titulo: 'Não perturbe',
-        descricao: 'Tocar o alerta de pedido mesmo nesse modo',
-        cor: const Color(0xFFDC2626),
-      ),
-      _Item(
         icone: Icons.fullscreen,
         titulo: 'Abrir tela cheia',
         descricao: 'Mostrar o pedido na tela assim que ele chegar',
@@ -114,9 +107,6 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
           concedida = true;
           break;
         case 3:
-          concedida = await DndPermissionService.garantir();
-          break;
-        case 4:
           concedida = await FullScreenIntentPermissionService.garantir();
           break;
       }
@@ -144,35 +134,47 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
               ? _buildDisclosure()
               : Column(
                   children: [
-                    const SizedBox(height: 56),
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A56DB),
-                        borderRadius: BorderRadius.circular(18),
+                    // Rolável: em telas menores (ou com fonte do sistema
+                    // maior), 4 itens + cabeçalho podem estourar a altura —
+                    // mesmo padrão já usado em location_disclosure_screen.dart.
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 56),
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A56DB),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(Icons.delivery_dining,
+                                  color: Colors.white, size: 36),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Permissões necessárias',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Precisamos de acesso para funcionar corretamente durante as entregas.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: Color(0xFF9CA3AF),
+                                  fontSize: 14,
+                                  height: 1.4),
+                            ),
+                            const SizedBox(height: 40),
+                            ...List.generate(_itens.length, _buildItem),
+                          ],
+                        ),
                       ),
-                      child: const Icon(Icons.delivery_dining,
-                          color: Colors.white, size: 36),
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Permissões necessárias',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Precisamos de acesso para funcionar corretamente durante as entregas.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: Color(0xFF9CA3AF), fontSize: 14, height: 1.4),
-                    ),
-                    const SizedBox(height: 40),
-                    ...List.generate(_itens.length, _buildItem),
-                    const Spacer(),
                     AnimatedOpacity(
                       opacity: tudo ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 400),
@@ -201,78 +203,85 @@ class _PermissoesScreenState extends State<PermissoesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 56),
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A56DB),
-            borderRadius: BorderRadius.circular(18),
+        // Rolável: mesmo padrão de location_disclosure_screen.dart — em
+        // telas menores o texto de disclosure não pode empurrar o botão
+        // "Continuar" pra fora da área visível.
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 56),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A56DB),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(Icons.delivery_dining,
+                      color: Colors.white, size: 36),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Precisamos de alguns acessos',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161820),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _LinhaDisclosure(
+                        icone: Icons.location_on,
+                        cor: Color(0xFF1A56DB),
+                        texto:
+                            "O Let's Go Delivery Parceiro usa sua localização em tempo "
+                            'real para exibir corridas disponíveis próximas a você e '
+                            'permitir que lojas e clientes acompanhem sua entrega. '
+                            'Na próxima tela explicamos os detalhes antes de pedir '
+                            'essa permissão.',
+                      ),
+                      SizedBox(height: 16),
+                      _LinhaDisclosure(
+                        icone: Icons.notifications,
+                        cor: Color(0xFF7C3AED),
+                        texto:
+                            'Notificações avisam sobre novos pedidos disponíveis.',
+                      ),
+                      SizedBox(height: 16),
+                      _LinhaDisclosure(
+                        icone: Icons.battery_charging_full,
+                        cor: Color(0xFF059669),
+                        texto:
+                            'A exceção de otimização de bateria mantém o GPS ativo '
+                            'durante a entrega, mesmo com o app em segundo plano.',
+                      ),
+                      SizedBox(height: 16),
+                      _LinhaDisclosure(
+                        icone: Icons.fullscreen,
+                        cor: Color(0xFFEA580C),
+                        texto:
+                            'Por fim, pedimos pra abrir a tela do pedido automaticamente '
+                            'quando ele chegar, mesmo com o celular bloqueado.',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Icon(Icons.delivery_dining,
-              color: Colors.white, size: 36),
         ),
         const SizedBox(height: 20),
-        const Text(
-          'Precisamos de alguns acessos',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-              color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161820),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _LinhaDisclosure(
-                icone: Icons.location_on,
-                cor: Color(0xFF1A56DB),
-                texto:
-                    "O Let's Go Delivery Parceiro usa sua localização em tempo "
-                    'real para exibir corridas disponíveis próximas a você e '
-                    'permitir que lojas e clientes acompanhem sua entrega. '
-                    'Na próxima tela explicamos os detalhes antes de pedir '
-                    'essa permissão.',
-              ),
-              SizedBox(height: 16),
-              _LinhaDisclosure(
-                icone: Icons.notifications,
-                cor: Color(0xFF7C3AED),
-                texto: 'Notificações avisam sobre novos pedidos disponíveis.',
-              ),
-              SizedBox(height: 16),
-              _LinhaDisclosure(
-                icone: Icons.battery_charging_full,
-                cor: Color(0xFF059669),
-                texto:
-                    'A exceção de otimização de bateria mantém o GPS ativo '
-                    'durante a entrega, mesmo com o app em segundo plano.',
-              ),
-              SizedBox(height: 16),
-              _LinhaDisclosure(
-                icone: Icons.do_not_disturb_on_outlined,
-                cor: Color(0xFFDC2626),
-                texto:
-                    'Pedimos também a exceção de "Não perturbe", pra você não '
-                    'perder um pedido se o celular estiver nesse modo.',
-              ),
-              SizedBox(height: 16),
-              _LinhaDisclosure(
-                icone: Icons.fullscreen,
-                cor: Color(0xFFEA580C),
-                texto:
-                    'Por fim, pedimos pra abrir a tela do pedido automaticamente '
-                    'quando ele chegar, mesmo com o celular bloqueado.',
-              ),
-            ],
-          ),
-        ),
-        const Spacer(),
         SizedBox(
           height: 52,
           child: ElevatedButton(

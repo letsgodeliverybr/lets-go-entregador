@@ -60,29 +60,40 @@ class _FullScreenIntentRepromptScreenState extends State<FullScreenIntentRepromp
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 56),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(18)),
-                child: const Icon(Icons.notifications_active, color: Colors.white, size: 36),
+              // Rolável — mesmo padrão de location_disclosure_screen.dart,
+              // pra o botão não ficar fora da área visível em telas menores.
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 56),
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(color: const Color(0xFF1A56DB), borderRadius: BorderRadius.circular(18)),
+                        child: const Icon(Icons.notifications_active, color: Colors.white, size: 36),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Novidade: pedido abrindo sozinho',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Agora dá pra tela de "Pedidos Disponíveis" abrir sozinha quando '
+                        'um pedido novo chegar — mesmo com o celular bloqueado ou outro '
+                        'app aberto. Pra isso funcionar, o Android pede uma permissão '
+                        'especial. Sem ela, o app continua funcionando normal, só que '
+                        'você precisa tocar na notificação na mão pra ver o pedido.',
+                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14, height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Novidade: pedido abrindo sozinho',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Agora dá pra tela de "Pedidos Disponíveis" abrir sozinha quando '
-                'um pedido novo chegar — mesmo com o celular bloqueado ou outro '
-                'app aberto. Pra isso funcionar, o Android pede uma permissão '
-                'especial. Sem ela, o app continua funcionando normal, só que '
-                'você precisa tocar na notificação na mão pra ver o pedido.',
-                style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14, height: 1.4),
-              ),
-              const Spacer(),
               SizedBox(
                 height: 52,
                 child: ElevatedButton(

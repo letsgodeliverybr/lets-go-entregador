@@ -221,33 +221,44 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _cabecalho(
-          Icons.battery_charging_full,
-          const Color(0xFF059669),
-          'Uma última configuração',
-          'Pra receber notificação de pedido novo mesmo com o app fechado, '
-              'seu celular precisa parar de "otimizar a bateria" desse app. '
-              'Sem isso, o Android pode fechar o app sozinho e a notificação '
-              'não toca.',
-        ),
-        if (_bateriaNegadaUmaVez)
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C0A0A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF7F1D1D)),
-            ),
-            child: const Text(
-              'Ainda não foi ativado. Recomendado — sem essa permissão, você '
-              'pode perder pedidos novos sem perceber. Toca em "Ativar" de '
-              'novo e escolhe "Permitir" na tela do sistema, ou continua sem '
-              'ativar (não recomendado).',
-              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
+        // Rolável — mesmo padrão de location_disclosure_screen.dart, pra o
+        // botão não ficar fora da área visível em telas menores.
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _cabecalho(
+                  Icons.battery_charging_full,
+                  const Color(0xFF059669),
+                  'Uma última configuração',
+                  'Pra receber notificação de pedido novo mesmo com o app fechado, '
+                      'seu celular precisa parar de "otimizar a bateria" desse app. '
+                      'Sem isso, o Android pode fechar o app sozinho e a notificação '
+                      'não toca.',
+                ),
+                if (_bateriaNegadaUmaVez)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C0A0A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF7F1D1D)),
+                    ),
+                    child: const Text(
+                      'Ainda não foi ativado. Recomendado — sem essa permissão, você '
+                      'pode perder pedidos novos sem perceber. Toca em "Ativar" de '
+                      'novo e escolhe "Permitir" na tela do sistema, ou continua sem '
+                      'ativar (não recomendado).',
+                      style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+              ],
             ),
           ),
-        const Spacer(),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           height: 52,
           child: ElevatedButton(
@@ -292,33 +303,42 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _cabecalho(
-          Icons.notifications_active,
-          const Color(0xFF1A56DB),
-          'Deixa o pedido aparecer na hora',
-          'Pra tela de "Pedidos Disponíveis" abrir sozinha quando um pedido '
-              'novo chegar — mesmo com o celular bloqueado ou outro app '
-              'aberto — o Android pede uma permissão especial. Sem ela, '
-              'você só vê o pedido se tocar na notificação na mão.',
-        ),
-        if (_fullScreenIntentNegadoUmaVez)
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C0A0A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF7F1D1D)),
-            ),
-            child: const Text(
-              'Ainda não foi ativado. Recomendado — sem essa permissão, o '
-              'pedido só aparece se você abrir o app na mão a cada '
-              'notificação. Toca em "Ativar" de novo e permite na tela do '
-              'sistema, ou continua sem ativar (não recomendado).',
-              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _cabecalho(
+                  Icons.notifications_active,
+                  const Color(0xFF1A56DB),
+                  'Deixa o pedido aparecer na hora',
+                  'Pra tela de "Pedidos Disponíveis" abrir sozinha quando um pedido '
+                      'novo chegar — mesmo com o celular bloqueado ou outro app '
+                      'aberto — o Android pede uma permissão especial. Sem ela, '
+                      'você só vê o pedido se tocar na notificação na mão.',
+                ),
+                if (_fullScreenIntentNegadoUmaVez)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C0A0A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF7F1D1D)),
+                    ),
+                    child: const Text(
+                      'Ainda não foi ativado. Recomendado — sem essa permissão, o '
+                      'pedido só aparece se você abrir o app na mão a cada '
+                      'notificação. Toca em "Ativar" de novo e permite na tela do '
+                      'sistema, ou continua sem ativar (não recomendado).',
+                      style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, height: 1.4),
+                    ),
+                  ),
+              ],
             ),
           ),
-        const Spacer(),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           height: 52,
           child: ElevatedButton(
@@ -359,36 +379,45 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _cabecalho(
-          Icons.rocket_launch,
-          const Color(0xFFEA580C),
-          'Seu celular é Xiaomi',
-          'Celulares Xiaomi (MIUI) têm um bloqueio próprio, separado do '
-              'Android normal, que impede o app de tocar o som do pedido se o '
-              '"Início automático" não estiver ativado. Sem isso, mesmo com '
-              'tudo certo, a notificação chega muda.',
-        ),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161820),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF2A2D35)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Passo a passo:',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 10),
-              const Text(
-                '1. Toca no botão abaixo pra abrir a tela de Início automático.\n'
-                '2. Procura "Let\'s Go Entregador" na lista.\n'
-                '3. Ativa o toggle ao lado do nome do app.\n'
-                '4. Volta aqui e marca a confirmação abaixo.',
-                style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13, height: 1.6),
-              ),
-            ],
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _cabecalho(
+                  Icons.rocket_launch,
+                  const Color(0xFFEA580C),
+                  'Seu celular é Xiaomi',
+                  'Celulares Xiaomi (MIUI) têm um bloqueio próprio, separado do '
+                      'Android normal, que impede o app de tocar o som do pedido se o '
+                      '"Início automático" não estiver ativado. Sem isso, mesmo com '
+                      'tudo certo, a notificação chega muda.',
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161820),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF2A2D35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Passo a passo:',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 10),
+                      const Text(
+                        '1. Toca no botão abaixo pra abrir a tela de Início automático.\n'
+                        '2. Procura "Let\'s Go Entregador" na lista.\n'
+                        '3. Ativa o toggle ao lado do nome do app.\n'
+                        '4. Volta aqui e marca a confirmação abaixo.',
+                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13, height: 1.6),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -422,7 +451,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
               ],
             ),
           ),
-        const Spacer(),
+        const SizedBox(height: 20),
         SizedBox(
           height: 52,
           child: ElevatedButton(
