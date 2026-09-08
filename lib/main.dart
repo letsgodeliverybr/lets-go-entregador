@@ -633,9 +633,13 @@ class _AuthGateState extends State<AuthGate> {
     return Container(
       color: Colors.black,
       child: const Center(
+        // 260 (não mais 180): logo_splash.png agora é o lockup completo
+        // (ícone + "@pedeletsgo" + "#CadaKmUmSonho", 2026-09-08) — mais
+        // conteúdo/texto que o ícone sozinho de antes, precisa de mais
+        // espaço pro texto ficar legível.
         child: Image(
           image: AssetImage('assets/images/logo_splash.png'),
-          width: 180,
+          width: 260,
         ),
       ),
     );
