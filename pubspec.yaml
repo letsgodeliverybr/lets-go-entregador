@@ -38,12 +38,25 @@ dev_dependencies:
   geolocator_android: ^4.6.1
   geolocator_platform_interface: ^4.2.4
   flutter_launcher_icons: any
+  flutter_native_splash: ^2.3.10
 
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
+
+# logo_splash.png é a mesma logo (assets/images/logo.png) com o fundo
+# branco removido (a original não tem canal alpha) — sem isso, a splash
+# nativa mostraria um quadrado branco atrás da logo em vez do preto que a
+# marca usa em todo o resto do app (AuthGate, telas dark).
+flutter_native_splash:
+  color: "#000000"
+  image: assets/images/logo_splash.png
+  android_12:
+    color: "#000000"
+    image: assets/images/logo_splash.png
+  ios: false
 
 flutter:
   uses-material-design: true

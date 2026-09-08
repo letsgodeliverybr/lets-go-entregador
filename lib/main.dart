@@ -602,10 +602,22 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
+  // Mesma logo/fundo preto do splash nativo (flutter_native_splash) — sem
+  // isso, o usuário veria a logo por uma fração de segundo e depois um
+  // spinner genérico enquanto _verificarAuth() resolve (sessão + permissões
+  // + setup de dispositivo, pode levar mais que só o tempo do splash
+  // nativo). Sem indicador de progresso nenhum de propósito — a transição
+  // pra tela final deve parecer contínua, não "logo, depois loading".
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    return Container(
+      color: Colors.black,
+      child: const Center(
+        child: Image(
+          image: AssetImage('assets/images/logo_splash.png'),
+          width: 180,
+        ),
+      ),
     );
   }
 }
