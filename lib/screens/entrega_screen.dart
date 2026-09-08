@@ -844,7 +844,9 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     final endereco = widget.pedido['endereco'] ?? '—';
     final complemento = widget.pedido['complemento']?.toString() ?? '';
     final nomeCliente = widget.pedido['cliente'] ?? '—';
-    final telefone = widget.pedido['telefone']?.toString() ?? widget.pedido['telefone_cliente']?.toString() ?? '—';
+    // Telefone do cliente removido dessa tela (privacidade — ver auditoria
+    // 2026-09-08): dado sensível sem uso funcional aqui (sem
+    // launchUrl('tel:...')/WhatsApp), só era exibido em texto puro.
     final zero800 = widget.pedido['telefone_0800']?.toString() ?? widget.pedido['zero_oitocentos']?.toString() ?? '';
     final observacao = widget.pedido['descricao']?.toString() ?? '';
     final distKm = widget.pedido['distancia_km'];
@@ -904,12 +906,6 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
           const Icon(Icons.person_outline, color: Colors.white54, size: 16),
           const SizedBox(width: 6),
           Expanded(child: Text(nomeCliente, style: const TextStyle(color: Colors.white, fontSize: 14))),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          const Icon(Icons.phone_outlined, color: Colors.white54, size: 16),
-          const SizedBox(width: 6),
-          Text(telefone, style: const TextStyle(color: Colors.white, fontSize: 14)),
         ]),
         if (zero800.isNotEmpty) ...[
           const SizedBox(height: 8),

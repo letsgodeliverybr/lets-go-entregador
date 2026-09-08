@@ -144,10 +144,10 @@ class PedidoCardWidget extends StatelessWidget {
 
               // Linha 5: rota + km | valor base riscado → valor final
               Row(children: [
-                const Icon(Icons.route_outlined, color: Colors.white70, size: 16),
+                const Icon(Icons.route_outlined, color: Colors.white, size: 16),
                 const SizedBox(width: 4),
                 Text('${distanciaKm.toStringAsFixed(2)} km',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    style: const TextStyle(color: Colors.white, fontSize: 13)),
                 const Spacer(),
                 if (comRetorno) ...[
                   Text('R\$${taxaSemRetorno.toStringAsFixed(2)}',
