@@ -39,11 +39,20 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
     _carregar();
+    // Mesmo motivo de entregador_home_screen.dart: atualiza o toggle na
+    // hora quando o TrackingService força offline por bateria baixa,
+    // mesmo com entrega ativa (sem isso, só resincroniza reabrindo a tela).
+    TrackingService.addForcadoOfflineListener(_onForcadoOfflinePorBateria);
+  }
+
+  void _onForcadoOfflinePorBateria() {
+    if (mounted) setState(() => _online = false);
   }
 
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    TrackingService.removeForcadoOfflineListener(_onForcadoOfflinePorBateria);
     super.dispose();
   }
 

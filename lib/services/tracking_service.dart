@@ -17,6 +17,22 @@ class TrackingService {
   static Position? _ultimaPosicao;
   static String? _entregadorId;
 
+  // Telas (Home, Status) assinam isso pra saber, na hora, quando o serviço
+  // forçou `disponivel=false` por bateria baixa — sem isso o toggle só
+  // resincroniza ao reabrir a tela (_carregarEntregador), não enquanto o
+  // motoboy já está parado nela com uma entrega em andamento (ver auditoria
+  // 2026-09-08). Lista simples em vez de Stream/ValueNotifier porque não
+  // carrega valor nenhum, é só um "aconteceu agora" — a tela decide o que
+  // fazer (setState(() => _online = false)).
+  static final List<void Function()> _listenersForcadoOffline = [];
+  static void addForcadoOfflineListener(void Function() cb) => _listenersForcadoOffline.add(cb);
+  static void removeForcadoOfflineListener(void Function() cb) => _listenersForcadoOffline.remove(cb);
+  static void _notificarForcadoOffline() {
+    for (final cb in List<void Function()>.from(_listenersForcadoOffline)) {
+      cb();
+    }
+  }
+
   /// Lança [Exception] se a bateria estiver abaixo do limite mínimo
   /// (BatteryService.limiteMinimo) — chamado no início de [ficarOnline] E
   /// [iniciar] (não só um dos dois): ambos os fluxos de toggle do app
@@ -106,24 +122,42 @@ class TrackingService {
     });
   }
 
-  // Força indisponível por bateria baixa enquanto já online. NÃO força se
-  // houver entrega ativa — ficarOffline() já lança Exception nesse caso
-  // (mesma checagem usada pro toggle manual), e aqui só engolimos o erro:
-  // não faz sentido barrar/avisar quem já foi barrado, o entregador
-  // continua com o pedido em mãos, indisponível pra NOVAS ofertas só
-  // depois de finalizar. _forcandoOfflinePorBateria evita disparo
-  // duplicado se o stream emitir mais de um valor abaixo do limite antes
-  // da primeira chamada terminar (ficarOffline é assíncrono).
+  // Força indisponível por bateria baixa enquanto já online.
+  //
+  // Correção 2026-09-08 (auditoria de segurança operacional): a versão
+  // anterior desistia silenciosamente quando havia entrega ativa,
+  // assumindo que bastava não conseguir NOVAS ofertas — entregadores_no_raio()
+  // já exclui quem tem pedido ativo, então o resultado (não recebe oferta
+  // nova) é o mesmo de qualquer jeito. Mas o pedido explícito era sobre o
+  // ESTADO, não só o resultado: `disponivel` tem que virar false JÁ, e o
+  // toggle da tela tem que mostrar isso, mesmo com entrega em andamento —
+  // não só depois de finalizar. Por isso agora: tenta o desligamento
+  // completo (ficarOffline, que também para GPS/foreground) e, se recusar
+  // por entrega ativa, cai pro desligamento "suave" — só grava
+  // `disponivel=false`, sem tocar em tracking/GPS/foreground service (o
+  // motoboy ainda precisa disso tudo rodando pra terminar a entrega em
+  // mãos). `_forcandoOfflinePorBateria` evita disparo duplicado se o
+  // stream emitir mais de um valor abaixo do limite antes da primeira
+  // chamada terminar (ambos os caminhos são assíncronos).
   static Future<void> _forcarOfflinePorBateria(String entregadorId, int nivel) async {
     if (_forcandoOfflinePorBateria) return;
     _forcandoOfflinePorBateria = true;
     try {
-      await ficarOffline(entregadorId);
-      debugPrint('[TrackingService] 🔋 Forçado indisponível — bateria em $nivel%');
+      try {
+        await ficarOffline(entregadorId);
+        debugPrint('[TrackingService] 🔋 Forçado indisponível — bateria em $nivel%');
+      } catch (e) {
+        debugPrint('[TrackingService] 🔋 Bateria baixa ($nivel%) com entrega em andamento — mantendo tracking, só marcando indisponível: $e');
+        try {
+          await _supabase.from('entregadores').update({
+            'disponivel': false,
+            'updated_at': DateTime.now().toIso8601String(),
+          }).eq('id', entregadorId);
+        } catch (_) {}
+      }
       // ignore: unawaited_futures
       NotificationService.showBateriaBaixaLocal(nivel);
-    } catch (e) {
-      debugPrint('[TrackingService] 🔋 Bateria baixa ($nivel%), mas entrega em andamento — não força offline: $e');
+      _notificarForcadoOffline();
     } finally {
       _forcandoOfflinePorBateria = false;
     }

@@ -58,6 +58,10 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
       _carregarStats();
       _carregarPedidosEmAndamento();
     });
+    // Atualiza o toggle na hora quando o TrackingService força offline por
+    // bateria baixa (inclusive com entrega ativa — nesse caso não passa
+    // por _carregarEntregador de novo, já que a tela não é reaberta).
+    TrackingService.addForcadoOfflineListener(_onForcadoOfflinePorBateria);
     _iniciarLocalizacaoPassiva();
     _assinarRealtimeRota();
     WidgetsBinding.instance.addPostFrameCallback((_) => _centrarMapaNoMotoboy());
@@ -331,11 +335,16 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (mounted) setState(() => _rotaAtual = null);
   }
 
+  void _onForcadoOfflinePorBateria() {
+    if (mounted) setState(() => _online = false);
+  }
+
   @override
   void dispose() {
     _statsTimer?.cancel();
     _rotaAutorecusaTimer?.cancel();
     _channelRota?.unsubscribe();
+    TrackingService.removeForcadoOfflineListener(_onForcadoOfflinePorBateria);
     // Não cancela nenhum alerta aqui — o alerta insistente é do canal
     // nativo, sobrevive a essa tela fechar por conta própria (mesmo
     // raciocínio já aplicado em pedidos_disponiveis_screen.dart).
