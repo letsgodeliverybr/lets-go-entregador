@@ -560,15 +560,35 @@ class _AuthGateState extends State<AuthGate> {
     try {
       final e = await Supabase.instance.client
           .from('entregadores')
-          .select('disponivel, status_cadastro, aprovado, status')
+          .select(
+              'disponivel, status_cadastro, aprovado, status, '
+              'foto_perfil_status, foto_cnh_status, foto_crlv_status, '
+              'foto_comprovante_residencia_status, foto_placa_status')
           .eq('id', session.user.id)
           .single();
 
-      final statusCadastro = e['status_cadastro']?.toString() ?? '';
-      final aprovado = e['aprovado'] == true;
       final status = e['status']?.toString() ?? '';
 
-      if (aprovado || status == 'ativo' || statusCadastro == 'aprovado') {
+      // Gate real fica nos 5 documentos, não em status_cadastro/aprovado
+      // (auditoria 2026-09-08) — esses dois continuam existindo só como
+      // espelho pro painel (badge/filtro/listagem), o painel já mantém os
+      // dois em sincronia com os documentos (ver app.js,
+      // _recalcularStatusCadastro), mas o app não pode CONFIAR nisso: se
+      // esse espelho um dia dessincronizar por algum bug do lado do
+      // painel, o gate real ainda precisa checar a fonte, não o reflexo.
+      // status=='bloqueado' trava sempre, mesmo com os 5 aprovados — é um
+      // kill-switch independente do admin, não relacionado a documento.
+      const camposDocumento = [
+        'foto_perfil_status',
+        'foto_cnh_status',
+        'foto_crlv_status',
+        'foto_comprovante_residencia_status',
+        'foto_placa_status',
+      ];
+      final todosDocumentosAprovados =
+          camposDocumento.every((c) => e[c]?.toString() == 'aprovado');
+
+      if (status != 'bloqueado' && todosDocumentosAprovados) {
         if (e['disponivel'] == true) {
           // App estava fechado/morto e foi aberto pelo fullScreenIntent da
           // notificação de novo pedido (não por toque manual) — nesse caso
