@@ -19,6 +19,7 @@ import 'online_status_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
 import 'rota_disponivel_screen.dart';
+import 'chat_bot_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/status_utils.dart' as su;
 
@@ -587,26 +588,15 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                   bottom: 16, left: 16,
                   child: GestureDetector(
                     onTap: _abrirChat,
-                    child: Stack(children: [
-                      Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF22c55e),
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
-                        ),
-                        child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
+                    child: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22c55e),
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 8)],
                       ),
-                      Positioned(
-                        top: 0, right: 0,
-                        child: Container(
-                          width: 16, height: 16,
-                          decoration: const BoxDecoration(color: Color(0xFFef4444), shape: BoxShape.circle),
-                          child: const Center(child: Text('1',
-                              style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
-                        ),
-                      ),
-                    ]),
+                      child: const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
+                    ),
                   ),
                 ),
 
@@ -725,24 +715,10 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   }
 
   void _abrirChat() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF161820),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 40, height: 4,
-              decoration: BoxDecoration(color: const Color(0xFF2a2d3a), borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 20),
-          const Icon(Icons.chat_bubble_outline, color: Color(0xFF22c55e), size: 48),
-          const SizedBox(height: 12),
-          const Text('Chat', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          const Text('Em breve', style: TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
-          const SizedBox(height: 24),
-        ]),
-      ),
+    final nomeCompleto = _entregador?['nome']?.toString() ?? 'Motoboy';
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ChatBotScreen(nomeEntregador: nomeCompleto)),
     );
   }
 }
