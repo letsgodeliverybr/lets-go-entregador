@@ -1,7 +1,7 @@
 name: lets_go_entregador
 description: Lets Go Delivery app.
 publish_to: 'none'
-version: 1.0.0+91
+version: 1.0.0+92
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -46,19 +46,25 @@ flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
 
-# logo_splash.png (2026-09-08): lockup oficial completo — ícone +
-# "@pedeletsgo" + "#CadaKmUmSonho" — já em fundo preto, 1254x1254 (acima
-# do canvas de referência de 1152x1152 do Android 12+, evita upscale/
-# borrão). Fonte: arquivo de marca "ADESIVO PEDELETSGO.png" do usuário.
+# Confirmado em aparelho real (2026-09-08): a fase nativa (Android 12+)
+# corta o lockup completo — é a "zona de segurança" que a API de splash
+# do Android impõe no ícone, mascara/corta o que passar da área central.
+# Por isso, aqui (fase 1, restrita) usa SÓ o ícone — logo_icone_splash.png
+# (assets/images/logo.png com o fundo branco removido, ainda não tinha
+# canal alpha; mesmo processo já usado antes nesta sessão). O lockup
+# completo (logo_splash.png, ícone + "@pedeletsgo" + "#CadaKmUmSonho")
+# fica só pro AuthGate (lib/main.dart) — lá não tem restrição nenhuma do
+# Android, controlamos o layout 100%.
 # O efeito de zoom na abertura no Android 12+ é do próprio sistema
 # operacional (android:windowSplashScreenAnimatedIcon sempre anima),
-# não dá pra desativar só por config deste pacote.
+# não dá pra desativar só por config deste pacote — vale mesmo só com
+# ícone.
 flutter_native_splash:
   color: "#000000"
-  image: assets/images/logo_splash.png
+  image: assets/images/logo_icone_splash.png
   android_12:
     color: "#000000"
-    image: assets/images/logo_splash.png
+    image: assets/images/logo_icone_splash.png
   ios: false
 
 flutter:
