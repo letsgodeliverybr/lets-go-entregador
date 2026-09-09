@@ -70,7 +70,13 @@ class _LoginScreenState extends State<LoginScreen> {
         // função que o cold start (AuthGate) usa — fonte única do gate de
         // cadastro/permissões, garante que quem não está 100% aprovado cai
         // direto em AguardoAprovacaoScreen, sem ver nenhuma outra tela antes.
+        // ignore: avoid_print
+        debugPrint('[GATE-DEBUG] login OK — uid=${user.id} email=${user.email} '
+            'chamando resolverTelaPosLogin()...');
         final tela = await resolverTelaPosLogin();
+        // ignore: avoid_print
+        debugPrint('[GATE-DEBUG] resolverTelaPosLogin() retornou ${tela.runtimeType} '
+            '— navegando agora');
         if (mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => tela));
         }

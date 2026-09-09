@@ -52,6 +52,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // ignore: avoid_print
+    debugPrint('[GATE-DEBUG] *** EntregadorHomeScreen ABRIU/MONTOU ***');
     _carregarEntregador();
     _carregarStats();
     _carregarPedidosEmAndamento();

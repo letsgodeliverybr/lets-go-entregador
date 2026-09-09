@@ -45,6 +45,8 @@ class _AguardoAprovacaoScreenState extends State<AguardoAprovacaoScreen> {
   @override
   void initState() {
     super.initState();
+    // ignore: avoid_print
+    debugPrint('[GATE-DEBUG] *** AguardoAprovacaoScreen ABRIU/MONTOU ***');
     _carregar();
   }
 
