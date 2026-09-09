@@ -4,21 +4,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'services/volume_service.dart';
 import 'screens/login_screen.dart';
-import 'screens/permissoes_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/entregador_home_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
 import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
-import 'screens/aguardo_aprovacao_screen.dart';
 import 'services/notification_service.dart';
-import 'screens/device_setup_screen.dart';
-import 'screens/fullscreen_intent_reprompt_screen.dart';
-import 'services/fullscreen_intent_permission_service.dart';
+import 'services/tela_pos_login_service.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
 import 'utils/cla_helper.dart' as cla;
@@ -573,15 +565,20 @@ class _AuthGateState extends State<AuthGate> with SingleTickerProviderStateMixin
 
   // Duração mínima = duração real da sequência visual (2026-09-08): garante
   // que as 2 imagens + transição sejam sempre exibidas por inteiro, mesmo
-  // quando _resolverTela() termina quase instantaneamente (sessão já em
-  // cache) — e também quando o PRÓPRIO precache das imagens atrasa o
-  // início da animação (ver _iniciarSequenciaVisual). Future.wait espera o
-  // MAIOR dos dois tempos — a checagem real de auth/permissões nunca fica
-  // mais lenta por causa disso, só a exibição da marca é que nunca corta a
-  // sequência pela metade.
+  // quando resolverTelaPosLogin() termina quase instantaneamente (sessão
+  // já em cache) — e também quando o PRÓPRIO precache das imagens atrasa
+  // o início da animação (ver _iniciarSequenciaVisual). Future.wait espera
+  // o MAIOR dos dois tempos — a checagem real de auth/permissões nunca
+  // fica mais lenta por causa disso, só a exibição da marca é que nunca
+  // corta a sequência pela metade.
+  //
+  // resolverTelaPosLogin() (services/tela_pos_login_service.dart, extraído
+  // em 2026-09-09) é a MESMA função usada por LoginScreen depois de um
+  // login ativo — fonte única do gate de cadastro/permissões, pra cold
+  // start e login ativo nunca poderem divergir de novo.
   Future<void> _verificarAuth() async {
     final resultados = await Future.wait([
-      _resolverTela(),
+      resolverTelaPosLogin(),
       _sequenciaVisualCompleta.future,
     ]);
     final tela = resultados[0] as Widget;
@@ -590,134 +587,6 @@ class _AuthGateState extends State<AuthGate> with SingleTickerProviderStateMixin
       context,
       MaterialPageRoute(builder: (_) => tela),
     );
-  }
-
-  // Wrapper fino: aplica o gate obrigatório de DeviceSetupScreen (bateria +
-  // autoinício MIUI) por cima de qualquer resultado — vale tanto pra quem
-  // ainda vai logar quanto pra quem reabre o app com sessão já existente
-  // (esse segundo caminho pula direto pra EntregadorHomeScreen/HomeScreen
-  // sem passar por PermissoesScreen nenhuma, então sem esse wrapper aqui o
-  // gate nunca apareceria de novo depois do primeiro login). Só mostra uma
-  // vez — DeviceSetupScreen.jaConcluido() vira true depois da 1ª conclusão.
-  Future<Widget> _resolverTela() async {
-    final tela = await _resolverTelaSemSetup();
-    if (!await DeviceSetupScreen.jaConcluido()) {
-      return DeviceSetupScreen(next: tela);
-    }
-    // Entregador já concluiu o setup obrigatório ANTES da etapa de
-    // Full-Screen-Intent existir (jaConcluido() é uma flag única e global
-    // — quem já passou por ela nunca mais vê DeviceSetupScreen, e por
-    // consequência nunca seria perguntado sobre essa permissão
-    // especificamente). Achado em auditoria 2026-09-02: pra apps não
-    // classificados como chamada/alarme (nosso caso), o Google NÃO
-    // concede essa permissão automaticamente desde 22/01/2025 — sem
-    // perguntar ativamente, boa parte da base instalada nunca teria essa
-    // permissão, mesmo com todo o resto do fluxo (som/vibração/loop)
-    // funcionando normal. Não-bloqueante — "Agora não" sempre disponível,
-    // ver fullscreen_intent_reprompt_screen.dart. Só perguntado uma vez
-    // (jaFoiPerguntado()), independente de session != null aqui porque
-    // não faz sentido perguntar antes do login existir.
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null &&
-        !await FullScreenIntentPermissionService.isGranted() &&
-        !await FullScreenIntentPermissionService.jaFoiPerguntado()) {
-      return FullScreenIntentRepromptScreen(next: tela);
-    }
-    return tela;
-  }
-
-  Future<Widget> _resolverTelaSemSetup() async {
-    final locPerm = await Geolocator.checkPermission();
-    final locFaltando = locPerm == LocationPermission.denied ||
-        locPerm == LocationPermission.deniedForever;
-
-    final notifOk = await FlutterLocalNotificationsPlugin()
-            .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
-            ?.areNotificationsEnabled() ??
-        true;
-    final notifFaltando = !notifOk;
-
-    bool bateriaFaltando = false;
-    try {
-      final ignorandoOtimizacao =
-          await FlutterForegroundTask.isIgnoringBatteryOptimizations;
-      bateriaFaltando = !ignorandoOtimizacao;
-    } catch (_) {}
-
-    final precisaPermissoes = locFaltando || notifFaltando || bateriaFaltando;
-
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) {
-      if (precisaPermissoes) return PermissoesScreen(next: const LoginScreen());
-      return const LoginScreen();
-    }
-
-    await NotificationService.saveFcmToken(session.user.id);
-
-    try {
-      final e = await Supabase.instance.client
-          .from('entregadores')
-          .select(
-              'disponivel, status_cadastro, aprovado, status, '
-              'foto_perfil_status, foto_cnh_status, foto_crlv_status, '
-              'foto_comprovante_residencia_status, foto_placa_status')
-          .eq('id', session.user.id)
-          .single();
-
-      final status = e['status']?.toString() ?? '';
-
-      // Gate real fica nos 5 documentos, não em status_cadastro/aprovado
-      // (auditoria 2026-09-08) — esses dois continuam existindo só como
-      // espelho pro painel (badge/filtro/listagem), o painel já mantém os
-      // dois em sincronia com os documentos (ver app.js,
-      // _recalcularStatusCadastro), mas o app não pode CONFIAR nisso: se
-      // esse espelho um dia dessincronizar por algum bug do lado do
-      // painel, o gate real ainda precisa checar a fonte, não o reflexo.
-      // status=='bloqueado' trava sempre, mesmo com os 5 aprovados — é um
-      // kill-switch independente do admin, não relacionado a documento.
-      const camposDocumento = [
-        'foto_perfil_status',
-        'foto_cnh_status',
-        'foto_crlv_status',
-        'foto_comprovante_residencia_status',
-        'foto_placa_status',
-      ];
-      final todosDocumentosAprovados =
-          camposDocumento.every((c) => e[c]?.toString() == 'aprovado');
-
-      if (status != 'bloqueado' && todosDocumentosAprovados) {
-        if (e['disponivel'] == true) {
-          // App estava fechado/morto e foi aberto pelo fullScreenIntent da
-          // notificação de novo pedido (não por toque manual) — nesse caso
-          // onDidReceiveNotificationResponse (notification_service.dart)
-          // não dispara, porque o plugin de notificações locais ainda não
-          // tinha listener registrado no momento em que o Android lançou a
-          // Activity. getNotificationAppLaunchDetails() é o jeito
-          // documentado do flutter_local_notifications de recuperar esse
-          // dado depois, direto no cold start.
-          try {
-            final detalhes = await FlutterLocalNotificationsPlugin()
-                .getNotificationAppLaunchDetails();
-            if (detalhes?.didNotificationLaunchApp == true &&
-                detalhes?.notificationResponse?.payload == 'novo_pedido') {
-              // App estava morto/background e só ficou "vivo" de verdade
-              // agora via fullScreenIntent — o alerta insistente (canal
-              // nativo, FLAG_INSISTENT) já estava tocando sozinho desde a
-              // chegada da notificação, sem depender disso; só resta
-              // navegar direto pra tela certa.
-              return const PedidosDisponiveisScreen();
-            }
-          } catch (_) {}
-          return const EntregadorHomeScreen();
-        }
-        return const HomeScreen();
-      }
-
-      return const AguardoAprovacaoScreen();
-    } catch (_) {
-      return const LoginScreen();
-    }
   }
 
   // Fundo preto igual ao splash nativo (flutter_native_splash) — sem isso,
