@@ -9,6 +9,7 @@ import '../screens/home_screen.dart';
 import '../screens/entregador_home_screen.dart';
 import '../screens/pedidos_disponiveis_screen.dart';
 import '../screens/aguardo_aprovacao_screen.dart';
+import '../screens/cadastro_aprovacao_screen.dart';
 import '../screens/device_setup_screen.dart';
 import '../screens/fullscreen_intent_reprompt_screen.dart';
 import 'notification_service.dart';
@@ -91,16 +92,18 @@ Future<Widget> _resolverTelaSemSetup() async {
         .single();
 
     final status = e['status']?.toString() ?? '';
+    final statusCadastro = e['status_cadastro']?.toString() ?? '';
 
-    // Gate real fica nos 5 documentos, não em status_cadastro/aprovado
+    // Gate de ACESSO fica nos 5 documentos, não em status_cadastro/aprovado
     // (auditoria 2026-09-08) — esses dois continuam existindo só como
     // espelho pro painel (badge/filtro/listagem), o painel já mantém os
     // dois em sincronia com os documentos (ver app.js,
-    // _recalcularStatusCadastro), mas o app não pode CONFIAR nisso: se
-    // esse espelho um dia dessincronizar por algum bug do lado do
-    // painel, o gate real ainda precisa checar a fonte, não o reflexo.
-    // status=='bloqueado' trava sempre, mesmo com os 5 aprovados — é um
-    // kill-switch independente do admin, não relacionado a documento.
+    // _recalcularStatusCadastro), mas o app não pode CONFIAR nisso pra
+    // LIBERAR acesso: se esse espelho um dia dessincronizar por algum bug
+    // do lado do painel, o gate de acesso ainda precisa checar a fonte,
+    // não o reflexo. status=='bloqueado' trava sempre, mesmo com os 5
+    // aprovados — é um kill-switch independente do admin, não relacionado
+    // a documento.
     const camposDocumento = [
       'foto_perfil_status',
       'foto_cnh_status',
@@ -111,7 +114,15 @@ Future<Widget> _resolverTelaSemSetup() async {
     final todosDocumentosAprovados =
         camposDocumento.every((c) => e[c]?.toString() == 'aprovado');
 
-    if (status != 'bloqueado' && todosDocumentosAprovados) {
+    // Bloqueado trava sempre, ANTES de checar documento — kill-switch do
+    // admin, independente de o cadastro estar pendente/em_análise/
+    // aprovado. Checa primeiro pra nunca cair no ramo de "pendente" nem
+    // no de acesso liberado.
+    if (status == 'bloqueado') {
+      return const AguardoAprovacaoScreen();
+    }
+
+    if (todosDocumentosAprovados) {
       if (e['disponivel'] == true) {
         // App estava fechado/morto e foi aberto pelo fullScreenIntent da
         // notificação de novo pedido (não por toque manual) — nesse caso
@@ -137,6 +148,25 @@ Future<Widget> _resolverTelaSemSetup() async {
         return const EntregadorHomeScreen();
       }
       return const HomeScreen();
+    }
+
+    // Distinção pendente vs em_análise/reprovado (2026-09-09, correção de
+    // roteamento): os 5 campos foto_*_status só têm 3 valores possíveis
+    // ('em_analise','aprovado','reprovado' — ver migration
+    // add_status_documentos_entregador.sql) e nascem com default
+    // 'em_analise', mesmo pra quem NUNCA enviou documento nenhum. Ou seja,
+    // o gate de ACESSO (todosDocumentosAprovados) não tem como distinguir
+    // "nunca enviei nada" de "enviei e está em análise" — os dois batem
+    // 'em_analise' nos 5 campos. Quem nunca enviou tinha caído aqui, na
+    // tela de STATUS (nada pra mostrar, sem enviar nada não tem como
+    // completar o cadastro). status_cadastro, por outro lado, É confiável
+    // pra essa distinção específica (não é usado pra LIBERAR acesso, só
+    // pra escolher a tela de bloqueio certa): 'pendente' só é setado no
+    // signup (registro_screen.dart) e só sai desse valor quando
+    // CadastroAprovacaoScreen de fato SUBMETE os documentos (vira
+    // 'em_analise' nesse momento — ver cadastro_aprovacao_screen.dart).
+    if (statusCadastro == 'pendente') {
+      return const CadastroAprovacaoScreen();
     }
 
     return const AguardoAprovacaoScreen();
