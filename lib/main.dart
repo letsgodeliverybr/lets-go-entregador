@@ -479,24 +479,26 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> with SingleTickerProviderStateMixin {
-  // Sequência da Fase 2 (2026-09-08, fechamento definitivo do splash): a
-  // Fase 1 nativa (flutter_native_splash, pubspec.yaml) continua sozinha
-  // com o ícone pequeno — aqui, sob controle total do Flutter, mostramos a
-  // marca em 2 imagens: Imagem A (logo_splash.png, ícone + @pedeletsgo +
-  // #CadaKmUmSonho) por 1s, uma transição combinada (A esmaece enquanto B
+  // Sequência da Fase 2 (2026-09-09, ajuste de duração a pedido do
+  // usuário): a Fase 1 nativa (flutter_native_splash) foi removida por
+  // completo — volta ao padrão do Flutter, ver commit "revert" de
+  // 2026-09-08 — aqui, sob controle total do Flutter, mostramos a marca
+  // em 2 imagens: Imagem A (logo_splash.png, ícone + @pedeletsgo +
+  // #CadaKmUmSonho) por 2s, uma transição combinada (A esmaece enquanto B
   // aparece crescendo) e Imagem B (logo_parceiro_letsgo.png, "PARCEIRO
-  // LET'S GO DELIVERY") por 2s — B fica mais tempo que A de propósito
-  // (pedido do usuário): é a marca final que deve grudar na memória.
+  // LET'S GO DELIVERY") por 2s.
   //
-  // Total de 3.4s: 1s + 0.4s de transição própria + 2s. Testado com
-  // captura de frames em tempo real antes da confirmação (só o holdA/
-  // transição — holdB é só um Duration maior, mesmo mecanismo).
-  static const _holdA = Duration(milliseconds: 1000);
+  // Total de 4.4s: 2s + 0.4s de transição própria + 2s — a transição
+  // continua consumindo tempo À PARTE dos 2 holds (mesmo critério já
+  // usado antes: descontar do hold encurtaria o tempo de leitura de cada
+  // imagem). Testado com captura de frames em tempo real nesses tempos
+  // maiores antes de reportar como pronto.
+  static const _holdA = Duration(milliseconds: 2000);
   static const _transicao = Duration(milliseconds: 400);
   // holdB = 2000ms: não precisa de campo próprio, é o que sobra de
   // duracaoTotalFase2 depois de _t2 (ver build()).
   static const duracaoTotalFase2 = Duration(
-    milliseconds: 1000 + 400 + 2000, // holdA + transicao + holdB
+    milliseconds: 2000 + 400 + 2000, // holdA + transicao + holdB
   );
 
   static const _escalaInicialB = 0.72;
