@@ -485,8 +485,19 @@ class _AuthGateState extends State<AuthGate> {
     _verificarAuth();
   }
 
+  // Duração mínima de 2s (2026-09-08, decisão final sobre o splash): garante
+  // que a marca completa (ícone + "Let's Go Delivery") fique visível por
+  // esse tempo mesmo quando _resolverTela() termina rápido — sem isso, uma
+  // sessão já válida em cache podia resolver quase instantaneamente e a
+  // Fase 2 mal aparecia. Future.wait espera o MAIOR dos dois tempos (a
+  // checagem real de auth/permissões nunca fica mais lenta por causa
+  // disso, só a exibição da marca é que nunca fica mais rápida que 2s).
   Future<void> _verificarAuth() async {
-    final tela = await _resolverTela();
+    final resultados = await Future.wait([
+      _resolverTela(),
+      Future.delayed(const Duration(seconds: 2)),
+    ]);
+    final tela = resultados[0] as Widget;
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
