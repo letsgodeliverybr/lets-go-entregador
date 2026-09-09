@@ -633,13 +633,20 @@ class _AuthGateState extends State<AuthGate> {
     return Container(
       color: Colors.black,
       child: const Center(
-        // 260 (não mais 180): logo_splash.png agora é o lockup completo
-        // (ícone + "@pedeletsgo" + "#CadaKmUmSonho", 2026-09-08) — mais
-        // conteúdo/texto que o ícone sozinho de antes, precisa de mais
-        // espaço pro texto ficar legível.
+        // Mesmo arquivo E mesmo tamanho da Fase 1 nativa (flutter_native_
+        // splash, pubspec.yaml) — de propósito, 2026-09-08: pra parecer
+        // uma imagem só/contínua entre as duas fases, não uma trocando
+        // pela outra. logo_icone_texto_circular.png foi dimensionado pra
+        // caber inteiro dentro da zona de segurança circular de 288dp da
+        // Splash Screen API do Android 12+ (doc oficial) — 237 é 85% do
+        // limite teórico calculado pro aspect ratio dessa imagem, margem
+        // pra variação de máscara entre fabricantes/versões. Aqui na Fase
+        // 2 não existe essa restrição (controlamos o layout 100%), mas
+        // usamos o MESMO tamanho mesmo assim — é o que garante a
+        // continuidade, não o máximo que essa tela permitiria sozinha.
         child: Image(
-          image: AssetImage('assets/images/logo_splash.png'),
-          width: 260,
+          image: AssetImage('assets/images/logo_icone_texto_circular.png'),
+          width: 237,
         ),
       ),
     );

@@ -1,7 +1,7 @@
 name: lets_go_entregador
 description: Lets Go Delivery app.
 publish_to: 'none'
-version: 1.0.0+92
+version: 1.0.0+93
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -46,25 +46,26 @@ flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
 
-# Confirmado em aparelho real (2026-09-08): a fase nativa (Android 12+)
-# corta o lockup completo — é a "zona de segurança" que a API de splash
-# do Android impõe no ícone, mascara/corta o que passar da área central.
-# Por isso, aqui (fase 1, restrita) usa SÓ o ícone — logo_icone_splash.png
-# (assets/images/logo.png com o fundo branco removido, ainda não tinha
-# canal alpha; mesmo processo já usado antes nesta sessão). O lockup
-# completo (logo_splash.png, ícone + "@pedeletsgo" + "#CadaKmUmSonho")
-# fica só pro AuthGate (lib/main.dart) — lá não tem restrição nenhuma do
-# Android, controlamos o layout 100%.
+# Mesma imagem, mesmo tamanho nas duas fases (2026-09-08): confirmado em
+# aparelho real que o lockup completo (icone+"@pedeletsgo"+
+# "#CadaKmUmSonho") era cortado na fase nativa (zona de segurança circular
+# de 288dp da Splash Screen API do Android 12+, doc oficial). Solução:
+# logo_icone_texto_circular.png é um lockup horizontal compacto (ícone +
+# "Let's Go Delivery") dimensionado pra caber inteiro dentro dessa zona
+# (calculado: ~280x69dp no limite teórico do círculo, usado a 237x58dp —
+# 85% disso, margem de segurança pra variação de máscara entre
+# fabricantes/versões). Mesmo arquivo, mesmo tamanho de exibição (237),
+# usado aqui E no AuthGate (lib/main.dart) — sem isso, o "ícone só" da
+# fase 1 não tinha como parecer contínuo com o lockup completo da fase 2.
 # O efeito de zoom na abertura no Android 12+ é do próprio sistema
-# operacional (android:windowSplashScreenAnimatedIcon sempre anima),
-# não dá pra desativar só por config deste pacote — vale mesmo só com
-# ícone.
+# operacional (android:windowSplashScreenAnimatedIcon sempre anima), não
+# dá pra desativar só por config deste pacote.
 flutter_native_splash:
   color: "#000000"
-  image: assets/images/logo_icone_splash.png
+  image: assets/images/logo_icone_texto_circular.png
   android_12:
     color: "#000000"
-    image: assets/images/logo_icone_splash.png
+    image: assets/images/logo_icone_texto_circular.png
   ios: false
 
 flutter:
