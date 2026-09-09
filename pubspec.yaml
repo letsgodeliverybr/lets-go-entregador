@@ -1,7 +1,7 @@
 name: lets_go_entregador
 description: Lets Go Delivery app.
 publish_to: 'none'
-version: 1.0.0+96
+version: 1.0.0+97
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -38,39 +38,12 @@ dev_dependencies:
   geolocator_android: ^4.6.1
   geolocator_platform_interface: ^4.2.4
   flutter_launcher_icons: any
-  flutter_native_splash: ^2.3.10
 
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
-
-# Fase 1 nativa (2026-09-08, fechamento definitivo do splash — ver
-# lib/main.dart pra Fase 2): confirmado em aparelho real que o lockup
-# completo (icone+"@pedeletsgo"+"#CadaKmUmSonho") era cortado aqui (zona
-# de segurança circular de 288dp da Splash Screen API do Android 12+, doc
-# oficial). Solução: logo_icone_texto_circular.png é um lockup horizontal
-# compacto (ícone + "Let's Go Delivery") dimensionado pra caber inteiro
-# dentro dessa zona (calculado: ~280x69dp no limite teórico do círculo,
-# usado a 237x58dp — 85% disso, margem de segurança pra variação de
-# máscara entre fabricantes/versões). O azul do ícone foi recolorido pra
-# bater exatamente com o azul de logo_splash.png/Imagem A (#0044EF) — a
-# versão original tinha um leve degradê mais escuro por causa do processo
-# de composição. Sob controle total do Flutter, a Fase 2 evoluiu pra uma
-# sequência de 2 imagens (logo_splash.png -> logo_parceiro_letsgo.png),
-# não usa mais este arquivo nem o mesmo tamanho — só a Fase 1 (aqui, fora
-# do nosso controle) continua com essa restrição de zona segura. O efeito
-# de zoom na abertura no Android 12+ é do próprio sistema operacional
-# (android:windowSplashScreenAnimatedIcon sempre anima), não dá pra
-# desativar só por config deste pacote.
-flutter_native_splash:
-  color: "#000000"
-  image: assets/images/logo_icone_texto_circular.png
-  android_12:
-    color: "#000000"
-    image: assets/images/logo_icone_texto_circular.png
-  ios: false
 
 flutter:
   uses-material-design: true
