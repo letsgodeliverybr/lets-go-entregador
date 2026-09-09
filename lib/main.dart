@@ -478,24 +478,109 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with SingleTickerProviderStateMixin {
+  // Sequência da Fase 2 (2026-09-08, fechamento definitivo do splash): a
+  // Fase 1 nativa (flutter_native_splash, pubspec.yaml) continua sozinha
+  // com o ícone pequeno — aqui, sob controle total do Flutter, mostramos a
+  // marca em 2 imagens: Imagem A (logo_splash.png, ícone + @pedeletsgo +
+  // #CadaKmUmSonho) por 1s, uma transição combinada (A esmaece enquanto B
+  // aparece crescendo) e Imagem B (logo_parceiro_letsgo.png, "PARCEIRO
+  // LET'S GO DELIVERY") por 2s — B fica mais tempo que A de propósito
+  // (pedido do usuário): é a marca final que deve grudar na memória.
+  //
+  // Total de 3.4s: 1s + 0.4s de transição própria + 2s. Testado com
+  // captura de frames em tempo real antes da confirmação (só o holdA/
+  // transição — holdB é só um Duration maior, mesmo mecanismo).
+  static const _holdA = Duration(milliseconds: 1000);
+  static const _transicao = Duration(milliseconds: 400);
+  // holdB = 2000ms: não precisa de campo próprio, é o que sobra de
+  // duracaoTotalFase2 depois de _t2 (ver build()).
+  static const duracaoTotalFase2 = Duration(
+    milliseconds: 1000 + 400 + 2000, // holdA + transicao + holdB
+  );
+
+  static const _escalaInicialB = 0.72;
+
+  late final AnimationController _splashController;
+  bool _iniciouSequenciaVisual = false;
+  // Resolve só quando a sequência visual de fato TERMINA de tocar na tela
+  // (não um timer fixo contado desde initState) — ver _iniciarSequenciaVisual.
+  final Completer<void> _sequenciaVisualCompleta = Completer<void>();
+
+  double get _t1 =>
+      _holdA.inMilliseconds / duracaoTotalFase2.inMilliseconds;
+  double get _t2 =>
+      (_holdA.inMilliseconds + _transicao.inMilliseconds) /
+      duracaoTotalFase2.inMilliseconds;
+
   @override
   void initState() {
     super.initState();
+    _splashController = AnimationController(
+      vsync: this,
+      duration: duracaoTotalFase2,
+    );
     _verificarAuth();
   }
 
-  // Duração mínima de 2s (2026-09-08, decisão final sobre o splash): garante
-  // que a marca completa (ícone + "Let's Go Delivery") fique visível por
-  // esse tempo mesmo quando _resolverTela() termina rápido — sem isso, uma
-  // sessão já válida em cache podia resolver quase instantaneamente e a
-  // Fase 2 mal aparecia. Future.wait espera o MAIOR dos dois tempos (a
-  // checagem real de auth/permissões nunca fica mais lenta por causa
-  // disso, só a exibição da marca é que nunca fica mais rápida que 2s).
+  // precacheImage precisa de BuildContext válido (Theme/MediaQuery já
+  // resolvidos) — não dá pra chamar em initState(), por isso aqui.
+  // _iniciouSequenciaVisual evita disparar de novo em rebuilds.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_iniciouSequenciaVisual) {
+      _iniciouSequenciaVisual = true;
+      _iniciarSequenciaVisual();
+    }
+  }
+
+  @override
+  void dispose() {
+    _splashController.dispose();
+    super.dispose();
+  }
+
+  // Decodificar logo_splash.png (730KB) + logo_parceiro_letsgo.png (564KB)
+  // pode levar tempo perceptível num aparelho mais fraco / 1ª abertura. O
+  // AnimationController roda no relógio real desde que forward() é
+  // chamado, independente de a imagem já estar pintável — se o decode
+  // atrasar, a Imagem A pode nunca chegar a ser exibida (confirmado em
+  // teste local: sem esse precache, o 1º frame pintado já mostrava a
+  // Imagem B pronta, com a fase A inteira "pulada"). Por isso: só chama
+  // forward() depois que as duas imagens já estão prontas pra pintar.
+  Future<void> _iniciarSequenciaVisual() async {
+    await Future.wait([
+      precacheImage(const AssetImage('assets/images/logo_splash.png'), context),
+      precacheImage(
+          const AssetImage('assets/images/logo_parceiro_letsgo.png'), context),
+    ]);
+    if (!mounted) {
+      _sequenciaVisualCompleta.complete();
+      return;
+    }
+    try {
+      await _splashController.forward().orCancel;
+    } on TickerCanceled {
+      // widget foi descartado (dispose) antes da animação terminar - ok.
+    }
+    if (!_sequenciaVisualCompleta.isCompleted) {
+      _sequenciaVisualCompleta.complete();
+    }
+  }
+
+  // Duração mínima = duração real da sequência visual (2026-09-08): garante
+  // que as 2 imagens + transição sejam sempre exibidas por inteiro, mesmo
+  // quando _resolverTela() termina quase instantaneamente (sessão já em
+  // cache) — e também quando o PRÓPRIO precache das imagens atrasa o
+  // início da animação (ver _iniciarSequenciaVisual). Future.wait espera o
+  // MAIOR dos dois tempos — a checagem real de auth/permissões nunca fica
+  // mais lenta por causa disso, só a exibição da marca é que nunca corta a
+  // sequência pela metade.
   Future<void> _verificarAuth() async {
     final resultados = await Future.wait([
       _resolverTela(),
-      Future.delayed(const Duration(seconds: 2)),
+      _sequenciaVisualCompleta.future,
     ]);
     final tela = resultados[0] as Widget;
     if (!mounted) return;
@@ -633,31 +718,66 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  // Mesma logo/fundo preto do splash nativo (flutter_native_splash) — sem
-  // isso, o usuário veria a logo por uma fração de segundo e depois um
-  // spinner genérico enquanto _verificarAuth() resolve (sessão + permissões
-  // + setup de dispositivo, pode levar mais que só o tempo do splash
+  // Fundo preto igual ao splash nativo (flutter_native_splash) — sem isso,
+  // o usuário veria a logo por uma fração de segundo e depois um spinner
+  // genérico enquanto _verificarAuth() resolve (sessão + permissões +
+  // setup de dispositivo, pode levar mais que só o tempo do splash
   // nativo). Sem indicador de progresso nenhum de propósito — a transição
   // pra tela final deve parecer contínua, não "logo, depois loading".
+  //
+  // Imagem A e Imagem B ficam as duas sempre montadas (Opacity, não
+  // condicional) desde o 1º frame — evita um "pop-in" de decodificação no
+  // meio da transição, e faz o precache de ambas acontecer em paralelo com
+  // a Fase 1 nativa.
   @override
   Widget build(BuildContext context) {
     return Container(
       color: Colors.black,
-      child: const Center(
-        // Mesmo arquivo E mesmo tamanho da Fase 1 nativa (flutter_native_
-        // splash, pubspec.yaml) — de propósito, 2026-09-08: pra parecer
-        // uma imagem só/contínua entre as duas fases, não uma trocando
-        // pela outra. logo_icone_texto_circular.png foi dimensionado pra
-        // caber inteiro dentro da zona de segurança circular de 288dp da
-        // Splash Screen API do Android 12+ (doc oficial) — 237 é 85% do
-        // limite teórico calculado pro aspect ratio dessa imagem, margem
-        // pra variação de máscara entre fabricantes/versões. Aqui na Fase
-        // 2 não existe essa restrição (controlamos o layout 100%), mas
-        // usamos o MESMO tamanho mesmo assim — é o que garante a
-        // continuidade, não o máximo que essa tela permitiria sozinha.
-        child: Image(
-          image: AssetImage('assets/images/logo_icone_texto_circular.png'),
-          width: 237,
+      child: Center(
+        child: AnimatedBuilder(
+          animation: _splashController,
+          builder: (context, _) {
+            final v = _splashController.value;
+            double opacidadeA;
+            double opacidadeB;
+            double escalaB;
+            if (v <= _t1) {
+              opacidadeA = 1;
+              opacidadeB = 0;
+              escalaB = _escalaInicialB;
+            } else if (v >= _t2) {
+              opacidadeA = 0;
+              opacidadeB = 1;
+              escalaB = 1;
+            } else {
+              final p = Curves.easeOut.transform((v - _t1) / (_t2 - _t1));
+              opacidadeA = 1 - p;
+              opacidadeB = p;
+              escalaB = _escalaInicialB + (1 - _escalaInicialB) * p;
+            }
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Opacity(
+                  opacity: opacidadeA,
+                  child: const Image(
+                    image: AssetImage('assets/images/logo_splash.png'),
+                    width: 260,
+                  ),
+                ),
+                Opacity(
+                  opacity: opacidadeB,
+                  child: Transform.scale(
+                    scale: escalaB,
+                    child: const Image(
+                      image: AssetImage('assets/images/logo_parceiro_letsgo.png'),
+                      width: 260,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
