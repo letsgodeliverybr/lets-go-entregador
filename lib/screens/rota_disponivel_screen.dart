@@ -173,7 +173,22 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     }
   }
 
-  void _rejeitar() {
+  // Grava a recusa (2026-09-10, pra alimentar "Recusadas" no card "Meu
+  // desempenho hoje" da HomeScreen) — mesmo tratamento fire-and-forget de
+  // aceitar_pedido_screen.dart._recusar(): não trava nem avisa em falha de
+  // rede, o entregador só quer sair da tela.
+  Future<void> _rejeitar() async {
+    final uid = _supabase.auth.currentUser?.id;
+    final pedidoId = _pedido['id']?.toString();
+    if (uid != null && pedidoId != null) {
+      try {
+        await _supabase.from('pedido_recusas').insert({
+          'pedido_id': pedidoId,
+          'entregador_id': uid,
+        });
+      } catch (_) {}
+    }
+    if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PedidosDisponiveisScreen()));
   }
 

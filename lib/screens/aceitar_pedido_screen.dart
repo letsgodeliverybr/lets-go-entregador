@@ -132,7 +132,25 @@ class _State extends State<AceitarPedidoScreen> {
     }
   }
 
-  void _recusar() => Navigator.pop(context);
+  // Grava a recusa (2026-09-10, pra alimentar "Recusadas" no card "Meu
+  // desempenho hoje" da HomeScreen) — antes disso, recusar era só
+  // Navigator.pop(context), sem nenhum rastro no banco. Fire-and-forget
+  // silencioso: se o insert falhar (rede etc.), não trava nem avisa o
+  // entregador, ele só quer sair da tela — o pior caso é um dia com a
+  // contagem de recusas levemente subestimada, não vale bloquear a ação.
+  Future<void> _recusar() async {
+    final uid = _supabase.auth.currentUser?.id;
+    final pedidoId = widget.pedido['id']?.toString();
+    if (uid != null && pedidoId != null) {
+      try {
+        await _supabase.from('pedido_recusas').insert({
+          'pedido_id': pedidoId,
+          'entregador_id': uid,
+        });
+      } catch (_) {}
+    }
+    if (mounted) Navigator.pop(context);
+  }
 
 
   @override
