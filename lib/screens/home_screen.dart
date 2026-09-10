@@ -660,25 +660,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       child: Column(
         children: [
-          Container(
-            height: 160,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E2130),
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            // Logo do Let's Go no lugar do ícone genérico (2026-09-10) —
-            // logo_icone_splash.png é a única versão da logo com fundo
-            // transparente de verdade (RGBA) no projeto; logo.png tem
-            // fundo branco opaco, apareceria como um quadrado branco feio
-            // em cima do card escuro.
-            child: Center(
-              child: Opacity(
-                opacity: 0.7,
+          // Banner "Mete Marcha!" (2026-09-10) — substitui a logo pequena
+          // (ficava ruim/pouco proporcional num slot de 72px). Imagem
+          // promocional em si (banner_mete_marcha.jpg, fundo azul, texto
+          // branco), com cantos próprios arredondados e um respiro lateral
+          // — diferente da logo antiga, que ocupava a largura toda da
+          // caixa escura sem margem nenhuma.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                // Proporção real do arquivo (1035x682, ~3:2).
+                aspectRatio: 1035 / 682,
                 child: Image.asset(
-                  'assets/images/logo_icone_splash.png',
-                  width: 72,
-                  height: 72,
+                  'assets/images/banner_mete_marcha.jpg',
+                  fit: BoxFit.cover,
                 ),
               ),
             ),
@@ -844,14 +841,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ? const Color(0xFF1A56DB)
                   : const Color(0xFF2A2D35)),
         ),
+        // Gap FIXO (2026-09-10, corrige espaçamento inconsistente) — antes
+        // usava MainAxisAlignment.spaceBetween, que calcula o espaço livre
+        // com base na largura medida de CADA texto. "Almoço" (com o "m",
+        // mais largo) mede mais que "Jantar" no mesmo peso/tamanho de
+        // fonte, sobrando menos espaço livre pro spaceBetween distribuir —
+        // resultado: gap visivelmente menor no botão Almoço, mesmo sendo
+        // o mesmo widget/mesmo código nos dois. Expanded+SizedBox garante
+        // um gap de 8px sempre, independente da largura do texto.
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label,
-                style: TextStyle(
-                    color: selecionado ? const Color(0xFF1A56DB) : Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+            Expanded(
+              child: Text(label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: selecionado ? const Color(0xFF1A56DB) : Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13)),
+            ),
+            const SizedBox(width: 8),
             Text(horario,
                 style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
           ],
