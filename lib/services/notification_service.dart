@@ -90,6 +90,20 @@ class NotificationService {
   static const String _channelBateriaId = 'letsgo_bateria_baixa';
   static const String _channelBateriaName = 'Bateria baixa';
   static const String _channelBateriaDesc = 'Aviso quando fica indisponível por bateria baixa';
+
+  // Aviso de "pedido realocado pra outro entregador" (2026-09-10, bug real
+  // corrigido — ver migrations/notificar_entregador_antigo_realocacao.sql,
+  // repo painel): quando um admin realoca manualmente um pedido que já
+  // estava com este entregador, o pedido é desalocado dele sem aviso
+  // nenhum antes dessa correção — ele continuava "em rota" na visão dele
+  // enquanto o pedido já tinha voltado a 'pronto' (disponível pra
+  // qualquer outro) no banco. Mesmo motivo neutro do canal de bateria: é
+  // um AVISO do que já aconteceu, não uma oferta pra aceitar — nunca deve
+  // soar como o alarme insistente de pedido novo.
+  static const String _channelPedidoRealocadoId = 'letsgo_pedido_realocado';
+  static const String _channelPedidoRealocadoName = 'Pedido realocado';
+  static const String _channelPedidoRealocadoDesc =
+      'Aviso quando um pedido que estava com você é reatribuído a outro entregador';
   // wa.me com número já em formato internacional (55 + DDD 11 + número) —
   // mesmo (11) 99170-2772 usado em todo o resto do app pra contato/suporte.
   // Trocado de "abrir link de cadastro" pra "abrir WhatsApp" a pedido.
@@ -255,6 +269,15 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
       ));
+
+      await plugin?.createNotificationChannel(const AndroidNotificationChannel(
+        _channelPedidoRealocadoId,
+        _channelPedidoRealocadoName,
+        description: _channelPedidoRealocadoDesc,
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      ));
     }
 
     _initialized = true;
@@ -290,6 +313,10 @@ class NotificationService {
           titulo: msg.data['titulo']?.toString(),
           corpo: msg.data['corpo']?.toString(),
         );
+      } else if (tipo == 'pedido_realocado') {
+        // Aviso, não alarme — sem VolumeService/forçar volume, diferente
+        // dos ramos abaixo (nova_rota/novo_pedido, que são ofertas reais).
+        await showPedidoRealocadoLocal(msg.data['numero']?.toString() ?? '');
       } else if (tipo == 'nova_rota') {
         // Volume forçado ANTES de mostrar — achado em auditoria
         // (2026-09-03): esse caminho (app em foreground) nunca chamava
@@ -547,6 +574,45 @@ class NotificationService {
           'Carregue o celular para ficar disponível de novo.',
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'bateria_baixa',
+    );
+  }
+
+  // ── Notificação local: pedido realocado pra outro entregador ────────────
+  // 2026-09-10, bug real corrigido: admin usou "Alocar entregador" (painel)
+  // num pedido que já estava com este entregador — o pedido foi desalocado
+  // dele e reaberto como disponível. Precisa avisar explicitamente (mesmo
+  // motivo da bateria baixa: sem isso ele só descobre quando tentar avançar
+  // a entrega e falhar, ou nunca descobre e segue dirigindo à toa).
+  // Notificação simples, sem som insistente — é um aviso do que já
+  // aconteceu, não uma oferta pra aceitar.
+  static Future<void> showPedidoRealocadoLocal(String numero) async {
+    if (!_initialized) await initLocal();
+
+    const androidDetails = AndroidNotificationDetails(
+      _channelPedidoRealocadoId,
+      _channelPedidoRealocadoName,
+      channelDescription: _channelPedidoRealocadoDesc,
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final numeroTexto = numero.isNotEmpty ? '#$numero' : 'que estava com você';
+    await _localNotifications.show(
+      1004,
+      '🔄 Pedido realocado',
+      'O pedido $numeroTexto foi reatribuído a outro entregador pelo suporte. '
+          'Não é mais necessário continuar a entrega dele.',
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'pedido_realocado',
     );
   }
 

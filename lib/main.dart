@@ -51,7 +51,10 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       await Firebase.initializeApp(options: _firebaseOptions);
     }
     final tipo = message.data['tipo']?.toString() ?? '';
-    if (tipo != 'avaliar_app' && tipo != 'indicacao' && tipo != 'periodico') {
+    if (tipo != 'avaliar_app' &&
+        tipo != 'indicacao' &&
+        tipo != 'periodico' &&
+        tipo != 'pedido_realocado') {
       // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
       // mesmo fallback de sempre (else final antigo).
       //
@@ -88,6 +91,13 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       await NotificationService.showPeriodicoLocal(
         titulo: message.data['titulo']?.toString(),
         corpo: message.data['corpo']?.toString(),
+      );
+    } else if (tipo == 'pedido_realocado') {
+      // Aviso (bug real corrigido 2026-09-10), não alarme — sem
+      // VolumeService.forcarVolumeMidiaMaximo(), diferente do ramo padrão
+      // acima (novo_pedido/nova_rota são ofertas reais pra aceitar).
+      await NotificationService.showPedidoRealocadoLocal(
+        message.data['numero']?.toString() ?? '',
       );
     }
   } catch (e, st) {
