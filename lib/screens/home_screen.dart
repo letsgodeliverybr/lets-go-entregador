@@ -662,19 +662,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           // Banner "Mete Marcha!" (2026-09-10) — substitui a logo pequena
           // (ficava ruim/pouco proporcional num slot de 72px). Imagem
-          // promocional em si (banner_mete_marcha.jpg, fundo azul, texto
-          // branco), com cantos próprios arredondados e um respiro lateral
-          // — diferente da logo antiga, que ocupava a largura toda da
-          // caixa escura sem margem nenhuma.
+          // promocional em si (banner_mete_marcha.png — trocada nesse
+          // mesmo dia por uma versão vetorial de qualidade bem melhor,
+          // fundo azul, texto branco), com cantos próprios arredondados e
+          // um respiro lateral — diferente da logo antiga, que ocupava a
+          // largura toda da caixa escura sem margem nenhuma.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: AspectRatio(
-                // Proporção real do arquivo (1035x682, ~3:2).
-                aspectRatio: 1035 / 682,
+                // Proporção real do arquivo (1545x1018, ~3:2 — praticamente
+                // idêntica à versão anterior, 1035x682).
+                aspectRatio: 1545 / 1018,
                 child: Image.asset(
-                  'assets/images/banner_mete_marcha.jpg',
+                  'assets/images/banner_mete_marcha.png',
                   fit: BoxFit.cover,
                 ),
               ),
@@ -849,15 +851,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // resultado: gap visivelmente menor no botão Almoço, mesmo sendo
         // o mesmo widget/mesmo código nos dois. Expanded+SizedBox garante
         // um gap de 8px sempre, independente da largura do texto.
+        // FittedBox no label (2026-09-10, corrige truncamento) — o
+        // Expanded (fix de espaçamento acima) deixa pouco espaço sobrando
+        // pro label num card de meia-tela, e TextOverflow.ellipsis cortava
+        // "Almoço"/"Jantar" pra "Alm…"/"Jan…". FittedBox encolhe a fonte
+        // em vez de cortar — mesma técnica já usada no botão "Confirmar
+        // Turno" — garante a palavra inteira sempre visível. O horário
+        // continua no tamanho normal (menor, não precisa desse cuidado).
         child: Row(
           children: [
             Expanded(
-              child: Text(label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: selecionado ? const Color(0xFF1A56DB) : Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13)),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(label,
+                    style: TextStyle(
+                        color: selecionado ? const Color(0xFF1A56DB) : Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+              ),
             ),
             const SizedBox(width: 8),
             Text(horario,
