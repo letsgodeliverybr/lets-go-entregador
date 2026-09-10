@@ -577,15 +577,11 @@ class _AuthGateState extends State<AuthGate> with SingleTickerProviderStateMixin
   // login ativo — fonte única do gate de cadastro/permissões, pra cold
   // start e login ativo nunca poderem divergir de novo.
   Future<void> _verificarAuth() async {
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] AuthGate._verificarAuth() (cold start) — chamando resolverTelaPosLogin()...');
     final resultados = await Future.wait([
       resolverTelaPosLogin(),
       _sequenciaVisualCompleta.future,
     ]);
     final tela = resultados[0] as Widget;
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] AuthGate: resolverTelaPosLogin() retornou ${tela.runtimeType}');
     if (!mounted) return;
     Navigator.pushReplacement(
       context,

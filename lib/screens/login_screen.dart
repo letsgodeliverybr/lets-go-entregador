@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'registro_screen.dart';
+import 'carregando_pos_login_screen.dart';
 import '../services/notification_service.dart';
-import '../services/tela_pos_login_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,22 +63,21 @@ class _LoginScreenState extends State<LoginScreen> {
           });
         }
         await NotificationService.saveFcmToken(user.id);
-        // Brecha de segurança corrigida em 2026-09-09: antes ia direto pra
-        // HomeScreen() sem checar nada — um entregador reprovado/em_análise
-        // conseguia navegar pelo app inteiro (mapa, telas internas) e só era
-        // barrado ao tentar ficar online. resolverTelaPosLogin() é a MESMA
-        // função que o cold start (AuthGate) usa — fonte única do gate de
-        // cadastro/permissões, garante que quem não está 100% aprovado cai
-        // direto em AguardoAprovacaoScreen, sem ver nenhuma outra tela antes.
-        // ignore: avoid_print
-        debugPrint('[GATE-DEBUG] login OK — uid=${user.id} email=${user.email} '
-            'chamando resolverTelaPosLogin()...');
-        final tela = await resolverTelaPosLogin();
-        // ignore: avoid_print
-        debugPrint('[GATE-DEBUG] resolverTelaPosLogin() retornou ${tela.runtimeType} '
-            '— navegando agora');
+        // Brecha de segurança corrigida em 2026-09-09, depois refinada: ia
+        // direto pra HomeScreen() sem checar nada — corrigido chamando
+        // resolverTelaPosLogin() aqui mesmo. Só que isso ainda deixava uma
+        // janela de race condition real (confirmada em teste com conta
+        // 'pendente': o destino final chegava a aparecer por uma fração de
+        // segundo antes do redirect). Correção definitiva: navega IMEDIATA-
+        // MENTE (sem esperar nada) pra CarregandoPosLoginScreen — só ela é
+        // visível durante a resolução, e só ELA (não mais o LoginScreen)
+        // chama resolverTelaPosLogin() e navega pro destino final quando
+        // terminar. Nenhum frame de conteúdo aparece entre login e destino.
         if (mounted) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => tela));
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const CarregandoPosLoginScreen()),
+          );
         }
       }
     } on AuthException catch (e) {

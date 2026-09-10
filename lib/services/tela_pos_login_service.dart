@@ -27,11 +27,7 @@ import 'fullscreen_intent_permission_service.dart';
 // no mesmo resultado — não dá mais pra um deles "esquecer" o gate.
 Future<Widget> resolverTelaPosLogin() async {
   final tela = await _resolverTelaSemSetup();
-  final setupConcluido = await DeviceSetupScreen.jaConcluido();
-  // ignore: avoid_print
-  debugPrint('[GATE-DEBUG] resolverTelaPosLogin: _resolverTelaSemSetup() -> '
-      '${tela.runtimeType} | DeviceSetupScreen.jaConcluido()=$setupConcluido');
-  if (!setupConcluido) {
+  if (!await DeviceSetupScreen.jaConcluido()) {
     return DeviceSetupScreen(next: tela);
   }
   // Entregador já concluiu o setup obrigatório ANTES da etapa de
@@ -78,8 +74,6 @@ Future<Widget> _resolverTelaSemSetup() async {
   final precisaPermissoes = locFaltando || notifFaltando || bateriaFaltando;
 
   final session = Supabase.instance.client.auth.currentSession;
-  // ignore: avoid_print
-  debugPrint('[GATE-DEBUG] _resolverTelaSemSetup: session=${session == null ? 'NULL' : '${session.user.id} / ${session.user.email}'}');
   if (session == null) {
     if (precisaPermissoes) return const PermissoesScreen(next: LoginScreen());
     return const LoginScreen();
@@ -96,9 +90,6 @@ Future<Widget> _resolverTelaSemSetup() async {
             'foto_comprovante_residencia_status, foto_placa_status')
         .eq('id', session.user.id)
         .single();
-
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] row bruta lida do banco pra uid=${session.user.id}: $e');
 
     final status = e['status']?.toString() ?? '';
     final statusCadastro = e['status_cadastro']?.toString() ?? '';
@@ -123,24 +114,15 @@ Future<Widget> _resolverTelaSemSetup() async {
     final todosDocumentosAprovados =
         camposDocumento.every((c) => e[c]?.toString() == 'aprovado');
 
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] status=$status statusCadastro=$statusCadastro '
-        'todosDocumentosAprovados=$todosDocumentosAprovados '
-        'disponivel=${e['disponivel']}');
-
     // Bloqueado trava sempre, ANTES de checar documento — kill-switch do
     // admin, independente de o cadastro estar pendente/em_análise/
     // aprovado. Checa primeiro pra nunca cair no ramo de "pendente" nem
     // no de acesso liberado.
     if (status == 'bloqueado') {
-      // ignore: avoid_print
-      debugPrint('[GATE-DEBUG] decisão: bloqueado -> AguardoAprovacaoScreen');
       return const AguardoAprovacaoScreen();
     }
 
     if (todosDocumentosAprovados) {
-      // ignore: avoid_print
-      debugPrint('[GATE-DEBUG] decisão: todosDocumentosAprovados -> acesso liberado');
       if (e['disponivel'] == true) {
         // App estava fechado/morto e foi aberto pelo fullScreenIntent da
         // notificação de novo pedido (não por toque manual) — nesse caso
@@ -184,18 +166,11 @@ Future<Widget> _resolverTelaSemSetup() async {
     // CadastroAprovacaoScreen de fato SUBMETE os documentos (vira
     // 'em_analise' nesse momento — ver cadastro_aprovacao_screen.dart).
     if (statusCadastro == 'pendente') {
-      // ignore: avoid_print
-      debugPrint('[GATE-DEBUG] decisão: statusCadastro=pendente -> CadastroAprovacaoScreen');
       return const CadastroAprovacaoScreen();
     }
 
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] decisão: fallback -> AguardoAprovacaoScreen '
-        '(statusCadastro=$statusCadastro)');
     return const AguardoAprovacaoScreen();
-  } catch (err, st) {
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] EXCEÇÃO em _resolverTelaSemSetup: $err\n$st');
+  } catch (_) {
     return const LoginScreen();
   }
 }

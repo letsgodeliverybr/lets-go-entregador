@@ -47,8 +47,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    // ignore: avoid_print
-    debugPrint('[GATE-DEBUG] *** HomeScreen ABRIU/MONTOU ***');
     WidgetsBinding.instance.addObserver(this);
     _inicializar();
   }
