@@ -14,6 +14,16 @@ class TrackingService {
   static StreamSubscription<int>? _batterySub;
   static bool _ativo = false;
   static bool _forcandoOfflinePorBateria = false;
+  // Estado (não concorrência) — 2026-09-10, corrige alerta repetido: marca
+  // que já disparou o alerta/offline PRO CRUZAMENTO ATUAL de 15%, distinto
+  // de [_forcandoOfflinePorBateria] (que só evita 2 chamadas simultâneas e
+  // é resetada assim que uma chamada termina — sem isso, o próximo
+  // ACTION_BATTERY_CHANGED nativo, que pode disparar de novo mesmo sem o
+  // % mudar de verdade, ver BatteryService, passava livre e repetia som/
+  // vibração/notificação). Só volta a `false` quando o nível se recupera
+  // pra ≥15% (uma queda futura já conta como cruzamento novo, deve
+  // alertar de novo) ou quando o rastreamento reinicia.
+  static bool _jaAlertouBateriaBaixa = false;
   static Position? _ultimaPosicao;
   static String? _entregadorId;
 
@@ -116,8 +126,15 @@ class TrackingService {
   // gastar esse listener com o entregador offline.
   static void _assinarBateria(String entregadorId) {
     _batterySub?.cancel();
+    _jaAlertouBateriaBaixa = false; // novo início de rastreamento, estado limpo
     _batterySub = BatteryService.onLevelChanged.listen((nivel) {
-      if (nivel >= BatteryService.limiteMinimo) return;
+      if (nivel >= BatteryService.limiteMinimo) {
+        // Recuperou (carregou) acima do limite — uma queda futura no mesmo
+        // turno é um cruzamento NOVO, deve alertar de novo.
+        _jaAlertouBateriaBaixa = false;
+        return;
+      }
+      if (_jaAlertouBateriaBaixa) return; // já alertou pra esse cruzamento
       _forcarOfflinePorBateria(entregadorId, nivel);
     });
   }
@@ -138,10 +155,13 @@ class TrackingService {
   // motoboy ainda precisa disso tudo rodando pra terminar a entrega em
   // mãos). `_forcandoOfflinePorBateria` evita disparo duplicado se o
   // stream emitir mais de um valor abaixo do limite antes da primeira
-  // chamada terminar (ambos os caminhos são assíncronos).
+  // chamada terminar (ambos os caminhos são assíncronos); `_jaAlertouBateriaBaixa`
+  // evita o disparo repetido DEPOIS que essa chamada já terminou, pro mesmo
+  // cruzamento (ver comentário em _assinarBateria).
   static Future<void> _forcarOfflinePorBateria(String entregadorId, int nivel) async {
     if (_forcandoOfflinePorBateria) return;
     _forcandoOfflinePorBateria = true;
+    _jaAlertouBateriaBaixa = true;
     try {
       try {
         await ficarOffline(entregadorId);
@@ -289,12 +309,27 @@ class TrackingService {
   }) async {
     if (!aindaOnlineSegundoBanco) return false;
     final nivel = await BatteryService.nivelAtual();
-    if (nivel == null || nivel >= BatteryService.limiteMinimo) return true;
+    if (nivel == null) return true;
+    if (nivel >= BatteryService.limiteMinimo) {
+      // Recuperou — mesma lógica de _assinarBateria: uma queda futura no
+      // mesmo turno volta a contar como cruzamento novo.
+      _jaAlertouBateriaBaixa = false;
+      return true;
+    }
     try {
       await ficarOffline(entregadorId);
       debugPrint('[TrackingService] 🔋 Offline mantido/forçado ao reabrir a tela — bateria em $nivel%');
-      // ignore: unawaited_futures
-      NotificationService.showBateriaBaixaLocal(nivel);
+      // 2026-09-10: sem essa checagem, voltar pra essa tela várias vezes
+      // (trocar de aba e voltar) com bateria já baixa disparava a
+      // notificação de novo a cada volta — segundo ponto de disparo
+      // repetido, junto com o listener contínuo em _assinarBateria. Mesmo
+      // flag de estado dos dois caminhos, pra nunca alertar 2x pro mesmo
+      // cruzamento não importa por qual caminho ele foi detectado.
+      if (!_jaAlertouBateriaBaixa) {
+        _jaAlertouBateriaBaixa = true;
+        // ignore: unawaited_futures
+        NotificationService.showBateriaBaixaLocal(nivel);
+      }
       return false;
     } catch (_) {
       // Entrega ativa — ficarOffline já recusou, entregador continua
