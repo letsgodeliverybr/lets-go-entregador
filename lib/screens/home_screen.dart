@@ -346,11 +346,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         title: const Text('Bem vindo!',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-              onPressed: () {}),
-        ],
+        // Sino removido (2026-09-10) — não existe notificação implementada
+        // atrás dele, era um botão morto (onPressed: () {}).
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -361,11 +358,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(height: 16),
             _buildCardPrincipal(),
             const SizedBox(height: 16),
-            _buildCardSaldoDisponivel(),
-            const SizedBox(height: 16),
+            // Nova ordem (2026-09-10, a pedido do usuário): Agendamento +
+            // Desempenho / Saldo + Premium / MEI + Seguro.
             _buildLinhaAgendamentoDesempenho(),
             const SizedBox(height: 16),
-            _buildLinhaPremiumMeiSeguro(),
+            _buildLinhaSaldoPremium(),
+            const SizedBox(height: 16),
+            _buildLinhaMeiSeguro(),
             const SizedBox(height: 80),
           ],
         ),
@@ -668,9 +667,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               borderRadius:
                   BorderRadius.vertical(top: Radius.circular(16)),
             ),
-            child: const Center(
-              child: Icon(Icons.inventory_2_outlined,
-                  size: 72, color: Colors.white24),
+            // Logo do Let's Go no lugar do ícone genérico (2026-09-10) —
+            // logo_icone_splash.png é a única versão da logo com fundo
+            // transparente de verdade (RGBA) no projeto; logo.png tem
+            // fundo branco opaco, apareceria como um quadrado branco feio
+            // em cima do card escuro.
+            child: Center(
+              child: Opacity(
+                opacity: 0.7,
+                child: Image.asset(
+                  'assets/images/logo_icone_splash.png',
+                  width: 72,
+                  height: 72,
+                ),
+              ),
             ),
           ),
           Padding(
@@ -730,75 +740,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // Card "Saldo disponível" — largura total (2026-09-10, reorganização da
-  // tela offline). Mesmo dado/estilo do card antigo (_buildCardSaldo, na
-  // linha deslizável junto com "Demanda na sua região", removido — nunca
-  // funcionou), só que agora sozinho, largura total, item 1 da nova ordem.
-  Widget _buildCardSaldoDisponivel() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A2D35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  // Linha responsiva de 2 cards, cada um ocupando metade da largura
+  // disponível (2026-09-10, corrige responsividade) — substitui o padrão
+  // anterior de ListView horizontal com largura FIXA em dp
+  // (ex: width: 230). dp já é independente de densidade por padrão no
+  // Flutter (não é isso que causava o problema), mas uma largura fixa não
+  // se adapta à largura REAL da tela — num aparelho Android mais estreito
+  // (comum nos de entrada vendidos no Brasil, ~360dp de largura útil),
+  // 230+12+190=432dp de cards não cabe nos ~328dp disponíveis (360 menos
+  // os 32dp de padding da tela), ficando cortado/grande demais em
+  // proporção à tela real. Expanded faz os 2 cards sempre caberem
+  // exatamente na largura disponível, qualquer que seja. IntrinsicHeight +
+  // stretch iguala a altura dos dois ao conteúdo mais alto, sem precisar
+  // de altura fixa chutada (a mesma razão de fundo: menos texto/decisões
+  // arbitrárias de tamanho, mais adaptação ao conteúdo real).
+  Widget _linhaResponsiva(Widget esquerda, Widget direita) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Saldo disponível',
-              style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
-          const SizedBox(height: 8),
-          Text(
-            'R\$ ${_saldoSemana.toStringAsFixed(2)}',
-            style: const TextStyle(
-                color: Color(0xFF10b981),
-                fontSize: 30,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          const Text('Reset domingo 23:59',
-              style: TextStyle(color: Color(0xFF4B5563), fontSize: 12)),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ConfirmarSaqueScreen())),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A56DB),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: const Text('Sacar',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            ),
-          ),
+          Expanded(child: esquerda),
+          const SizedBox(width: 12),
+          Expanded(child: direita),
         ],
       ),
     );
   }
 
-  // Linha deslizável 1: Agendamento + Meu desempenho hoje.
-  Widget _buildLinhaAgendamentoDesempenho() {
-    return SizedBox(
-      height: 224,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildCardAgendamento(),
-          const SizedBox(width: 12),
-          _buildCardDesempenho(),
-        ],
-      ),
-    );
-  }
+  // Linha 1: Agendamento + Meu Desempenho Hoje.
+  Widget _buildLinhaAgendamentoDesempenho() =>
+      _linhaResponsiva(_buildCardAgendamento(), _buildCardDesempenho());
 
   Widget _buildCardAgendamento() {
     return Container(
-      width: 230,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
@@ -816,6 +790,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           _botaoTurno('jantar', 'Jantar', '18:00–23:59'),
           const Spacer(),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -827,7 +802,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-              child: const Text('Confirmar turno',
+              child: const Text('Confirmar Turno',
                   style: TextStyle(color: Colors.white, fontSize: 13)),
             ),
           ),
@@ -876,7 +851,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _confirmarTurno() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Turno confirmado!'),
+        content: Text('Turno Confirmado!'),
         backgroundColor: Color(0xFF10b981),
       ),
     );
@@ -884,7 +859,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildCardDesempenho() {
     return Container(
-      width: 190,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
@@ -893,8 +867,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Meu desempenho hoje',
+          const Text('Meu Desempenho Hoje',
               style: TextStyle(
                   color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
@@ -920,28 +895,59 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // Linha deslizável 2: Entregador Premium + Seja um Entregador MEI +
-  // Seguro do seu veículo.
-  Widget _buildLinhaPremiumMeiSeguro() {
-    return SizedBox(
-      height: 236,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+  // Linha 2: Saldo Disponível + Entregador Premium.
+  Widget _buildLinhaSaldoPremium() =>
+      _linhaResponsiva(_buildCardSaldoDisponivel(), _buildCardPremium());
+
+  // Card "Saldo Disponível" (2026-09-10, reorganização da tela offline) —
+  // agora meia-largura (linha 2, junto com Entregador Premium), por isso a
+  // fonte do valor ficou menor que a versão full-width anterior (30 -> 24),
+  // pra não arriscar overflow num valor de 4+ dígitos numa coluna estreita.
+  Widget _buildCardSaldoDisponivel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161820),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2A2D35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCardPremium(),
-          const SizedBox(width: 12),
-          _buildCardBeneficio(
-            titulo: 'Seja um Entregador MEI',
-            texto:
-                'Aproveite as vantagens de ser um entregador qualificado como empreendedor.',
-            botao: 'Saiba mais',
+          const Text('Saldo Disponível',
+              style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'R\$ ${_saldoSemana.toStringAsFixed(2)}',
+              style: const TextStyle(
+                  color: Color(0xFF10b981),
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold),
+            ),
           ),
-          const SizedBox(width: 12),
-          _buildCardBeneficio(
-            titulo: 'Seguro do seu veículo',
-            texto:
-                'Proteja seu meio de trabalho. Conheça opções pensadas pra entregadores.',
-            botao: 'Conhecer',
+          const SizedBox(height: 4),
+          const Text('Reset Domingo 23:59',
+              style: TextStyle(color: Color(0xFF4B5563), fontSize: 12)),
+          const Spacer(),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ConfirmarSaqueScreen())),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A56DB),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Sacar',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
           ),
         ],
       ),
@@ -954,11 +960,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // exclusividade de despacho por cidade, sem relação nenhuma). Por
   // enquanto só mostra o progresso calculado a partir de pedidos
   // finalizados — sem criar nenhum status/flag novo, sem lógica de bônus
-  // (a pedido do usuário).
+  // (a pedido do usuário). Barra de progresso AZUL (mesma cor do botão
+  // Sacar) — antes âmbar, trocado a pedido do usuário. O ícone de coroa
+  // continua âmbar de propósito (cor associada a "premium"/destaque), só a
+  // barra mudou.
   Widget _buildCardPremium() {
     final progresso = (_entregas90Dias / _metaPremium).clamp(0.0, 1.0);
     return Container(
-      width: 240,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
@@ -967,6 +975,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Row(
             children: [
@@ -981,7 +990,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 10),
           const Text(
-              '850 entregas nos últimos 90 dias corridos vira Premium automaticamente.',
+              '850 Entregas Nos Últimos 90 Dias Corridos Vira Premium Automaticamente.',
               style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12, height: 1.35)),
           const SizedBox(height: 12),
           ClipRRect(
@@ -990,7 +999,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               value: progresso,
               minHeight: 8,
               backgroundColor: const Color(0xFF1E2130),
-              color: const Color(0xFFF59E0B),
+              color: const Color(0xFF1A56DB),
             ),
           ),
           const SizedBox(height: 6),
@@ -998,7 +1007,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: const TextStyle(
                   color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          const Text('Bônus especial após 8 semanas no Premium',
+          const Text('Bônus Especial Após 8 Semanas No Premium',
               style: TextStyle(
                   color: Color(0xFF6B7280), fontSize: 11, fontStyle: FontStyle.italic)),
         ],
@@ -1006,13 +1015,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  // Linha 3: Seja Um Entregador MEI + Seguro Do Seu Veículo.
+  Widget _buildLinhaMeiSeguro() => _linhaResponsiva(
+        _buildCardBeneficio(
+          // MEI é sigla, fica toda maiúscula sempre (exceção ao Title
+          // Case do resto do texto, a pedido do usuário).
+          titulo: 'Seja Um Entregador MEI',
+          texto:
+              'Aproveite As Vantagens De Ser Um Entregador Qualificado Como Empreendedor.',
+          botao: 'Saiba Mais',
+        ),
+        _buildCardBeneficio(
+          titulo: 'Seguro Do Seu Veículo',
+          texto:
+              'Proteja Seu Meio De Trabalho. Conheça Opções Pensadas Pra Entregadores.',
+          botao: 'Conhecer',
+        ),
+      );
+
   Widget _buildCardBeneficio({
     required String titulo,
     required String texto,
     required String botao,
   }) {
     return Container(
-      width: 190,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
@@ -1021,6 +1047,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(titulo,
               style: const TextStyle(
@@ -1028,7 +1055,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           Text(texto,
               style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 12, height: 1.35)),
-          const Spacer(),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
