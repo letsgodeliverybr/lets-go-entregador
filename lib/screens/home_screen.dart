@@ -788,11 +788,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 12),
           _botaoTurno('almoco', 'Almoço', '10:00–14:00'),
           const SizedBox(height: 8),
-          _botaoTurno('jantar', 'Jantar', '18:00–23:59'),
+          _botaoTurno('jantar', 'Jantar', '19:00–23:00'),
           const Spacer(),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
+            height: 40,
             child: ElevatedButton(
               onPressed: _turnoSelecionado == null ? null : _confirmarTurno,
               style: ElevatedButton.styleFrom(
@@ -801,9 +802,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
+                // Padding horizontal reduzido (2026-09-10, corrige texto
+                // quebrando em 2 linhas) — o padding padrão do
+                // ElevatedButton (~24dp de cada lado) não sobrava espaço
+                // suficiente pro texto numa coluna de metade da tela.
+                padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
-              child: const Text('Confirmar Turno',
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
+              // FittedBox garante 1 linha só sempre, encolhendo o texto se
+              // precisar em vez de quebrar — mais robusto que só ajustar
+              // padding/fonte, funciona em qualquer largura de tela.
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Confirmar Turno',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
             ),
           ),
         ],
@@ -988,10 +1004,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          const Text(
-              '850 Entregas Nos Últimos 90 Dias Corridos Vira Premium Automaticamente.',
-              style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12, height: 1.35)),
+          const SizedBox(height: 14),
+          // Contagem limpa (2026-09-10) — removida a frase longa
+          // explicando a regra (850 entregas/90 dias vira Premium) e a
+          // linha de bônus, a pedido do usuário. Mesmo padrão visual do
+          // card "Saldo Disponível" ao lado: label pequena em cima, valor
+          // grande embaixo.
+          const Text('Entregas Nos Últimos 90 Dias',
+              style: TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+          const SizedBox(height: 4),
+          Text('$_entregas90Dias/$_metaPremium',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
@@ -1002,14 +1026,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               color: const Color(0xFF1A56DB),
             ),
           ),
-          const SizedBox(height: 6),
-          Text('$_entregas90Dias/$_metaPremium',
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          const Text('Bônus Especial Após 8 Semanas No Premium',
-              style: TextStyle(
-                  color: Color(0xFF6B7280), fontSize: 11, fontStyle: FontStyle.italic)),
         ],
       ),
     );
