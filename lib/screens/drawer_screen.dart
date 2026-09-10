@@ -6,6 +6,7 @@ import 'extrato_screen.dart';
 import 'historico_saques_screen.dart';
 import 'minha_conta_screen.dart';
 import 'ranking_screen.dart';
+import '../services/premium_service.dart';
 
 class DrawerScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -18,11 +19,23 @@ class _DrawerScreenState extends State<DrawerScreen> {
   final _supabase = Supabase.instance.client;
   String? _nome;
   String? _fotoUrl;
+  // ID curto (2026-09-10, menu lateral): não existe campo numérico
+  // sequencial nenhum na tabela — codigo_cadastro existe mas está NULL em
+  // 100% dos registros hoje, não é usado em lugar nenhum (nem painel, nem
+  // app), coluna morta. Usa os 8 primeiros caracteres do UUID (entregadores.id
+  // == auth.uid()), mesmo padrão já usado no painel como fallback de
+  // exibição (app.js, e.id?.substring(0,8)). Não depende de rede — vem
+  // direto da sessão já aberta, por isso é setado fora de _carregarPerfil().
+  String? _idCurto;
+  bool _isPremium = false;
 
   @override
   void initState() {
     super.initState();
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid != null) _idCurto = uid.substring(0, 8).toUpperCase();
     _carregarPerfil();
+    _carregarPremium();
   }
 
   Future<void> _carregarPerfil() async {
@@ -44,6 +57,17 @@ class _DrawerScreenState extends State<DrawerScreen> {
             .createSignedUrl(fotoPath, 3600);
         if (mounted) setState(() => _fotoUrl = signedUrl);
       }
+    } catch (_) {}
+  }
+
+  // PremiumService é a MESMA fonte usada pelo card "Entregador Premium" da
+  // Home (services/premium_service.dart) — nunca diverge da regra de lá.
+  Future<void> _carregarPremium() async {
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final entregas = await PremiumService.entregas90Dias(uid);
+      if (mounted) setState(() => _isPremium = PremiumService.isPremium(entregas));
     } catch (_) {}
   }
 
@@ -81,6 +105,21 @@ class _DrawerScreenState extends State<DrawerScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_nome ?? '...', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                        if (_idCurto != null) ...[
+                          const SizedBox(height: 2),
+                          Text('ID: $_idCurto',
+                              style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12)),
+                        ],
+                        // Sem espaço reservado quando não é premium — o
+                        // Column só ganha esse filho se _isPremium for true.
+                        if (_isPremium) ...[
+                          const SizedBox(height: 2),
+                          const Text('Entregador Premium',
+                              style: TextStyle(
+                                  color: Color(0xFF1A56DB),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ],
                       ],
                     ),
                   ),
