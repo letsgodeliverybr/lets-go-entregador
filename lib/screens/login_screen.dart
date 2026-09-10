@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'registro_screen.dart';
-import 'carregando_pos_login_screen.dart';
+import '../main.dart';
 import '../services/notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -63,20 +63,24 @@ class _LoginScreenState extends State<LoginScreen> {
           });
         }
         await NotificationService.saveFcmToken(user.id);
-        // Brecha de segurança corrigida em 2026-09-09, depois refinada: ia
-        // direto pra HomeScreen() sem checar nada — corrigido chamando
-        // resolverTelaPosLogin() aqui mesmo. Só que isso ainda deixava uma
-        // janela de race condition real (confirmada em teste com conta
-        // 'pendente': o destino final chegava a aparecer por uma fração de
-        // segundo antes do redirect). Correção definitiva: navega IMEDIATA-
-        // MENTE (sem esperar nada) pra CarregandoPosLoginScreen — só ela é
-        // visível durante a resolução, e só ELA (não mais o LoginScreen)
-        // chama resolverTelaPosLogin() e navega pro destino final quando
-        // terminar. Nenhum frame de conteúdo aparece entre login e destino.
+        // Brecha de segurança corrigida em 2026-09-09, refinada em
+        // 2026-09-10: ia direto pra HomeScreen() sem checar nada — depois
+        // corrigida chamando resolverTelaPosLogin() aqui mesmo, mas isso
+        // ainda deixava uma janela de race condition real (confirmada em
+        // teste com conta 'pendente': o destino final chegava a aparecer
+        // por uma fração de segundo antes do redirect). Solução definitiva:
+        // navega IMEDIATAMENTE (sem esperar nada) pro AuthGate — a MESMA
+        // tela de loading do cold start (sequência de 2 imagens, 2s+2s),
+        // não uma tela de loading genérica separada. AuthGate já cuida de
+        // tudo sozinho: espera a sequência visual completa E
+        // resolverTelaPosLogin() (o maior dos dois), só então navega pro
+        // destino final — nenhum frame de conteúdo aparece entre login e
+        // destino, e login/cold start compartilham exatamente a mesma
+        // experiência de marca.
         if (mounted) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const CarregandoPosLoginScreen()),
+            MaterialPageRoute(builder: (_) => const AuthGate()),
           );
         }
       }
