@@ -11,6 +11,7 @@ import '../services/location_permission_flow.dart';
 // canal nativo, ver _assinarRealtimeRota abaixo).
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
+import '../services/logout_semanal_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'home_screen.dart';
@@ -267,7 +268,52 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   Future<void> _logout() async {
     final user = _supabase.auth.currentUser;
-    if (user != null) await TrackingService.ficarOffline(user.id);
+    if (user != null) {
+      // Bug real corrigido 2026-09-11: essa checagem faltava aqui — dava
+      // pra sair normal com entrega ativa, sem nenhum aviso. Dois motivos
+      // combinados: TrackingService.ficarOffline() abaixo só filtrava
+      // motoboy_id (sem entregador_id, sem chegou_destino/retornando) e
+      // não tinha try/catch, então a exceção dela abortava a função
+      // inteira em silêncio quando disparava. temEntregaAtiva() usa a
+      // checagem ampla (mesma do logout semanal) como gate ANTES de
+      // qualquer coisa — mesmo diálogo já usado no bloqueio de "ficar
+      // offline com entrega ativa" (online_status_screen.dart), texto
+      // reaproveitado literalmente.
+      if (await temEntregaAtiva(user.id)) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF161820),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Row(children: [
+                Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFf59e0b), size: 22),
+                SizedBox(width: 8),
+                Text('Entrega em andamento',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+              ]),
+              content: const Text(
+                  'Você possui uma entrega em andamento. '
+                  'Finalize a entrega antes de ficar offline.',
+                  style: TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Entendido',
+                      style: TextStyle(color: Color(0xFF1A56DB))),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      try {
+        await TrackingService.ficarOffline(user.id);
+      } catch (_) {}
+    }
     _statsTimer?.cancel();
     await _supabase.auth.signOut();
     if (mounted) {

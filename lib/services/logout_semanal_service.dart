@@ -66,7 +66,14 @@ Future<bool> _loginExpirou() async {
   return loginEm.isBefore(ultimaSegunda0330Brasilia());
 }
 
-Future<bool> _temEntregaAtiva(String userId) async {
+// Pública (2026-09-11) — também usada pelo bloqueio de LOGOUT MANUAL com
+// entrega ativa (entregador_home_screen.dart/home_screen.dart), não só
+// pelo logout semanal. Fonte única: TrackingService.ficarOffline() tinha
+// sua própria checagem (só motoboy_id, sem entregador_id, e sem
+// chegou_destino), que deixava passar o logout sem aviso quando o pedido
+// estava alocado pela coluna entregador_id — daí reaproveitar essa aqui
+// em vez de confiar na checagem antiga.
+Future<bool> temEntregaAtiva(String userId) async {
   try {
     final data = await Supabase.instance.client
         .from('pedidos')
@@ -92,7 +99,7 @@ Future<bool> checarLogoutSemanal() async {
   final session = Supabase.instance.client.auth.currentSession;
   if (session == null) return false;
   if (!await _loginExpirou()) return false;
-  if (await _temEntregaAtiva(session.user.id)) return false;
+  if (await temEntregaAtiva(session.user.id)) return false;
   await Supabase.instance.client.auth.signOut();
   await _limparLoginRegistrado();
   return true;

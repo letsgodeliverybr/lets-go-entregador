@@ -9,6 +9,8 @@ import 'aguardo_aprovacao_screen.dart';
 import '../services/location_permission_flow.dart';
 import '../services/tracking_service.dart';
 import '../services/premium_service.dart';
+import '../services/logout_semanal_service.dart';
+import 'login_screen.dart';
 import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 
@@ -331,12 +333,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  // Bug real corrigido 2026-09-11: essa tela montava DrawerScreen() sem
+  // passar onLogout — o fallback do próprio drawer (ver
+  // drawer_screen.dart) navegava direto pra LoginScreen SEM nunca chamar
+  // signOut(), deixando a sessão do Supabase válida por baixo (o app
+  // "parecia" deslogado, mas reabrir com o processo ainda vivo ou o
+  // AuthGate restaurando sessão no cold start voltava logado sozinho).
+  // Ter uma entrega ativa chegando até essa tela (offline) é bem raro —
+  // TrackingService.ficarOffline() já bloqueia ficar offline com entrega
+  // ativa antes disso — mas a checagem entra por consistência/segurança,
+  // mesmo padrão agora usado em entregador_home_screen.dart.
+  Future<void> _logout() async {
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      if (await temEntregaAtiva(user.id)) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF161820),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Row(children: [
+                Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFf59e0b), size: 22),
+                SizedBox(width: 8),
+                Text('Entrega em andamento',
+                    style: TextStyle(color: Colors.white, fontSize: 16)),
+              ]),
+              content: const Text(
+                  'Você possui uma entrega em andamento. '
+                  'Finalize a entrega antes de ficar offline.',
+                  style: TextStyle(color: Color(0xFF94a3b8), fontSize: 14)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Entendido',
+                      style: TextStyle(color: Color(0xFF1A56DB))),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      try {
+        await TrackingService.ficarOffline(user.id);
+      } catch (_) {}
+    }
+    await _supabase.auth.signOut();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFF0D0F14),
-      drawer: const DrawerScreen(),
+      drawer: DrawerScreen(onLogout: _logout),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0F14),
         elevation: 0,
