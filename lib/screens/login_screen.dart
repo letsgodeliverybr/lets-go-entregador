@@ -3,9 +3,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'registro_screen.dart';
 import '../main.dart';
 import '../services/notification_service.dart';
+import '../services/logout_semanal_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  // Setado pelo logout forçado semanal (main.dart) ao redirecionar pra cá
+  // — exibido uma vez, via SnackBar, depois que a tela já está montada.
+  final String? mensagemInicial;
+  const LoginScreen({super.key, this.mensagemInicial});
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -16,6 +20,20 @@ class _LoginScreenState extends State<LoginScreen> {
   final _senhaController = TextEditingController();
   bool _senhaVisivel = false;
   bool _carregando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.mensagemInicial != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.mensagemInicial!)),
+          );
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -35,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       final user = response.user;
       if (user != null) {
+        await registrarLoginAgora();
         // UPDATE primeiro — nunca sobrescreve nome/outros campos fora do payload
         // (upsert() puro exigiria 'nome' NOT NULL no payload mesmo quando a linha
         // já existe). Só cria a linha (INSERT) se ela realmente não existir ainda

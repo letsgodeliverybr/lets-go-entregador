@@ -11,6 +11,7 @@ import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'services/notification_service.dart';
 import 'services/tela_pos_login_service.dart';
+import 'services/logout_semanal_service.dart';
 import 'widgets/pedido_card_widget.dart';
 import 'utils/taxa_helper.dart' as th;
 import 'utils/cla_helper.dart' as cla;
@@ -130,12 +131,13 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _supabase = Supabase.instance.client;
   StreamSubscription<List<Map<String, dynamic>>>? _streamSub;
   StreamSubscription<AuthState>? _authSub;
   OverlayEntry? _overlayEntry;
   Timer? _overlayTimer;
+  Timer? _logoutSemanalTimer;
   Set<String> _idsConhecidos = {};
   bool _primeiraEmissao = true;
 
@@ -155,6 +157,33 @@ class _MyAppState extends State<MyApp> {
 
     if (_supabase.auth.currentSession != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _iniciarStream());
+    }
+
+    // Logout forçado semanal (toda segunda 03:30 Brasília) — checa no
+    // cold start, a cada 60s em foreground (aba/app aberto sem nunca
+    // voltar do background não dispara didChangeAppLifecycleState) e
+    // toda vez que o app volta do background. Ver logout_semanal_service.
+    WidgetsBinding.instance.addObserver(this);
+    _checarLogoutSemanalETratar();
+    _logoutSemanalTimer = Timer.periodic(
+        const Duration(seconds: 60), (_) => _checarLogoutSemanalETratar());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checarLogoutSemanalETratar();
+  }
+
+  Future<void> _checarLogoutSemanalETratar() async {
+    final deslogou = await checarLogoutSemanal();
+    if (deslogou) {
+      navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(
+              mensagemInicial: 'Sessão expirada — faça login novamente.'),
+        ),
+        (route) => false,
+      );
     }
   }
 
@@ -284,6 +313,8 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _logoutSemanalTimer?.cancel();
     _authSub?.cancel();
     _cancelarStream();
     _fecharOverlay();
