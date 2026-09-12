@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'tracking_service.dart';
 
 // Logout forçado semanal (toda segunda 03:30 Brasília) — pedido do
 // usuário pra todo entregador reentrar com usuário/senha no início da
@@ -100,6 +101,16 @@ Future<bool> checarLogoutSemanal() async {
   if (session == null) return false;
   if (!await _loginExpirou()) return false;
   if (await temEntregaAtiva(session.user.id)) return false;
+  // Gap real corrigido 2026-09-11: sem isso, o entregador continuava
+  // aparecendo ONLINE no Mapa ao Vivo do painel depois do logout forçado
+  // (signOut() só derruba a sessão local, não marca disponivel:false no
+  // banco) — mesmo efeito colateral que TrackingService.ficarOffline()
+  // já produz pro botão manual de logout/toggle offline, reaproveitado
+  // aqui pra herdar o comportamento que o painel já tem hoje pra qualquer
+  // entregador offline, sem precisar de lógica nova lá.
+  try {
+    await TrackingService.ficarOffline(session.user.id);
+  } catch (_) {}
   await Supabase.instance.client.auth.signOut();
   await _limparLoginRegistrado();
   return true;
