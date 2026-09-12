@@ -18,6 +18,18 @@ import 'tracking_service.dart';
 
 const _chaveLoginEm = 'lg_login_em_ms';
 
+// Race real corrigida 2026-09-12: registrarLoginAgora() faz `await`
+// (SharedPreferences.getInstance()/setInt() são assíncronos, round-trip
+// de platform channel) — nesse intervalo, o Timer.periodic(60s) ou um
+// didChangeAppLifecycleState(resumed) de main.dart podiam rodar
+// checarLogoutSemanal() vendo currentSession já válido (signInWithPassword
+// já retornou) mas lg_login_em ainda não persistido, lendo "sem login
+// registrado" → tratado como expirado → deslogava um login que acabou de
+// acontecer. Setada de forma SÍNCRONA (sem await antes) assim que o login
+// dá certo, então não existe brecha pro event loop intercalar outra
+// checagem antes dela virar true.
+bool _loginEmAndamento = false;
+
 // Lista mais ampla de status "em andamento" usada no app (ver
 // tracking_service.dart/chat_bot_screen.dart) — inclui chegou_destino e
 // retornando além do conjunto usado em entregador_home_screen.dart, de
@@ -33,9 +45,14 @@ const _statusAtivos = [
 ];
 
 Future<void> registrarLoginAgora() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(
-      _chaveLoginEm, DateTime.now().toUtc().millisecondsSinceEpoch);
+  _loginEmAndamento = true;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+        _chaveLoginEm, DateTime.now().toUtc().millisecondsSinceEpoch);
+  } finally {
+    _loginEmAndamento = false;
+  }
 }
 
 Future<void> _limparLoginRegistrado() async {
@@ -97,6 +114,7 @@ Future<bool> temEntregaAtiva(String userId) async {
 /// automaticamente assim que o entregador ficar livre. Retorna true só
 /// quando de fato deslogou (o chamador deve navegar pra LoginScreen).
 Future<bool> checarLogoutSemanal() async {
+  if (_loginEmAndamento) return false;
   final session = Supabase.instance.client.auth.currentSession;
   if (session == null) return false;
   if (!await _loginExpirou()) return false;
