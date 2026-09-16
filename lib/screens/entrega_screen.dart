@@ -546,6 +546,45 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
             setState(() { _erro = 'Digite os 4 dígitos do código'; _carregando = false; });
             return;
           }
+
+          // Pedido da integração real do iFood (origem=='ifood', com
+          // ifood_order_id) — diferente do fluxo ifood_manual (WebView de
+          // confirmacao-entrega-propria.ifood.com.br, pra loja sem API).
+          // Aqui o código de 4 dígitos é o de ENTREGA que o iFood manda pro
+          // cliente (evento DDCR) e precisa ser validado de volta na API
+          // real (verifyDeliveryCode) antes de finalizar — sem isso o
+          // iFood nunca marca o pedido CONCLUDED do lado dele. Busca
+          // 'origem' fresco do banco (não confia em widget.pedido).
+          final pedidoOrigem = await _supabase
+              .from('pedidos')
+              .select('origem, ifood_order_id')
+              .eq('id', _pedidoId)
+              .single();
+
+          if (pedidoOrigem['origem'] == 'ifood' && pedidoOrigem['ifood_order_id'] != null) {
+            try {
+              final resp = await _supabase.functions.invoke(
+                'ifood-validar-codigo',
+                body: {'action': 'entrega', 'pedido_id': _pedidoId, 'code': codigo},
+              );
+              final ok = resp.data is Map && resp.data['ok'] == true;
+              if (!ok) {
+                setState(() { _erro = 'Código não confere. Peça o código certo ao cliente.'; _carregando = false; });
+                return;
+              }
+            } on FunctionException catch (e) {
+              final detail = e.details;
+              final msg = (detail is Map && detail['error'] != null)
+                  ? detail['error'].toString()
+                  : 'Código não confere. Peça o código certo ao cliente.';
+              setState(() { _erro = msg; _carregando = false; });
+              return;
+            } catch (_) {
+              setState(() { _erro = 'Falha ao validar código com o iFood. Verifique sua conexão e tente novamente.'; _carregando = false; });
+              return;
+            }
+          }
+
           await _supabase.from('pedidos').update({
             'status': 'finalizado',
             'status_detalhado': 'finalizado',
