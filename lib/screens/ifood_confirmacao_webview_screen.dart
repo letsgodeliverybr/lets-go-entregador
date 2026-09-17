@@ -56,7 +56,14 @@ import 'package:webview_flutter/webview_flutter.dart';
 // não dá pra confiar só no onPageFinished (SPA não recarrega a página ao
 // trocar de tela interna).
 class IfoodConfirmacaoWebviewScreen extends StatefulWidget {
-  const IfoodConfirmacaoWebviewScreen({super.key});
+  // Código localizador de 8 dígitos (customer.phone.localizer, já obtido
+  // pelo nosso backend via GET /order/v1.0/orders/{id} — existe mesmo
+  // quando o telefone do cliente é o 0800 genérico, confirmado
+  // 2026-09-17). Quando presente, preenche e avança sozinho assim que
+  // chega na tela de código — o entregador só precisa confirmar que
+  // chegou no local, sem digitar nem fotografar nada.
+  final String? codigoLocalizador;
+  const IfoodConfirmacaoWebviewScreen({super.key, this.codigoLocalizador});
 
   @override
   State<IfoodConfirmacaoWebviewScreen> createState() => _IfoodConfirmacaoWebviewScreenState();
@@ -71,6 +78,7 @@ class _IfoodConfirmacaoWebviewScreenState extends State<IfoodConfirmacaoWebviewS
   String? _erro;
   bool _naTelaNumeroPedido = false;
   bool _lendoOcr = false;
+  bool _autoPreenchimentoTentado = false;
 
   @override
   void initState() {
@@ -82,6 +90,14 @@ class _IfoodConfirmacaoWebviewScreenState extends State<IfoodConfirmacaoWebviewS
         onMessageReceived: (msg) {
           final naTela = msg.message.contains('numero-pedido') || msg.message == '/';
           if (mounted && naTela != _naTelaNumeroPedido) setState(() => _naTelaNumeroPedido = naTela);
+          // Só tenta uma vez por sessão de tela — se o preenchimento
+          // automático falhar (ex: iFood mudou o layout de novo), o
+          // entregador ainda tem o fallback manual/OCR, sem ficar
+          // tentando de novo a cada ping de rota.
+          if (naTela && widget.codigoLocalizador != null && !_autoPreenchimentoTentado) {
+            _autoPreenchimentoTentado = true;
+            _preencherCodigoNaPagina(widget.codigoLocalizador!);
+          }
         },
       )
       ..setNavigationDelegate(NavigationDelegate(
@@ -108,7 +124,7 @@ class _IfoodConfirmacaoWebviewScreenState extends State<IfoodConfirmacaoWebviewS
   }
 
   Future<void> _recarregar() async {
-    setState(() { _erro = null; _carregando = true; _naTelaNumeroPedido = false; });
+    setState(() { _erro = null; _carregando = true; _naTelaNumeroPedido = false; _autoPreenchimentoTentado = false; });
     await _controller.reload();
   }
 
@@ -407,20 +423,34 @@ true;
 // input.value direto NÃO dispara o onChange do React, o campo pareceria
 // preenchido visualmente mas o estado interno da página continuaria vazio
 // e o botão "Continuar" continuaria desabilitado.
+//
+// Bug real corrigido aqui (2026-09-17): o seletor original
+// ([data-testid="order-number-input"] + querySelectorAll('input')) nunca
+// bateu com o site de verdade — inspecionado ao vivo (dump-dom real da
+// rota /numero-pedido), cada dígito é um <input> individual com
+// data-testid="order-number-input-0" .. "-7", não um wrapper com 8
+// <input> genéricos dentro. Isso nunca funcionou em produção. Também
+// clica sozinho no data-testid="continue-button" depois de preencher
+// (existe de verdade, começa disabled até os 8 dígitos serem
+// preenchidos) — pequeno delay pro React processar o estado antes de
+// checar se ele já habilitou.
 const _jsPreencherCodigo = r'''
 (function(){
   try {
-    var wrapper = document.querySelector('[data-testid="order-number-input"]');
-    if (!wrapper) return 'NO_WRAPPER';
-    var inputs = wrapper.querySelectorAll('input');
-    if (inputs.length !== 8) return 'WRONG_COUNT';
     var digitos = __DIGITOS__;
+    if (digitos.length !== 8) return 'WRONG_COUNT';
     var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     for (var i = 0; i < 8; i++) {
-      setter.call(inputs[i], digitos[i]);
-      inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
-      inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
+      var input = document.querySelector('[data-testid="order-number-input-' + i + '"]');
+      if (!input) return 'MISSING_INPUT_' + i;
+      setter.call(input, digitos[i]);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    setTimeout(function(){
+      var btn = document.querySelector('[data-testid="continue-button"]');
+      if (btn && !btn.disabled) btn.click();
+    }, 400);
     return 'OK';
   } catch (e) {
     return 'ERRO:' + e.message;
