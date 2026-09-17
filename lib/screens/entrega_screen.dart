@@ -488,10 +488,14 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
             final targetLat2 = coletaLat2 ?? _lojaLat!;
             final targetLng2 = coletaLng2 ?? _lojaLng!;
             final distM = _calcularDistancia(pos.latitude, pos.longitude, targetLat2, targetLng2) * 1000;
-            if (distM > 50) {
+            // Mesmo raio de 500m do 'Cheguei no local'/'Cheguei no destino'
+            // (2026-09-16) — mesmo problema de GPS em shopping/condomínio
+            // afeta essa checagem de saída também, já que compara contra o
+            // mesmo ponto de coleta.
+            if (distM > 500) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 50 metros da loja para sair (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 500 metros da loja para sair (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
