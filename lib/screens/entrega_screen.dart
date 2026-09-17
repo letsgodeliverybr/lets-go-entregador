@@ -691,29 +691,25 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                   if (_erro != null)
                     Text(_erro!, style: const TextStyle(color: Color(0xFFef4444), fontSize: 13), textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  // Pra pedido MANUAL do iFood (loja não integrada,
-                  // sinalizado por plataforma_origem, escolhido no
-                  // formulário "Novo Pedido" do painel) OU pedido
-                  // AUTOMÁTICO real (origem=='ifood', webhook/polling da
-                  // integração de verdade).
+                  // Só pra pedido MANUAL que veio originalmente do iFood
+                  // mas a loja não é integrada (atendente digitou na mão
+                  // um pedido que chegou no app do iFood da loja, com
+                  // notinha impressa/código de confirmação) — sinalizado
+                  // pelo campo plataforma_origem, escolhido no formulário
+                  // "Novo Pedido" do painel.
                   //
-                  // Mudança 2026-09-17: origem=='ifood' passa a mostrar
-                  // esse botão também — investigação confirmou que
-                  // verifyDeliveryCode/DDCR (o que ifood-validar-codigo
-                  // chama) NÃO é o mecanismo oficial pra entrega própria
-                  // (delivery.deliveredBy=='MERCHANT', nosso caso sempre);
-                  // o oficial é este portal (confirmacao-entrega-propria.
-                  // ifood.com.br), usando customer.phone.localizer — campo
-                  // que existe independente do telefone do cliente ser
-                  // real (confirmado com payload real do iFood). Busca o
-                  // localizador fresco do banco (não confia em
-                  // widget.pedido) e passa pra tela preencher e avançar
-                  // sozinha — o entregador só confirma "Cheguei no local".
-                  // Independente do que acontecer na WebView, o fluxo de
-                  // finalizar no NOSSO sistema continua normal depois —
-                  // essa confirmação é só um passo A MAIS.
-                  if (widget.pedido['plataforma_origem']?.toString() == 'ifood_manual' ||
-                      widget.pedido['origem']?.toString() == 'ifood') ...[
+                  // REVERTIDO (2026-09-17): tinha liberado esse botão pra
+                  // origem=='ifood' também, mas a doc oficial de
+                  // homologação (Cenário 8, critério obrigatório) exige o
+                  // fluxo nativo — digitar o código no app e chamar
+                  // verifyDeliveryCode direto — não essa WebView. NÃO usa
+                  // origem=='ifood': esse campo é do pedido automático de
+                  // verdade, que confirma a entrega pelo campo de 4
+                  // dígitos em "Cheguei no destino" (ifood-validar-codigo),
+                  // não por aqui. O travamento por telefone fictício no
+                  // sandbox é limitação conhecida, aguardando resposta do
+                  // suporte do iFood — não motivo pra trocar de mecanismo.
+                  if (widget.pedido['plataforma_origem']?.toString() == 'ifood_manual') ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFEA1D2C),
@@ -721,24 +717,10 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: () async {
-                        String? localizador;
-                        if (widget.pedido['origem']?.toString() == 'ifood') {
-                          try {
-                            final row = await _supabase
-                                .from('pedidos')
-                                .select('ifood_phone_localizer')
-                                .eq('id', _pedidoId)
-                                .single();
-                            localizador = row['ifood_phone_localizer']?.toString();
-                          } catch (_) {}
-                        }
-                        if (!mounted) return;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => IfoodConfirmacaoWebviewScreen(codigoLocalizador: localizador)),
-                        );
-                      },
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const IfoodConfirmacaoWebviewScreen()),
+                      ),
                       icon: const Icon(Icons.storefront, size: 18),
                       label: const Text('Confirmar no iFood', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     ),
