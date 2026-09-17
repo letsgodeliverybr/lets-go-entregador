@@ -444,10 +444,16 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
             final targetLat1 = coletaLat1 ?? _lojaLat!;
             final targetLng1 = coletaLng1 ?? _lojaLng!;
             final distM = _calcularDistancia(pos.latitude, pos.longitude, targetLat1, targetLng1) * 1000;
-            if (distM > 50) {
+            // Raio de bloqueio manual subiu de 50m pra 500m (2026-09-16,
+            // pedido real: shopping com coleta longe da entrada, condomínio
+            // com portaria longe do endereço cadastrado — GPS nunca batia
+            // 50m mesmo com o entregador realmente no local). Não existe
+            // liberação automática nesse passo (sempre foi por toque), então
+            // essa é a única checagem — só bloqueia de verdade acima de 500m.
+            if (distM > 500) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 50 metros da loja (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 500 metros da loja (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
@@ -520,10 +526,16 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
           {
             final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
             final distM = _calcularDistancia(pos.latitude, pos.longitude, clienteLat.toDouble(), clienteLng.toDouble()) * 1000;
-            if (distM > 50) {
+            // Raio de bloqueio manual subiu de 50m pra 500m (2026-09-16,
+            // mesmo motivo do 'Cheguei no local' — GPS não bate em
+            // shopping/condomínio). A auto-liberação por proximidade
+            // (_iniciarVerificacaoProximidade, mais acima) continua
+            // disparando sozinha só a 50m, sem mudança nenhuma — isso aqui
+            // é só o botão manual, pra quando o auto não pegou.
+            if (distM > 500) {
               setState(() => _carregando = false);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Você precisa estar a menos de 50 metros do cliente (atual: ${distM.toStringAsFixed(0)}m)'),
+                content: Text('Você precisa estar a menos de 500 metros do cliente (atual: ${distM.toStringAsFixed(0)}m)'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
               ));
