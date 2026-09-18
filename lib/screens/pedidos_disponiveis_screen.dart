@@ -278,12 +278,22 @@ class _State extends State<PedidosDisponiveisScreen> {
           setState(() => _rotasAgrupadas = novasRotas);
         }
       } else {
-        // Pedidos ofertados individualmente (pra qualquer motoboy) agora —
-        // não devem aparecer no broadcast geral pra quem não é o alvo.
+        // Bug real corrigido aqui (2026-09-18): antes excluía do catch-up
+        // QUALQUER pedido com alguma linha 'aguardando' em despacho_fila,
+        // de qualquer entregador — o que também escondia pedidos da onda
+        // normal do Todos de quem tinha perdido a notificação original
+        // (ex: estava offline quando entregadores_no_raio rodou), já que
+        // uma onda com N entregadores online cria N linhas pro mesmo
+        // pedido, "envenenando" essa exclusão pra quem ficou de fora.
+        // Agora só considera `exclusivo=true` — reservado pra realocação
+        // manual de verdade (fn_intercept_realocacao_manual), que deve
+        // continuar exclusiva de quem foi escolhido. Onda normal
+        // (exclusivo=false, default) passa a aparecer via catch-up.
         final ofertadosIndividualmente = await _supabase
             .from('despacho_fila')
             .select('pedido_id')
             .eq('status', 'aguardando')
+            .eq('exclusivo', true)
             .isFilter('rota_agrupada_id', null);
         final idsOfertados = (ofertadosIndividualmente as List)
             .map((f) => f['pedido_id']?.toString())
