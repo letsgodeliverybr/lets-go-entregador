@@ -382,8 +382,26 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     if (mounted) setState(() => _rotaAtual = null);
   }
 
+  // Bug real corrigido (2026-09-19): só trocava o estado do toggle, nunca
+  // navegava — o entregador ficava "offline" no switch mas preso na tela
+  // do mapa, como se estivesse online. Mesmo destino do toggle manual
+  // (_toggleOnline, branch value==false): HomeScreen ("Mete Marcha").
+  // IMPORTANTE: só navega se TrackingService.ativo==false (desligamento
+  // completo, sem entrega ativa) — se ainda true, é o desligamento "suave"
+  // (bateria baixa COM entrega em andamento: GPS continua rodando de
+  // propósito, ver TrackingService.ficarOffline/_forcarOfflinePorBateria).
+  // Navegar nesse caso arrancaria o entregador da tela no meio de uma
+  // entrega em andamento — pior que o bug original.
   void _onForcadoOfflinePorBateria() {
-    if (mounted) setState(() => _online = false);
+    if (!mounted) return;
+    setState(() => _online = false);
+    if (!TrackingService.ativo) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override

@@ -45,8 +45,22 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
     TrackingService.addForcadoOfflineListener(_onForcadoOfflinePorBateria);
   }
 
+  // Bug real corrigido (2026-09-19): mesmo problema e mesma correção de
+  // entregador_home_screen.dart — só trocava o toggle, nunca navegava pra
+  // HomeScreen ("Mete Marcha"). Só navega se TrackingService.ativo==false
+  // (desligamento completo); se ainda true é o desligamento "suave" com
+  // entrega em andamento (GPS continua rodando de propósito) — nesse caso
+  // não navega, só reflete offline no toggle.
   void _onForcadoOfflinePorBateria() {
-    if (mounted) setState(() => _online = false);
+    if (!mounted) return;
+    setState(() => _online = false);
+    if (!TrackingService.ativo) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override
