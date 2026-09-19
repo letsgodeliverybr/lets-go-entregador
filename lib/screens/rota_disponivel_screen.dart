@@ -125,6 +125,39 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
       return;
     }
 
+    // Trava de online/offline — reforço: esse card pode ter chegado via
+    // overlay global (main.dart), cujo próprio countdown de 30s é uma
+    // janela onde o entregador pode ficar offline entre o popup aparecer e
+    // o toque em "Aceitar". Revalida com dado fresco na hora do aceite,
+    // mesmo padrão do clã acima. Fail-closed: sem confirmar, recusa.
+    try {
+      final entregador = await _supabase
+          .from('entregadores')
+          .select('disponivel')
+          .eq('id', user.id)
+          .single();
+      if (entregador['disponivel'] != true) {
+        if (mounted) {
+          setState(() => _processando = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Você está offline — fique online para aceitar pedidos.'),
+            backgroundColor: Colors.red,
+          ));
+          Navigator.pop(context);
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _processando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar seu status online. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     try {
       final agora = DateTime.now().toIso8601String();
       final result = await _supabase.from('pedidos').update({

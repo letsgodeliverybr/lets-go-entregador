@@ -569,6 +569,36 @@ class _State extends State<PedidosDisponiveisScreen> {
       return;
     }
 
+    // Trava de online/offline — reforço: _disponivel só é checado uma vez
+    // em _verificarEIniciar (entrada na tela); se o entregador ficar
+    // offline sem sair dela, a lista ainda em tela permitia aceitar.
+    // Revalida com dado fresco na hora do aceite, mesmo padrão do clã acima.
+    try {
+      final entregador = await _supabase
+          .from('entregadores')
+          .select('disponivel')
+          .eq('id', user.id)
+          .single();
+      if (entregador['disponivel'] != true) {
+        if (mounted) {
+          setState(() => _disponivel = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Você está offline — fique online para aceitar pedidos.'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar seu status online. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     try {
       final result = await _supabase
           .from('pedidos')
@@ -631,6 +661,33 @@ class _State extends State<PedidosDisponiveisScreen> {
   Future<void> _aceitarRota(Map<String, dynamic> rotaData) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
+
+    // Trava de online/offline — mesmo reforço de _aceitar acima.
+    try {
+      final entregador = await _supabase
+          .from('entregadores')
+          .select('disponivel')
+          .eq('id', user.id)
+          .single();
+      if (entregador['disponivel'] != true) {
+        if (mounted) {
+          setState(() => _disponivel = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Você está offline — fique online para aceitar pedidos.'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar seu status online. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
 
     final rotaId = rotaData['rota_agrupada_id'].toString();
     final filaId = rotaData['fila_id'].toString();

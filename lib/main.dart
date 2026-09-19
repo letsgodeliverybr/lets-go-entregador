@@ -285,6 +285,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               1000;
       if (distKm > raioBuscaKm) return;
 
+      // Bug real de segurança/lógica corrigido (2026-09-19): esse overlay é
+      // global (montado em MyApp, ligado a onAuthStateChange) e reage a
+      // QUALQUER pedido pronto assim que existe uma sessão autenticada —
+      // nunca checava se o entregador estava online (entregadores.disponivel),
+      // então aparecia (e deixava aceitar, via RotaDisponivelScreen) mesmo
+      // offline. Fail-closed: sem confirmar online=true, não mostra.
+      final meuId = _supabase.auth.currentUser?.id;
+      if (meuId == null) return;
+      try {
+        final entregador = await _supabase
+            .from('entregadores')
+            .select('disponivel')
+            .eq('id', meuId)
+            .single();
+        if (entregador['disponivel'] != true) return;
+      } catch (_) {
+        return;
+      }
+
       _mostrarOverlay(data);
     } catch (_) {}
   }
