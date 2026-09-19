@@ -144,7 +144,12 @@ class _State extends State<PedidosAceitosScreen> {
       case 'chegou_local':
       case 'chegou_no_local': return 'No local';
       case 'em_rota':         return 'Em rota';
-      case 'chegou_destino':  return 'Cheguei no local';
+      // Texto trocado corrigido (2026-09-19) — dizia "Cheguei no local"
+      // pra um status que na verdade é "chegou no DESTINO" (cliente, não
+      // loja); confundia com o real regresso de status corrigido em
+      // entrega_screen.dart (bug da checagem de proximidade durante
+      // retornando), mesmo sem ligação nenhuma entre os dois.
+      case 'chegou_destino':  return 'Chegou no destino';
       case 'retornando':      return 'Retornando';
       default:                return s;
     }

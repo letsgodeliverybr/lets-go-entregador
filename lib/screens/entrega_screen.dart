@@ -76,7 +76,17 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     if (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento) {
       _iniciarPollingPagamento();
     }
-    if (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando) {
+    // Bug real corrigido (2026-09-19): a checagem de chegada por
+    // proximidade compara contra a coordenada do CLIENTE — só faz sentido
+    // na ida (emRota). Incluir "retornando" aqui (e nos outros pontos
+    // marcados com o mesmo comentário nesse arquivo) fazia o app detectar
+    // "chegou no cliente" enquanto o entregador voltava pra LOJA sempre
+    // que loja e cliente ficavam geograficamente próximos, regravando
+    // status_detalhado='chegou_destino' por cima do 'retornando' correto
+    // — uma regressão de status real. O polling de pagamento
+    // (_iniciarPollingPagamento, linha acima) continua valendo pra
+    // retornando normalmente, só a proximidade de CLIENTE que não deve.
+    if (_etapa == EtapaEntrega.emRota) {
       _iniciarVerificacaoProximidade();
     }
     _obterPosicao();
@@ -97,7 +107,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   // Realtime perdeu eventos durante o lock (WebSocket cai e não replaya).
   Future<void> _sincronizarStatusPedido() async {
     if (!mounted) return;
-    if (_etapa != EtapaEntrega.emRota && _etapa != EtapaEntrega.retornando) return;
+    if (_etapa != EtapaEntrega.emRota) return;
     try {
       final data = await _supabase
           .from('pedidos')
@@ -107,8 +117,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
       final status = (data['status_detalhado'] ?? data['status'])?.toString() ?? '';
       debugPrint('[EntregaScreen] sincronizar ao resumir: status_banco=$status etapa_atual=$_etapa');
       if (!mounted) return;
-      if (status == 'chegou_destino' &&
-          (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+      if (status == 'chegou_destino' && _etapa == EtapaEntrega.emRota) {
         debugPrint('[EntregaScreen] chegou_destino detectado no resume — atualizando UI');
         setState(() => _etapa = EtapaEntrega.chegouDestino);
         ForegroundService.desativarProximidade();
@@ -142,7 +151,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   void _configurarComunicacaoForeground() {
     FlutterForegroundTask.initCommunicationPort();
     FlutterForegroundTask.addTaskDataCallback(_onDadosForeground);
-    if (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando) {
+    if (_etapa == EtapaEntrega.emRota) {
       _ativarProximidadeForeground();
     }
   }
@@ -151,8 +160,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     if (data is! String) return;
     if (data.startsWith('chegou_destino:')) {
       final pedidoIdRecebido = data.split(':').last;
-      if (pedidoIdRecebido == _pedidoId &&
-          (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+      if (pedidoIdRecebido == _pedidoId && _etapa == EtapaEntrega.emRota) {
         debugPrint('[EntregaScreen] ForegroundTask detectou chegada — atualizando UI');
         if (mounted) setState(() => _etapa = EtapaEntrega.chegouDestino);
         NotificationService.showChegouDestinoLocal();
@@ -191,7 +199,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     _subProximidade?.cancel();
     _subProximidade = null;
     if (!mounted) return;
-    if (_etapa != EtapaEntrega.emRota && _etapa != EtapaEntrega.retornando) return;
+    if (_etapa != EtapaEntrega.emRota) return;
     debugPrint('[EntregaScreen] Atualizando status para chegou_destino...');
     try {
       await _supabase.from('pedidos').update({
@@ -326,7 +334,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
       );
       debugPrint('[GEO] distancia_destino=${distM.toStringAsFixed(0)}m acc=${pos.accuracy.toStringAsFixed(0)}m status=$_etapa');
       if (pos.accuracy > 30) return;
-      if (distM <= 50 && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+      if (distM <= 50 && _etapa == EtapaEntrega.emRota) {
         debugPrint('[PROX] ✓ Chegou ao destino! dist=${distM.toStringAsFixed(0)}m acc=${pos.accuracy.toStringAsFixed(0)}m');
         _marcarChegouDestinoAutomatico();
       }
@@ -336,9 +344,9 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
       _subProximidade = null;
       if (!mounted) return;
       final etapaAtual = _etapa;
-      if (etapaAtual != EtapaEntrega.emRota && etapaAtual != EtapaEntrega.retornando) return;
+      if (etapaAtual != EtapaEntrega.emRota) return;
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
+        if (mounted && _etapa == EtapaEntrega.emRota) {
           _iniciarVerificacaoProximidade();
         }
       });
@@ -376,7 +384,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
               if (novaEtapa != null && novaEtapa != _etapa) {
                 debugPrint('[EntregaScreen] Realtime: status=$status — sincronizando etapa $_etapa -> $novaEtapa');
                 if (mounted) setState(() => _etapa = novaEtapa);
-                if (novaEtapa == EtapaEntrega.emRota || novaEtapa == EtapaEntrega.retornando) {
+                if (novaEtapa == EtapaEntrega.emRota) {
                   _iniciarVerificacaoProximidade();
                 }
                 if (novaEtapa == EtapaEntrega.retornando || novaEtapa == EtapaEntrega.aguardandoPagamento) {
@@ -667,9 +675,13 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
       }).eq('id', _pedidoId);
       setState(() => _etapa = EtapaEntrega.retornando);
       HapticFeedback.mediumImpact();
+      // Não reinicia verificação de proximidade aqui de propósito (bug
+      // real corrigido 2026-09-19) — ela compara contra a coordenada do
+      // CLIENTE, e só faz sentido na ida (emRota). Rearmada durante
+      // retornando, disparava "chegou ao destino" sempre que o caminho de
+      // volta pra loja passava perto do cliente, regravando
+      // status_detalhado='chegou_destino' por cima do 'retornando' certo.
       _iniciarPollingPagamento();
-      _iniciarVerificacaoProximidade();
-      _ativarProximidadeForeground();
     } catch (e) {
       setState(() => _erro = 'Erro ao marcar retorno.');
     } finally {
@@ -877,6 +889,36 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     );
   }
 
+  // Bug real corrigido (2026-09-19): "valor" (o que a loja preenche em
+  // "Valor R$" no painel — quanto o cliente precisa pagar em dinheiro na
+  // entrega, 0 = já pago) nunca era lido nem exibido em nenhuma tela
+  // alcançável do app — o entregador não tinha como saber quanto cobrar.
+  // Mostrado a partir de "chegou no local" (ainda não faz sentido saber
+  // antes de estar com o pedido em mãos) até o fim do fluxo; oculto
+  // quando valor<=0 (nada a cobrar).
+  Widget _buildValorACobrar() {
+    final valor = (widget.pedido['valor'] as num?)?.toDouble() ?? 0;
+    if (valor <= 0) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10b981).withOpacity(0.1),
+        border: Border.all(color: const Color(0xFF10b981).withOpacity(0.4)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        const Icon(Icons.payments_outlined, color: Color(0xFF10b981), size: 18),
+        const SizedBox(width: 8),
+        const Expanded(child: Text('Valor a cobrar do cliente',
+            style: TextStyle(color: Color(0xFF10b981), fontSize: 13, fontWeight: FontWeight.w600))),
+        Text('R\$ ${valor.toStringAsFixed(2)}',
+            style: const TextStyle(color: Color(0xFF10b981), fontSize: 16, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
   Widget _buildCardTela1(dynamic numero) {
     final loja = widget.pedido['lojas'];
     final nomeLoja = _nomeLoja ?? loja?['nome']?.toString() ?? widget.pedido['nome_loja']?.toString() ?? 'Loja';
@@ -893,6 +935,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (_etapa == EtapaEntrega.chegouLocal) _buildValorACobrar(),
         Row(children: [
           const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
           const SizedBox(width: 6),
@@ -953,6 +996,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildValorACobrar(),
         Row(children: [
           const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
           const SizedBox(width: 6),
