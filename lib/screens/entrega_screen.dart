@@ -42,23 +42,37 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   RealtimeChannel? _subPedido;
   Timer? _retryTimerPedido;
   int _retryContPedido = 0;
+  bool _pollingPagamentoIniciado = false;
 
   String get _pedidoId => widget.pedido['id'].toString();
+
+  // Extraído do initState (2026-09-19) pra reaproveitar no realtime — antes
+  // só rodava uma vez, no snapshot inicial do pedido (widget.pedido), então
+  // uma mudança de status_detalhado feita fora do app (ex: admin no painel)
+  // nunca aparecia sem sair da tela e voltar (o que recria a screen com um
+  // pedido novo vindo do banco).
+  // null = status não corresponde a nenhuma etapa do fluxo de entrega própria
+  // (ex: "finalizado"/"cancelado" — tratados em outro lugar: ação local do
+  // próprio entregador ou o branch de reset acima) — nesse caso o chamador
+  // não deve mexer em _etapa.
+  static EtapaEntrega? _etapaFromStatus(String status) {
+    switch (status) {
+      case 'aceito':               return EtapaEntrega.aceito;
+      case 'no_local':
+      case 'chegou_local':         return EtapaEntrega.chegouLocal;
+      case 'em_rota':              return EtapaEntrega.emRota;
+      case 'chegou_destino':       return EtapaEntrega.chegouDestino;
+      case 'retornando':           return EtapaEntrega.retornando;
+      case 'aguardando_pagamento': return EtapaEntrega.aguardandoPagamento;
+      default:                     return null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     final status = widget.pedido['status_detalhado'] ?? widget.pedido['status'] ?? '';
-    switch (status) {
-      case 'aceito':               _etapa = EtapaEntrega.aceito; break;
-      case 'no_local':
-      case 'chegou_local':         _etapa = EtapaEntrega.chegouLocal; break;
-      case 'em_rota':              _etapa = EtapaEntrega.emRota; break;
-      case 'chegou_destino':       _etapa = EtapaEntrega.chegouDestino; break;
-      case 'retornando':           _etapa = EtapaEntrega.retornando; break;
-      case 'aguardando_pagamento': _etapa = EtapaEntrega.aguardandoPagamento; break;
-      default:                     _etapa = EtapaEntrega.aceito;
-    }
+    _etapa = _etapaFromStatus(status) ?? EtapaEntrega.aceito;
     if (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento) {
       _iniciarPollingPagamento();
     }
@@ -264,6 +278,8 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
   }
 
   void _iniciarPollingPagamento() {
+    if (_pollingPagamentoIniciado) return;
+    _pollingPagamentoIniciado = true;
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 5));
       if (!mounted) return false;
@@ -274,11 +290,14 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
           return false;
         }
       } catch (_) {}
-      return mounted && (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento);
+      final continua = mounted && (_etapa == EtapaEntrega.retornando || _etapa == EtapaEntrega.aguardandoPagamento);
+      if (!continua) _pollingPagamentoIniciado = false;
+      return continua;
     });
   }
 
   void _iniciarVerificacaoProximidade() {
+    if (_subProximidade != null) return;
     final clienteLat = (widget.pedido['latitude'] ?? widget.pedido['lat']) as num?;
     final clienteLng = (widget.pedido['longitude'] ?? widget.pedido['lng']) as num?;
     if (clienteLat == null || clienteLng == null) {
@@ -340,7 +359,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
           ),
           callback: (payload) {
             final novo = payload.newRecord;
-            final status = novo['status']?.toString() ?? '';
+            final status = (novo['status_detalhado'] ?? novo['status'])?.toString() ?? '';
             final motoboyId = novo['motoboy_id'];
             final meuId = _supabase.auth.currentUser?.id;
             if (status == 'recebido' ||
@@ -348,10 +367,22 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
                 motoboyId == null ||
                 (meuId != null && motoboyId != meuId)) {
               _handleResetPedido();
-            } else if (status == 'chegou_destino' &&
-                (_etapa == EtapaEntrega.emRota || _etapa == EtapaEntrega.retornando)) {
-              debugPrint('[EntregaScreen] Realtime: status=chegou_destino — atualizando UI');
-              if (mounted) setState(() => _etapa = EtapaEntrega.chegouDestino);
+            } else {
+              // Generalizado (2026-09-19) — antes só sincronizava o caso
+              // específico chegou_destino; qualquer status_detalhado mudado
+              // fora do app (ex: admin no painel) agora reflete na hora,
+              // sem precisar sair da tela e voltar pra forçar um refetch.
+              final novaEtapa = _etapaFromStatus(status);
+              if (novaEtapa != null && novaEtapa != _etapa) {
+                debugPrint('[EntregaScreen] Realtime: status=$status — sincronizando etapa $_etapa -> $novaEtapa');
+                if (mounted) setState(() => _etapa = novaEtapa);
+                if (novaEtapa == EtapaEntrega.emRota || novaEtapa == EtapaEntrega.retornando) {
+                  _iniciarVerificacaoProximidade();
+                }
+                if (novaEtapa == EtapaEntrega.retornando || novaEtapa == EtapaEntrega.aguardandoPagamento) {
+                  _iniciarPollingPagamento();
+                }
+              }
             }
           },
         )

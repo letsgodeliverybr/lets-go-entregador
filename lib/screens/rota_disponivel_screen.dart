@@ -10,8 +10,8 @@ import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
 import '../utils/cla_helper.dart' as cla;
-import 'entrega_screen.dart';
 import 'pedidos_disponiveis_screen.dart';
+import 'pedidos_aceitos_screen.dart';
 
 class RotaDisponivelScreen extends StatefulWidget {
   final Map<String, dynamic> pedido;
@@ -164,7 +164,16 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
       // ignore: unawaited_futures
       NotificationService.cancelarAlertaRota();
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedido: _pedido)));
+      // Pedido do usuário (2026-09-19): depois de aceitar, vai pra lista
+      // "Aceitos" com todos os cards fechados — antes ia direto pro card
+      // expandido (EntregaScreen) do pedido recém-aceito, sem passar pela
+      // lista. pushAndRemoveUntil (não pushReplacement) limpa a pilha até
+      // aqui, mesmo padrão do accept em aceitar_pedido_screen.dart.
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const PedidosAceitosScreen()),
+        (route) => false,
+      );
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
