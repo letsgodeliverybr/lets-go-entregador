@@ -10,6 +10,8 @@ import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
 import '../utils/cla_helper.dart' as cla;
+import '../services/logout_semanal_service.dart'
+    show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_disponiveis_screen.dart';
 import 'pedidos_aceitos_screen.dart';
 
@@ -152,6 +154,36 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
         setState(() => _processando = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Não foi possível confirmar seu status online. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
+    // Limite de entregas simultâneas no aceite sozinho, por loja (2026-09-24)
+    // — essa é a tela onde a maioria dos aceites acontece de verdade (ver
+    // comentário abaixo), então é aqui que a trava mais importa.
+    try {
+      final lojaId = _pedido['loja_id']?.toString();
+      final limite = await limitePedidosLoja(lojaId);
+      final ativas = await contarEntregasAtivas(user.id, lojaId: lojaId);
+      if (ativas >= limite) {
+        if (mounted) {
+          setState(() => _processando = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Você já tem $ativas entregas dessa loja em andamento (limite: $limite). Finalize uma antes de aceitar outra.'),
+            backgroundColor: Colors.red,
+          ));
+          Navigator.pop(context);
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _processando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar suas entregas ativas. Tente novamente.'),
           backgroundColor: Colors.red,
         ));
       }

@@ -109,6 +109,46 @@ Future<bool> temEntregaAtiva(String userId) async {
   }
 }
 
+/// Fallback quando não dá pra saber o limite configurado da loja (sem
+/// loja_id no pedido, ou falha ao consultar) — mesmo valor padrão da
+/// coluna lojas.limite_pedidos_simultaneos. Alocação manual pelo admin
+/// tem um teto separado e fixo (4), aplicado do lado do painel.
+const limitePedidosAceiteSozinho = 2;
+
+/// Conta quantos pedidos ativos (entre aceito e finalizado) esse
+/// entregador já tem agora — usado pra travar um novo aceite sozinho.
+/// [lojaId], quando informado, restringe a contagem só aos pedidos
+/// DAQUELA loja (2026-09-24: o limite passou a ser por loja, não geral —
+/// um entregador pode ter 2 da Loja A e mais 2 da Loja B ao mesmo tempo,
+/// por exemplo, sem violar o limite de nenhuma das duas).
+Future<int> contarEntregasAtivas(String userId, {String? lojaId}) async {
+  final query = Supabase.instance.client
+      .from('pedidos')
+      .select('id')
+      .or('motoboy_id.eq.$userId,entregador_id.eq.$userId')
+      .inFilter('status', _statusAtivos);
+  final data = await (lojaId != null ? query.eq('loja_id', lojaId) : query);
+  return data.length;
+}
+
+/// Limite configurado da loja (lojas.limite_pedidos_simultaneos) pro
+/// aceite sozinho — [limitePedidosAceiteSozinho] se a loja não tiver
+/// (não deveria acontecer, coluna tem default 2) ou a consulta falhar.
+Future<int> limitePedidosLoja(String? lojaId) async {
+  if (lojaId == null) return limitePedidosAceiteSozinho;
+  try {
+    final data = await Supabase.instance.client
+        .from('lojas')
+        .select('limite_pedidos_simultaneos')
+        .eq('id', lojaId)
+        .maybeSingle();
+    return (data?['limite_pedidos_simultaneos'] as num?)?.toInt() ??
+        limitePedidosAceiteSozinho;
+  } catch (_) {
+    return limitePedidosAceiteSozinho;
+  }
+}
+
 /// Checa o corte semanal e desloga se aplicável. Não desloga com entrega
 /// ativa — só adia (reavaliado a cada chamada seguinte), deslogando
 /// automaticamente assim que o entregador ficar livre. Retorna true só

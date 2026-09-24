@@ -7,6 +7,8 @@ import '../services/notification_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
+import '../services/logout_semanal_service.dart'
+    show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_aceitos_screen.dart';
 import 'rota_disponivel_screen.dart';
 
@@ -599,6 +601,34 @@ class _State extends State<PedidosDisponiveisScreen> {
       return;
     }
 
+    // Limite de entregas simultâneas no aceite sozinho, por loja (2026-09-24,
+    // regra de negócio — configurável em Cadastros > Lojas, coluna
+    // lojas.limite_pedidos_simultaneos, padrão 2) — mesmo padrão de reforço
+    // das travas acima (dado fresco na hora do aceite).
+    try {
+      final lojaId = pedido['loja_id']?.toString();
+      final limite = await limitePedidosLoja(lojaId);
+      final ativas = await contarEntregasAtivas(user.id, lojaId: lojaId);
+      if (ativas >= limite) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Você já tem $ativas entregas dessa loja em andamento (limite: $limite). Finalize uma antes de aceitar outra.'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar suas entregas ativas. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
+
     try {
       final result = await _supabase
           .from('pedidos')
@@ -692,6 +722,34 @@ class _State extends State<PedidosDisponiveisScreen> {
     final rotaId = rotaData['rota_agrupada_id'].toString();
     final filaId = rotaData['fila_id'].toString();
     final pedidos = List<Map<String, dynamic>>.from(rotaData['pedidos'] as List);
+
+    // Limite de entregas simultâneas, por loja — mesmo teto de _aceitar(),
+    // mas aqui a rota inteira (2+ pedidos, sempre da MESMA loja — é assim
+    // que despacho-engine agrupa) entra de uma vez, então soma com quem
+    // ele já tem em andamento antes de aceitar.
+    try {
+      final lojaIdRota = pedidos.isNotEmpty ? pedidos.first['loja_id']?.toString() : null;
+      final limite = await limitePedidosLoja(lojaIdRota);
+      final ativas = await contarEntregasAtivas(user.id, lojaId: lojaIdRota);
+      if (ativas + pedidos.length > limite) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Essa rota tem ${pedidos.length} entregas dessa loja e você já tem $ativas em andamento — passaria do limite de $limite. Finalize uma antes de aceitar.'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Não foi possível confirmar suas entregas ativas. Tente novamente.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
 
     try {
       final agora = DateTime.now().toIso8601String();
