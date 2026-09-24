@@ -35,6 +35,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _entregasHoje = 0;
   double _saldoSemana = 0;
   bool _refreshing = false;
+  // Ganho por km rodado hoje (2026-09-24) — _saldoDia / soma de
+  // distancia_km dos mesmos pedidos de hoje. null enquanto não rodou
+  // nenhum km ainda (evita divisão por zero e "R$/km" enganoso com 1 só
+  // pedido de km≈0, ex: retirada no balcão).
+  double? _ganhoPorKmHoje;
 
   // Reorganização da tela offline (2026-09-10): "Meu desempenho hoje" e
   // "Entregador Premium".
@@ -190,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _supabase.from('entregadores').select('nome').eq('id', _eid).single(),
         _supabase
             .from('pedidos')
-            .select('taxa_motoboy,gorjeta')
+            .select('taxa_motoboy,gorjeta,distancia_km')
             .eq('motoboy_id', uid)
             .eq('status', 'finalizado')
             .gte('finalizado_em', inicioDia),
@@ -231,8 +236,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final totalDia = pedidosHoje.fold<double>(
         0, (s, p) => s + _calcTaxaMotoboy(p),
       );
+      final kmDia = pedidosHoje.fold<double>(
+        0, (s, p) => s + ((p['distancia_km'] as num?)?.toDouble() ?? 0),
+      );
+      final ganhoPorKmDia = kmDia > 0 ? totalDia / kmDia : null;
 
-      debugPrint('[HOME] total_ganhos_hoje=$totalDia qtd_pedidos_hoje=${pedidosHoje.length}');
+      debugPrint('[HOME] total_ganhos_hoje=$totalDia qtd_pedidos_hoje=${pedidosHoje.length} km_hoje=$kmDia ganho_por_km=$ganhoPorKmDia');
       debugPrint('[HOME] UID=$uid EID=$_eid match=${uid == _eid} saldoDisponivel=$saldoDisponivel');
       debugPrint('[HOME] aceitasHoje=$aceitasHoje recusadasHoje=$recusadasHoje entregas90Dias=$entregas90Dias');
 
@@ -242,6 +251,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _nome = nomeRaw.contains('@') ? '' : nomeRaw;
           _saldoDia = totalDia;
           _entregasHoje = pedidosHoje.length;
+          _ganhoPorKmHoje = ganhoPorKmDia;
           _saldoSemana = saldoDisponivel;
           _aceitasHoje = aceitasHoje;
           _recusadasHoje = recusadasHoje;
@@ -974,6 +984,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _linhaDesempenho('Finalizadas', _entregasHoje, const Color(0xFF10b981)),
           const SizedBox(height: 12),
           _linhaDesempenho('Recusadas', _recusadasHoje, const Color(0xFFEF4444)),
+          if (_ganhoPorKmHoje != null) ...[
+            const SizedBox(height: 12),
+            _linhaDesempenhoTexto('R\$ por km rodado',
+                'R\$ ${_ganhoPorKmHoje!.toStringAsFixed(2)}', const Color(0xFFF59E0B)),
+          ],
         ],
       ),
     );
@@ -986,6 +1001,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         Text(label,
             style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
         Text('$valor',
+            style: TextStyle(color: cor, fontWeight: FontWeight.bold, fontSize: 16)),
+      ],
+    );
+  }
+
+  Widget _linhaDesempenhoTexto(String label, String valor, Color cor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+        Text(valor,
             style: TextStyle(color: cor, fontWeight: FontWeight.bold, fontSize: 16)),
       ],
     );
