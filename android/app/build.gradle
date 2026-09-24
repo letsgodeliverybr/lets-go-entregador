@@ -62,7 +62,17 @@ android {
 
     defaultConfig {
         applicationId "br.com.letsgodelivery.parceiro"
-        minSdkVersion 21
+        // 21 -> 24 (2026-09-24): upload da build 121 rejeitado pelo Play
+        // Console — "A Proteção Automática do Google Play requer uma
+        // versão mínima do SDK de 24 ou mais recente". Não é opcional pra
+        // passar o upload. Não há telemetria de versão de Android/SDK dos
+        // aparelhos dos entregadores nesse projeto (sem device_info_plus,
+        // sem coluna correspondente em entregadores) nem acesso à Play
+        // Console/Android Publisher API neste ambiente — não dá pra saber
+        // por aqui se algum dos 258 entregadores está em Android 5.x/6.x
+        // (SDK 21-23), que ficaria incapaz de instalar/atualizar o app a
+        // partir desta build. Ver aviso na resposta desta sessão.
+        minSdkVersion 24
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
