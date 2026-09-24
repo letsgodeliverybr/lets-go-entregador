@@ -7,6 +7,7 @@ import 'battery_service.dart';
 import 'location_service.dart';
 import 'foreground_service.dart';
 import 'notification_service.dart';
+import 'logout_semanal_service.dart' show temEntregaAtiva;
 
 class TrackingService {
   static final _supabase = Supabase.instance.client;
@@ -261,16 +262,22 @@ class TrackingService {
 
   /// Tenta marcar o entregador como offline.
   ///
-  /// Lança [Exception] se houver pedido ativo (aceito / chegou_local /
-  /// em_rota / retornando) — o chamador deve capturar e exibir o alerta.
+  /// Lança [Exception] se houver pedido ativo — o chamador deve capturar e
+  /// exibir o alerta.
   static Future<void> ficarOffline(String entregadorId) async {
-    final ativos = await _supabase
-        .from('pedidos')
-        .select('id')
-        .eq('motoboy_id', entregadorId)
-        .inFilter('status', ['aceito', 'chegou_local', 'em_rota', 'retornando']);
-
-    if (ativos.isNotEmpty) {
+    // Bug real corrigido (2026-09-24): essa checagem era feita localmente
+    // aqui (só coluna motoboy_id, só 4 status, faltando chegou_destino) —
+    // exatamente a mesma lacuna já identificada e corrigida em 11/09 com
+    // temEntregaAtiva() (logout_semanal_service.dart, motoboy_id OU
+    // entregador_id, lista de status mais completa), só que aquele fix
+    // nunca foi aplicado de volta aqui. Como verificarBateriaEForcarOffline
+    // chama ficarOffline() direto (sem passar por temEntregaAtiva antes,
+    // diferente do botão de logout manual e do logout semanal), bateria
+    // baixa em background conseguia derrubar GPS/status/disponivel de um
+    // entregador com entrega em_rota de verdade — achado real (Fábio
+    // Sousa, pedidos #726/#728, sumiu do Mapa ao Vivo com 2 entregas
+    // em_rota ativas). Reaproveita a checagem única e já testada.
+    if (await temEntregaAtiva(entregadorId)) {
       throw Exception(
         'Você possui uma entrega em andamento. '
         'Finalize a entrega antes de ficar offline.',
