@@ -889,32 +889,41 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     );
   }
 
-  // Bug real corrigido (2026-09-19): "valor" (o que a loja preenche em
-  // "Valor R$" no painel — quanto o cliente precisa pagar em dinheiro na
-  // entrega, 0 = já pago) nunca era lido nem exibido em nenhuma tela
-  // alcançável do app — o entregador não tinha como saber quanto cobrar.
-  // Mostrado a partir de "chegou no local" (ainda não faz sentido saber
-  // antes de estar com o pedido em mãos) até o fim do fluxo; oculto
-  // quando valor<=0 (nada a cobrar).
+  // Bug real corrigido (2026-09-19, refinado 2026-09-24 após teste real no
+  // app): "valor" (o que a loja preenche em "Valor R$" no painel, ou pra
+  // pedido iFood o payments.pending — quanto o cliente precisa pagar na
+  // entrega em dinheiro/cartão, 0 = já pago online) nunca era lido nem
+  // exibido em nenhuma tela alcançável do app.
+  //
+  // Regra final (2026-09-24, confirmada com dado real de teste no
+  // celular — a versão anterior mostrava em qualquer etapa != emRota,
+  // que inclui retornando/aguardandoPagamento/finalizado, não só "chegou
+  // no destino" como o comentário dizia):
+  //   - só aparece com com_retorno=true (pedido com pagamento na entrega/
+  //     troco — se for pagamento online, não tem valor a cobrar);
+  //   - só na etapa "chegou no destino" (ver chamada em _buildCardTela2),
+  //     nunca antes disso nem depois;
+  //   - cor branca (era verde antes do ajuste de 19/09).
   Widget _buildValorACobrar() {
     final valor = (widget.pedido['valor'] as num?)?.toDouble() ?? 0;
-    if (valor <= 0) return const SizedBox.shrink();
+    final comRetorno = widget.pedido['com_retorno'] == true;
+    if (valor <= 0 || !comRetorno) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF10b981).withOpacity(0.1),
-        border: Border.all(color: const Color(0xFF10b981).withOpacity(0.4)),
+        color: Colors.white.withOpacity(0.06),
+        border: Border.all(color: Colors.white.withOpacity(0.25)),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(children: [
-        const Icon(Icons.payments_outlined, color: Color(0xFF10b981), size: 18),
+        const Icon(Icons.payments_outlined, color: Colors.white, size: 18),
         const SizedBox(width: 8),
         const Expanded(child: Text('Valor a cobrar do cliente',
-            style: TextStyle(color: Color(0xFF10b981), fontSize: 13, fontWeight: FontWeight.w600))),
+            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
         Text('R\$ ${valor.toStringAsFixed(2)}',
-            style: const TextStyle(color: Color(0xFF10b981), fontSize: 16, fontWeight: FontWeight.bold)),
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
       ]),
     );
   }
@@ -935,7 +944,6 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (_etapa == EtapaEntrega.chegouLocal) _buildValorACobrar(),
         Row(children: [
           const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
           const SizedBox(width: 6),
@@ -996,7 +1004,7 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _buildValorACobrar(),
+        if (_etapa == EtapaEntrega.chegouDestino) _buildValorACobrar(),
         Row(children: [
           const Icon(Icons.receipt_outlined, color: Colors.white54, size: 16),
           const SizedBox(width: 6),
