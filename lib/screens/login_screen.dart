@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'registro_screen.dart';
+import 'recuperar_senha_screen.dart';
 import '../main.dart';
 import '../services/notification_service.dart';
 import '../services/logout_semanal_service.dart';
@@ -155,7 +156,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 28),
                     _buildBotaoEntrar(),
                     const SizedBox(height: 16),
-                    Center(child: TextButton(onPressed: () {}, child: const Text('Esqueci minha senha', style: TextStyle(color: Color(0xFF3B82F6))))),
+                    Center(child: TextButton(
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecuperarSenhaScreen())),
+                      child: const Text('Esqueci minha senha', style: TextStyle(color: Color(0xFF3B82F6))),
+                    )),
                     const Divider(color: Color(0xFF2A2D35), height: 32),
                     Center(child: TextButton(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistroScreen())),
