@@ -162,19 +162,16 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     );
   }
 
-  // Supabase retorna timestamps sem sufixo de fuso — força UTC e converte para
-  // Brasília (UTC-3, fixo desde extinção do horário de verão em 2019).
-  DateTime? _parseBrasilia(String? raw) {
-    if (raw == null) return null;
-    var s = raw;
-    if (!s.contains('Z') && !s.contains('+') &&
-        !RegExp(r'-\d{2}:\d{2}$').hasMatch(s.length > 10 ? s.substring(10) : '')) {
-      s = '${s}Z';
-    }
-    final dt = DateTime.tryParse(s);
-    if (dt == null) return null;
-    return dt.toUtc().subtract(const Duration(hours: 3));
-  }
+  // Bug real corrigido (2026-09-24, achado real reportado: horários no
+  // Extrato apareciam 3h atrasados): pedidos.updated_at é `timestamp
+  // without time zone` — os dígitos gravados JÁ SÃO hora de Brasília
+  // (mesma regra documentada e testada no painel web, app.js). A versão
+  // anterior daqui fazia o oposto do que devia: tratava a string como se
+  // fosse UTC (acrescentava 'Z') e ainda subtraía mais 3h — um pedido
+  // finalizado às 16:48 (Brasília, real) aparecia como 13:48. Sem
+  // sufixo de fuso na string, DateTime.tryParse já interpreta os campos
+  // literalmente (sem nenhuma conversão) — é só usar direto.
+  DateTime? _parseBrasilia(String? raw) => raw == null ? null : DateTime.tryParse(raw);
 
   Widget _buildItem(Map<String, dynamic> p) {
     final data = _parseBrasilia(p['updated_at']?.toString());
