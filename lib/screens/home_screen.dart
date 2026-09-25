@@ -1002,10 +1002,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+            style: const TextStyle(color: Colors.white, fontSize: 13)),
         Text(valor,
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                color: Color(0xFF1A56DB), fontWeight: FontWeight.bold, fontSize: 16)),
       ],
     );
   }
