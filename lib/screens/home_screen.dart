@@ -979,41 +979,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: TextStyle(
                   color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _linhaDesempenho('Aceitas', _aceitasHoje, const Color(0xFF1A56DB)),
-          const SizedBox(height: 12),
-          _linhaDesempenho('Finalizadas', _entregasHoje, const Color(0xFF10b981)),
-          const SizedBox(height: 12),
-          _linhaDesempenho('Recusadas', _recusadasHoje, const Color(0xFFEF4444)),
           if (_ganhoPorKmHoje != null) ...[
+            _linhaDesempenhoTexto(
+                'R\$ por KM', 'R\$ ${_ganhoPorKmHoje!.toStringAsFixed(2)}'),
             const SizedBox(height: 12),
-            _linhaDesempenhoTexto('R\$ por km rodado',
-                'R\$ ${_ganhoPorKmHoje!.toStringAsFixed(2)}', const Color(0xFFF59E0B)),
           ],
+          _linhaDesempenho('Aceitas', _aceitasHoje),
+          const SizedBox(height: 12),
+          _linhaDesempenho('Finalizadas', _entregasHoje),
+          const SizedBox(height: 12),
+          _linhaDesempenho('Recusadas', _recusadasHoje),
         ],
       ),
     );
   }
 
-  Widget _linhaDesempenho(String label, int valor, Color cor) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-        Text('$valor',
-            style: TextStyle(color: cor, fontWeight: FontWeight.bold, fontSize: 16)),
-      ],
-    );
-  }
+  Widget _linhaDesempenho(String label, int valor) =>
+      _linhaDesempenhoTexto(label, '$valor');
 
-  Widget _linhaDesempenhoTexto(String label, String valor, Color cor) {
+  Widget _linhaDesempenhoTexto(String label, String valor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
             style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
         Text(valor,
-            style: TextStyle(color: cor, fontWeight: FontWeight.bold, fontSize: 16)),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       ],
     );
   }
