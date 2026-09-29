@@ -7,6 +7,7 @@ import '../services/notification_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
+import '../utils/bloqueio_helper.dart' as bloq;
 import '../services/logout_semanal_service.dart'
     show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_aceitos_screen.dart';
@@ -151,6 +152,8 @@ class _State extends State<PedidosDisponiveisScreen> {
       // — despacho_fila já vem corretamente restrito pelo backend
       // (entregadores_no_raio), não precisa filtrar de novo.
       await cla.carregarCla();
+      // Bloqueio por loja (Editar Loja no painel) — mesmo cadenciamento.
+      await bloq.carregarBloqueios();
 
       final configs = await Future.wait([
         _supabase
@@ -338,6 +341,10 @@ class _State extends State<PedidosDisponiveisScreen> {
 
         lista = [...pedidosFila, ...resto];
       }
+
+      // Pedido de loja que bloqueou este entregador não aparece (vale pros dois
+      // modos; despacho_fila já vem filtrado pelo backend, reforço aqui).
+      lista = lista.where((p) => bloq.pedidoPermitido(p['loja_id']?.toString())).toList();
 
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
@@ -555,6 +562,20 @@ class _State extends State<PedidosDisponiveisScreen> {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
+    // Bloqueio por loja — revalida na hora do aceite (o banco recusa de
+    // qualquer jeito; aqui é pra mensagem certa sem tentar gravar).
+    await bloq.carregarBloqueios();
+    if (!bloq.pedidoPermitido(pedido['loja_id']?.toString())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(bloq.mensagemBloqueado),
+          backgroundColor: Colors.red,
+        ));
+        _buscar();
+      }
+      return;
+    }
+
     // Trava de exclusividade de clã — reforço mesmo com a tela já filtrando
     // certo: revalida com dado fresco na hora do aceite, cobrindo a janela
     // entre a lista carregar e o toque no botão (ex: admin tirou o
@@ -683,7 +704,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(bloq.mensagemErroAceite(e, 'Erro: $e')), backgroundColor: Colors.red));
       }
     }
   }
@@ -727,6 +748,16 @@ class _State extends State<PedidosDisponiveisScreen> {
     // mas aqui a rota inteira (2+ pedidos, sempre da MESMA loja — é assim
     // que despacho-engine agrupa) entra de uma vez, então soma com quem
     // ele já tem em andamento antes de aceitar.
+    await bloq.carregarBloqueios();
+    if (pedidos.any((p) => !bloq.pedidoPermitido(p['loja_id']?.toString()))) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(bloq.mensagemBloqueado),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
     try {
       final lojaIdRota = pedidos.isNotEmpty ? pedidos.first['loja_id']?.toString() : null;
       final limite = await limitePedidosLoja(lojaIdRota);
@@ -790,7 +821,7 @@ class _State extends State<PedidosDisponiveisScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao aceitar rota: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text(bloq.mensagemErroAceite(e, 'Erro ao aceitar rota: $e')), backgroundColor: Colors.red));
       }
     }
   }

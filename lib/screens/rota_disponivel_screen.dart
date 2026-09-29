@@ -10,6 +10,7 @@ import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
 import '../utils/cla_helper.dart' as cla;
+import '../utils/bloqueio_helper.dart' as bloq;
 import '../services/logout_semanal_service.dart'
     show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_disponiveis_screen.dart';
@@ -109,6 +110,21 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     setState(() => _processando = true);
     final user = _supabase.auth.currentUser;
     if (user == null) { Navigator.pop(context); return; }
+
+    // Bloqueio por loja — o banco recusa de qualquer jeito; aqui é pra
+    // mensagem certa sem tentar gravar.
+    await bloq.carregarBloqueios();
+    if (!bloq.pedidoPermitido(_pedido['loja_id']?.toString())) {
+      if (mounted) {
+        setState(() => _processando = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(bloq.mensagemBloqueado),
+          backgroundColor: Colors.red,
+        ));
+        Navigator.pop(context);
+      }
+      return;
+    }
 
     // Trava de exclusividade de clã — reforço: esse pedido chegou aqui via
     // overlay do stream global (main.dart), que já filtra por clã, mas
@@ -242,7 +258,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(bloq.mensagemErroAceite(e, 'Erro: $e')), backgroundColor: Colors.red));
       }
     }
   }
