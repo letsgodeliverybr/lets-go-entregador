@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/volume_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/pedidos_disponiveis_screen.dart';
+import 'screens/vagas_screen.dart';
 import 'screens/rota_disponivel_screen.dart';
 import 'screens/extrato_screen.dart';
 import 'services/notification_service.dart';
@@ -55,7 +56,8 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
     if (tipo != 'avaliar_app' &&
         tipo != 'indicacao' &&
         tipo != 'periodico' &&
-        tipo != 'pedido_realocado') {
+        tipo != 'pedido_realocado' &&
+        tipo != 'nova_vaga') {
       // Cobre 'nova_rota', 'novo_pedido' e qualquer tipo desconhecido —
       // mesmo fallback de sempre (else final antigo).
       //
@@ -92,6 +94,15 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       await NotificationService.showPeriodicoLocal(
         titulo: message.data['titulo']?.toString(),
         corpo: message.data['corpo']?.toString(),
+      );
+    } else if (tipo == 'nova_vaga') {
+      // Vaga nova de Entrega Dedicada (notify-vaga, acao 'nova'): mesmo
+      // canal/som/vibração do pedido novo, volume forçado igual.
+      await VolumeService.forcarVolumeMidiaMaximo();
+      await NotificationService.showNovaVagaLocal(
+        titulo: message.data['titulo']?.toString(),
+        corpo: message.data['corpo']?.toString(),
+        vagaId: message.data['vaga_id']?.toString(),
       );
     } else if (tipo == 'pedido_realocado') {
       // Aviso (bug real corrigido 2026-09-10), não alarme — sem
@@ -356,6 +367,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       home: const AuthGate(),
       routes: {
         '/pedidos': (context) => const PedidosDisponiveisScreen(),
+        '/vagas': (context) => const VagasScreen(),
         '/login': (context) => const LoginScreen(),
         '/extrato': (context) => const ExtratoScreen(),
       },

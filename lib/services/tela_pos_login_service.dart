@@ -8,6 +8,7 @@ import '../screens/permissoes_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/entregador_home_screen.dart';
 import '../screens/pedidos_disponiveis_screen.dart';
+import '../screens/vagas_screen.dart';
 import '../screens/aguardo_aprovacao_screen.dart';
 import '../screens/cadastro_aprovacao_screen.dart';
 import '../screens/device_setup_screen.dart';
@@ -123,6 +124,14 @@ Future<Widget> _resolverTelaSemSetup() async {
     }
 
     if (todosDocumentosAprovados) {
+      // App aberto do zero pelo toque na notificação de vaga nova → aba Vagas
+      // (mesmo mecanismo do 'novo_pedido' logo abaixo).
+      try {
+        final det = await FlutterLocalNotificationsPlugin().getNotificationAppLaunchDetails();
+        if (det?.didNotificationLaunchApp == true && det?.notificationResponse?.payload == 'nova_vaga') {
+          return const VagasScreen();
+        }
+      } catch (_) {}
       if (e['disponivel'] == true) {
         // App estava fechado/morto e foi aberto pelo fullScreenIntent da
         // notificação de novo pedido (não por toque manual) — nesse caso

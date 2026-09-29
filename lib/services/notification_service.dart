@@ -149,6 +149,7 @@ class NotificationService {
           // parte, ver comentário acima e AuthGate em main.dart).
           _abrirTelaPedidosDisponiveis();
         }
+        if (details.payload == 'nova_vaga') _abrirTelaVagas();
       },
     );
 
@@ -323,6 +324,16 @@ class NotificationService {
         // Aviso, não alarme — sem VolumeService/forçar volume, diferente
         // dos ramos abaixo (nova_rota/novo_pedido, que são ofertas reais).
         await showPedidoRealocadoLocal(msg.data['numero']?.toString() ?? '');
+      } else if (tipo == 'nova_vaga') {
+        // Vaga nova de Entrega Dedicada: mesmo som/vibração do pedido, mas
+        // sem navegar sozinho (não é oferta com prazo de segundos) — o
+        // toque na notificação abre a aba Vagas.
+        await VolumeService.forcarVolumeMidiaMaximo();
+        await showNovaVagaLocal(
+          titulo: msg.data['titulo']?.toString(),
+          corpo: msg.data['corpo']?.toString(),
+          vagaId: msg.data['vaga_id']?.toString(),
+        );
       } else if (tipo == 'nova_rota') {
         // Volume forçado ANTES de mostrar — achado em auditoria
         // (2026-09-03): esse caminho (app em foreground) nunca chamava
@@ -390,6 +401,14 @@ class NotificationService {
   // pushNamed simples (não remove a pilha) — se o entregador já estava em
   // outra tela, some ao voltar/sair da tela Disponíveis, comportamento
   // aceitável pra esse caso de uso.
+  static void _abrirTelaVagas() {
+    try {
+      navigatorKey.currentState?.pushNamed('/vagas');
+    } catch (e) {
+      debugPrint('[NotificationService] falha ao navegar pra /vagas: $e');
+    }
+  }
+
   static void _abrirTelaPedidosDisponiveis() {
     try {
       navigatorKey.currentState?.pushNamed('/pedidos');
@@ -737,6 +756,46 @@ class NotificationService {
       "Pedidos na tela! Vem Pra Rua! Aproveite Alta Demanda Para Faturar Mais Com A Let's Go Delivery!",
       NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: 'novo_pedido',
+    );
+  }
+
+  // ── Notificação local: vaga nova (Entrega Dedicada) ─────────────────────
+  // Mesmo canal (_channelPedidoId), som (alerta_insistente_pedido),
+  // vibração e FLAG_INSISTENT do alerta de pedido novo — sem som novo nem
+  // canal novo. Diferenças: sem fullScreenIntent (vaga não é oferta de
+  // segundos, não precisa tomar a tela), texto vindo do push (notify-vaga,
+  // acao 'nova') e payload 'nova_vaga' → toque abre a aba Vagas. ID por vaga
+  // (faixa 3000-3999) pra almoço+jantar criados juntos não se sobreporem.
+  static Future<void> showNovaVagaLocal({String? titulo, String? corpo, String? vagaId}) async {
+    if (!_initialized) await initLocal();
+
+    final androidDetails = AndroidNotificationDetails(
+      _channelPedidoId,
+      _channelPedidoName,
+      channelDescription: _channelPedidoDesc,
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      sound: const RawResourceAndroidNotificationSound('alerta_insistente_pedido'),
+      enableVibration: true,
+      enableLights: true,
+      ticker: 'Nova vaga disponível',
+      icon: '@mipmap/ic_launcher',
+      additionalFlags: Int32List.fromList(<int>[4]),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      3000 + ((vagaId ?? '').hashCode % 1000).abs(),
+      (titulo == null || titulo.isEmpty) ? 'Nova vaga disponível' : titulo,
+      corpo ?? '',
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: 'nova_vaga',
     );
   }
 
