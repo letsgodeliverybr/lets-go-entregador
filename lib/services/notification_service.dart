@@ -9,6 +9,11 @@ import 'battery_service.dart';
 import 'volume_service.dart';
 
 class NotificationService {
+  /// Incrementa quando chega (com o app aberto) um push de vaga — notify-vaga
+  /// do painel, ao cancelar/desatribuir. A VagasScreen escuta pra recarregar
+  /// na hora (vagas_motoboy_fixo não está no Realtime).
+  static final ValueNotifier<int> vagasAtualizadas = ValueNotifier<int>(0);
+
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
@@ -298,6 +303,7 @@ class NotificationService {
     FirebaseMessaging.onMessage.listen((msg) async {
       debugPrint('[FCM] foreground: ${msg.data}');
       final tipo = msg.data['tipo']?.toString() ?? '';
+      if (msg.data['vaga_id'] != null) vagasAtualizadas.value++;
       if (tipo == 'avaliar_app') {
         await showAvaliarAppLocal(
           titulo: msg.data['titulo']?.toString(),

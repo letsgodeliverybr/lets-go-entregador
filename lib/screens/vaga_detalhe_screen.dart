@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/vagas_utils.dart';
 
 class VagaDetalheScreen extends StatefulWidget {
   final Map<String, dynamic> vaga;
@@ -35,10 +36,10 @@ class _VagaDetalheScreenState extends State<VagaDetalheScreen> {
       if (!mounted) return;
       if (result.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Essa vaga já foi preenchida por outro motoboy'),
+          content: Text('Essa vaga não está mais disponível'),
           backgroundColor: Colors.red,
         ));
-        Navigator.pop(context, true);
+        Navigator.pop(context, 'mudou');
         return;
       }
 
@@ -46,7 +47,7 @@ class _VagaDetalheScreenState extends State<VagaDetalheScreen> {
         content: Text('Vaga aceita com sucesso!'),
         backgroundColor: Color(0xFF16A34A),
       ));
-      Navigator.pop(context, true);
+      Navigator.pop(context, 'aceita');
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
@@ -72,10 +73,10 @@ class _VagaDetalheScreenState extends State<VagaDetalheScreen> {
     final valor = (widget.vaga['valor'] as num?)?.toDouble() ?? 0;
     final horarioInicio = (widget.vaga['horario_inicio'] ?? '—').toString();
     final horarioFim = (widget.vaga['horario_fim'] ?? '—').toString();
-    final data = DateTime.tryParse(widget.vaga['data']?.toString() ?? '');
-    final dataStr = data != null
-        ? '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year}'
-        : '—';
+    final dataStr = dataBr(widget.vaga['data']?.toString());
+    // Aberta pela aba "Minhas vagas": só consulta, sem botão Aceitar.
+    final podeAceitar = widget.vaga['status'] == 'disponivel' && widget.vaga['entregador_id'] == null;
+    final selo = seloSituacao(situacaoVaga(widget.vaga, DateTime.now()));
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F14),
@@ -101,6 +102,7 @@ class _VagaDetalheScreenState extends State<VagaDetalheScreen> {
             ),
           ]),
           const SizedBox(height: 24),
+          if (!podeAceitar) _linha(Icons.info_outline, 'Situação', selo.rotulo, cor: selo.cor),
           _linha(Icons.calendar_today, 'Data', dataStr),
           _linha(Icons.access_time, 'Horário', '$horarioInicio - $horarioFim'),
           _linha(Icons.location_on_outlined, 'Endereço', endereco),
@@ -123,8 +125,8 @@ class _VagaDetalheScreenState extends State<VagaDetalheScreen> {
                 child: const Text('Voltar', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
+            if (podeAceitar) const SizedBox(width: 12),
+            if (podeAceitar) Expanded(
               flex: 2,
               child: ElevatedButton(
                 onPressed: _processando ? null : _aceitar,
