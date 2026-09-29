@@ -34,14 +34,14 @@ class PedidoCardWidget extends StatelessWidget {
     final distanciaKm = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
-    final taxaMotoboy = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
-    final taxaMotoboySalvo = (pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaMotoboy;
-    final rawPd = taxaMotoboySalvo - taxaMotoboy;
-    final pdSalvo = rawPd >= 0.05 ? rawPd : 0.0;
-    final taxaFinal = taxaMotoboy + gorjeta + pdSalvo;
-    final taxaSemRetorno = comRetorno
-        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + gorjeta + pdSalvo
-        : 0.0;
+    // Valor = o que o painel paga (taxa_motoboy do pedido; senão tabela de
+    // pagamento da LOJA) — ver th.valorEntregador. Antes partia da tabela global.
+    final valor = th.detalharValor(pedido);
+    final taxaMotoboy = valor.base;
+    final taxaMotoboySalvo = valor.total;
+    final pdSalvo = valor.pd;
+    final taxaFinal = valor.total;
+    final taxaSemRetorno = comRetorno ? valor.semRetorno : 0.0;
     debugPrint('[PedidoCard] #${pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaMotoboy.toStringAsFixed(2)} pd_detectado=${pdSalvo.toStringAsFixed(2)}');
     final pontos = pedido['pontos'] as int? ?? 4;
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
@@ -91,19 +91,6 @@ class PedidoCardWidget extends StatelessWidget {
                       style: const TextStyle(color: Colors.white54, fontSize: 13)),
               ]),
               const SizedBox(height: 10),
-
-              // Linha 2: km de onde você está
-              Row(children: [
-                const Icon(Icons.location_on, color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  (distMotoboyLojaKm != null && distMotoboyLojaKm! > 0)
-                      ? '${distMotoboyLojaKm!.toStringAsFixed(2)} km de onde você está'
-                      : '— km de onde você está',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ]),
-              const SizedBox(height: 8),
 
               // Linha 3: pontos
               Row(children: [
@@ -175,9 +162,7 @@ class PedidoCardWidget extends StatelessWidget {
                   const SizedBox(width: 8),
                 ],
                 Text(
-                  pdSalvo > 0
-                      ? 'R\$${(taxaMotoboy + pdSalvo).toStringAsFixed(2)}'
-                      : 'R\$${taxaFinal.toStringAsFixed(2)}',
+                  'R\$${taxaFinal.toStringAsFixed(2)}',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15, fontWeight: FontWeight.w700),

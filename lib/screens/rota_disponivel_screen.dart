@@ -51,7 +51,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   @override
   void initState() {
     super.initState();
-    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
+    th.carregarFaixasLojas([_pedido['loja_id']?.toString()]).then((_) { if (mounted) setState(() {}); });
     _obterPosicaoEntregador();
     Future.delayed(const Duration(milliseconds: 300), _ajustarMapa);
   }
@@ -412,11 +412,13 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
     final comRetorno = _pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(_pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = _pedido['pontos'] ?? 4;
-    final taxaMotoboy = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final taxaMotoboySalvo = (_pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaMotoboy;
-    final rawPd = taxaMotoboySalvo - taxaMotoboy;
-    final precoDinamico = rawPd >= 0.05 ? rawPd : 0.0;
-    final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
+    // Valor = o que o painel paga (taxa_motoboy do pedido; senão tabela de
+    // pagamento da LOJA) — ver th.valorEntregador. Antes partia da tabela global.
+    final valor = th.detalharValor(_pedido);
+    final taxaMotoboy = valor.base;
+    final taxaMotoboySalvo = valor.total;
+    final precoDinamico = valor.pd;
+    final taxaTotal = valor.total;
     final numero = _pedido['numero']?.toString() ?? '—';
     debugPrint('[RotaDisponivel] #$numero taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaMotoboy.toStringAsFixed(2)} pd_detectado=${precoDinamico.toStringAsFixed(2)}');
 
@@ -532,7 +534,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
               Text('${km.toStringAsFixed(2)} km', style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
               const Spacer(),
               if (comRetorno) ...[
-                Text('R\$ ${(th.calcularTaxaMotoboy(km, false, th.faixasGlobais) + precoDinamico + gorjeta).toStringAsFixed(2)}',
+                Text('R\$ ${valor.semRetorno.toStringAsFixed(2)}',
                     style: const TextStyle(
                         color: Colors.red, fontSize: 14,
                         decoration: TextDecoration.lineThrough,
@@ -554,9 +556,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
                 const SizedBox(width: 8),
               ],
               Text(
-                precoDinamico > 0
-                    ? 'R\$ ${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
-                    : 'R\$ ${taxaTotal.toStringAsFixed(2)}',
+                'R\$ ${taxaTotal.toStringAsFixed(2)}',
                 style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ]),

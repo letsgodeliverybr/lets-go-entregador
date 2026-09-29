@@ -87,6 +87,8 @@ class _State extends State<PedidosAceitosScreen> {
           0.0;
       if (mounted) setState(() {
         _pedidos = List<Map<String, dynamic>>.from(results[0] as List);
+        // tabela de pagamento de cada loja (cache) → redesenha quando chegar
+        th.carregarFaixasLojas(_pedidos.map((p) => p['loja_id']?.toString())).then((_) { if (mounted) setState(() {}); });
         _precoDinamico = precoDinamico;
         _carregando = false;
       });
@@ -224,11 +226,8 @@ class _State extends State<PedidosAceitosScreen> {
                             // Usa PD salvo no pedido (fixo no momento da criação),
                             // não o PD ao vivo de configuracoes — pedidos históricos
                             // sempre mostram o indicador se foram criados com PD ativo.
-                            final distanciaKm = double.tryParse(p['distancia_km']?.toString() ?? '0') ?? 0.0;
-                            final comRetorno = p['com_retorno'] == true;
-                            final taxaMotoboySalvo = double.tryParse(p['taxa_motoboy']?.toString() ?? '0') ?? 0.0;
-                            final taxaBase = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
-                            final pdSalvo = (taxaMotoboySalvo - taxaBase).clamp(0.0, double.infinity);
+                            // Base pela tabela de pagamento da LOJA (antes: global).
+                            final pdSalvo = th.detalharValor(p).pd;
                             return PedidoCardWidget(
                               pedido: p,
                               statusLabel: _label(status),

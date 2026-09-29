@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -21,12 +20,11 @@ class _State extends State<AceitarPedidoScreen> {
   final _supabase = Supabase.instance.client;
   bool _aceitando = false;
   Position? _posicaoAtual;
-  double _distMotoboyLoja = 0;
 
   @override
   void initState() {
     super.initState();
-    th.carregarFaixas().then((_) { if (mounted) setState(() {}); });
+    th.carregarFaixasLojas([widget.pedido['loja_id']?.toString()]).then((_) { if (mounted) setState(() {}); });
     _obterPosicao();
   }
 
@@ -35,29 +33,12 @@ class _State extends State<AceitarPedidoScreen> {
       final pos = await Geolocator.getLastKnownPosition();
       if (pos != null && mounted) {
         setState(() => _posicaoAtual = pos);
-        _calcularDistLoja(pos);
       }
       final current = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
       if (mounted) {
         setState(() => _posicaoAtual = current);
-        _calcularDistLoja(current);
       }
     } catch (_) {}
-  }
-
-  void _calcularDistLoja(Position pos) {
-    final loja = widget.pedido['lojas'];
-    final lat = (loja?['latitude'] ?? loja?['lat']) as num?;
-    final lng = (loja?['longitude'] ?? loja?['lng']) as num?;
-    if (lat == null || lng == null) return;
-    const R = 6371.0;
-    final dLat = (lat.toDouble() - pos.latitude) * pi / 180;
-    final dLng = (lng.toDouble() - pos.longitude) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(pos.latitude * pi / 180) * cos(lat.toDouble() * pi / 180) *
-        sin(dLng / 2) * sin(dLng / 2);
-    final dist = R * 2 * atan2(sqrt(a), sqrt(1 - a));
-    if (mounted) setState(() => _distMotoboyLoja = dist);
   }
 
   LatLng? get _latLngCliente {
@@ -162,13 +143,15 @@ class _State extends State<AceitarPedidoScreen> {
     final comRetorno = widget.pedido['com_retorno'] == true;
     final gorjeta = double.tryParse(widget.pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final pontos = widget.pedido['pontos'] ?? 4;
-    final taxaBase = th.calcularTaxaMotoboy(km, comRetorno, th.faixasGlobais);
-    final taxaMotoboySalvo = (widget.pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaBase;
+    // Valor = o que o painel paga (taxa_motoboy do pedido; senão tabela de
+    // pagamento da LOJA) — ver th.valorEntregador. Antes partia da tabela global.
+    final valor = th.detalharValor(widget.pedido);
+    final taxaBase = valor.base;
+    final taxaMotoboySalvo = valor.total;
     final taxaMotoboy = taxaBase;
-    final rawPd = taxaMotoboySalvo - taxaBase;
-    final precoDinamico = rawPd >= 0.05 ? rawPd : 0.0;
+    final precoDinamico = valor.pd;
     debugPrint('[Aceitar] #${widget.pedido['numero']} taxa_motoboy_salvo=${taxaMotoboySalvo.toStringAsFixed(2)} taxa_base=${taxaBase.toStringAsFixed(2)} pd_detectado=${precoDinamico.toStringAsFixed(2)}');
-    final taxaTotal = taxaMotoboy + gorjeta + precoDinamico;
+    final taxaTotal = valor.total;
     final loja = widget.pedido['lojas'];
     final nomeLoja = loja?['nome']?.toString() ?? 'Estabelecimento';
     final endColeta = widget.pedido['endereco_coleta']?.toString() ?? '';
@@ -361,19 +344,6 @@ class _State extends State<AceitarPedidoScreen> {
                         ]),
                         const SizedBox(height: 10),
 
-                        // Linha 2: km de onde você está
-                        Row(children: [
-                          const Icon(Icons.location_on, color: Colors.white, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            _distMotoboyLoja > 0
-                                ? '${_distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
-                                : '— km de onde você está',
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
-                          ),
-                        ]),
-                        const SizedBox(height: 8),
-
                         // Linha 3: coleta (se houver) e entrega
                         if (endColeta.isNotEmpty) ...[
                           Row(children: [
@@ -425,7 +395,7 @@ class _State extends State<AceitarPedidoScreen> {
                               style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
                           const Spacer(),
                           if (comRetorno) ...[
-                            Text('R\$ ${(th.calcularTaxaMotoboy(km, false, th.faixasGlobais) + precoDinamico + gorjeta).toStringAsFixed(2)}',
+                            Text('R\$ ${valor.semRetorno.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                     color: Colors.red, fontSize: 14,
                                     decoration: TextDecoration.lineThrough,
@@ -447,9 +417,7 @@ class _State extends State<AceitarPedidoScreen> {
                             const SizedBox(width: 8),
                           ],
                           Text(
-                            precoDinamico > 0
-                                ? 'R\$ ${(taxaMotoboy + precoDinamico).toStringAsFixed(2)}'
-                                : 'R\$ ${taxaTotal.toStringAsFixed(2)}',
+                            'R\$ ${taxaTotal.toStringAsFixed(2)}',
                             style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,

@@ -404,6 +404,8 @@ class _PedidoOverlayState extends State<_PedidoOverlay> {
       if (mounted) setState(() => _segundos = (_segundos - 1).clamp(0, 30));
     });
     _carregarDados();
+    // valor do card pela tabela de pagamento da loja (ver th.valorEntregador)
+    th.carregarFaixasLojas([widget.pedido['loja_id']?.toString()]).then((_) { if (mounted) setState(() {}); });
   }
 
   @override

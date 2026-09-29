@@ -62,7 +62,8 @@ class _State extends State<PedidosDisponiveisScreen> {
     final km = double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final gorjeta = double.tryParse(pedido['gorjeta']?.toString() ?? '0') ?? 0;
     final temRetorno = pedido['com_retorno'] == true || pedido['retorno'] == true;
-    double base = th.calcularTaxaMotoboy(km, temRetorno, th.faixasGlobais);
+    if (pedido['taxa_motoboy'] != null) return th.valorEntregador(pedido);
+    double base = th.calcularPorLoja(pedido['loja_id']?.toString(), km, temRetorno);
     return base + _precoDinamico + gorjeta;
   }
 
@@ -345,6 +346,8 @@ class _State extends State<PedidosDisponiveisScreen> {
       // Pedido de loja que bloqueou este entregador não aparece (vale pros dois
       // modos; despacho_fila já vem filtrado pelo backend, reforço aqui).
       lista = lista.where((p) => bloq.pedidoPermitido(p['loja_id']?.toString())).toList();
+      // tabela de pagamento de cada loja (cache; só busca loja nova)
+      await th.carregarFaixasLojas(lista.map((p) => p['loja_id']?.toString()));
 
       final idsConhecidos = _pedidos.map((p) => p['id']).toSet();
       final novos = lista.where((p) => !idsConhecidos.contains(p['id'])).toList();
@@ -1079,32 +1082,18 @@ class _State extends State<PedidosDisponiveisScreen> {
     final distanciaKm =
         double.tryParse(pedido['distancia_km']?.toString() ?? '0') ?? 0;
     final comRetorno = pedido['com_retorno'] == true;
-    final taxaBase = th.calcularTaxaMotoboy(distanciaKm, comRetorno, th.faixasGlobais);
-    final taxaMotoboySalvo = (pedido['taxa_motoboy'] as num?)?.toDouble() ?? taxaBase;
-    final rawPd = taxaMotoboySalvo - taxaBase;
-    final pdSalvo = rawPd >= 0.05 ? rawPd : 0.0;
-    final taxaFinal = taxaBase + gorjeta + pdSalvo;
+    // Valor = o que o painel paga (taxa_motoboy do pedido; senão tabela de
+    // pagamento da LOJA) — ver th.valorEntregador. Antes partia da tabela global.
+    final valor = th.detalharValor(pedido);
+    final taxaBase = valor.base;
+    final pdSalvo = valor.pd;
+    final taxaFinal = valor.total;
 
     final numero = pedido['numero'] ?? pedido['id'].toString().substring(0, 6);
     final pontos = pedido['pontos'] ?? 4;
-    final taxaSemRetorno = comRetorno
-        ? th.calcularTaxaMotoboy(distanciaKm, false, th.faixasGlobais) + pdSalvo + gorjeta
-        : 0.0;
+    final taxaSemRetorno = comRetorno ? valor.semRetorno : 0.0;
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
-
-    double distMotoboyLoja = 0;
-    if (_posicaoAtual != null &&
-        loja != null &&
-        loja['latitude'] != null &&
-        loja['longitude'] != null) {
-      distMotoboyLoja = _calcularDistancia(
-        _posicaoAtual!.latitude,
-        _posicaoAtual!.longitude,
-        (loja['latitude'] as num).toDouble(),
-        (loja['longitude'] as num).toDouble(),
-      );
-    }
 
     final pedidoId = pedido['id'].toString();
     final segundosRestantes = _contadores[pedidoId];
@@ -1178,18 +1167,6 @@ class _State extends State<PedidosDisponiveisScreen> {
               const SizedBox(height: 10),
 
               Row(children: [
-                const Icon(Icons.location_on, color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  distMotoboyLoja > 0
-                      ? '${distMotoboyLoja.toStringAsFixed(2)} km de onde você está'
-                      : '— km de onde você está',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ]),
-              const SizedBox(height: 8),
-
-              Row(children: [
                 const Icon(Icons.star_border, color: Colors.white, size: 16),
                 const SizedBox(width: 6),
                 Text('$pontos pontos',
@@ -1260,9 +1237,7 @@ class _State extends State<PedidosDisponiveisScreen> {
                   const SizedBox(width: 8),
                 ],
                 Text(
-                  pdSalvo > 0
-                      ? 'R\$${(taxaBase + pdSalvo).toStringAsFixed(2)}'
-                      : 'R\$${taxaFinal.toStringAsFixed(2)}',
+                  'R\$${taxaFinal.toStringAsFixed(2)}',
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
