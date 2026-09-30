@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/saldo_semana.dart';
+import '../utils/saque_erro_helper.dart';
 
 class ConfirmarSaqueScreen extends StatefulWidget {
   const ConfirmarSaqueScreen({Key? key}) : super(key: key);
@@ -164,12 +165,7 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _processando = false);
-        final msg = e.toString();
-        final exibir = msg.contains('saldo_insuficiente')
-            ? 'Saldo insuficiente para este saque.'
-            : msg.contains('valor_invalido')
-                ? 'Informe um valor válido.'
-                : 'Erro ao solicitar saque. Tente novamente.';
+        final exibir = mensagemErroSaque(e);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(exibir),
