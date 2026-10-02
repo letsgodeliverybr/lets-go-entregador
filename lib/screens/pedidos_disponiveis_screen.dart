@@ -1177,6 +1177,15 @@ class _State extends State<PedidosDisponiveisScreen> {
               ]),
               const SizedBox(height: 10),
 
+              if (kmAteColeta(distMotoboyLoja) != null) ...[
+                Row(children: [
+                  const Icon(Icons.place_outlined, color: Colors.white, size: 16),
+                  const SizedBox(width: 6),
+                  Text(kmAteColeta(distMotoboyLoja)!,
+                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                ]),
+                const SizedBox(height: 8),
+              ],
               Row(children: [
                 const Icon(Icons.star_border, color: Colors.white, size: 16),
                 const SizedBox(width: 6),
@@ -1213,19 +1222,10 @@ class _State extends State<PedidosDisponiveisScreen> {
 
               const SizedBox(height: 12),
 
-              if (textoAteColeta(distMotoboyLoja) != null) ...[
-                Row(children: [
-                  const Icon(Icons.place_outlined, color: Color(0xFFFFFFFF), size: 16),
-                  const SizedBox(width: 4),
-                  Text(textoAteColeta(distMotoboyLoja)!,
-                      style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
-                ]),
-                const SizedBox(height: 6),
-              ],
               Row(children: [
                 const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
                 const SizedBox(width: 4),
-                Text(textoLojaAoCliente(distanciaKm),
+                Text(formatarKm(distanciaKm),
                     style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
                 const Spacer(),
                 if (comRetorno) ...[

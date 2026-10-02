@@ -7,11 +7,8 @@ void main() {
     expect(formatarKm(12), '12,0 km');
   });
   test('linha de coleta some sem posição', () {
-    expect(textoAteColeta(null), isNull);
-    expect(textoAteColeta(0), isNull);
-    expect(textoAteColeta(2.34), '2,3 km até a coleta');
-  });
-  test('loja ao cliente', () {
-    expect(textoLojaAoCliente(4.2), '4,2 km da loja ao cliente');
+    expect(kmAteColeta(null), isNull);
+    expect(kmAteColeta(0), isNull);
+    expect(kmAteColeta(0.2), '0,2 km');
   });
 }

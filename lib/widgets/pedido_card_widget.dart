@@ -93,6 +93,16 @@ class PedidoCardWidget extends StatelessWidget {
               ]),
               const SizedBox(height: 10),
 
+              // Linha 2: entregador até a loja (some sem GPS)
+              if (kmAteColeta(distMotoboyLojaKm) != null) ...[
+                Row(children: [
+                  const Icon(Icons.place_outlined, color: Colors.white, size: 16),
+                  const SizedBox(width: 6),
+                  Text(kmAteColeta(distMotoboyLojaKm)!,
+                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                ]),
+                const SizedBox(height: 8),
+              ],
               // Linha 3: pontos
               Row(children: [
                 const Icon(Icons.star_border, color: Colors.white, size: 16),
@@ -130,21 +140,11 @@ class PedidoCardWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // Linha 4b: entregador até a loja (some sem GPS)
-              if (textoAteColeta(distMotoboyLojaKm) != null) ...[
-                Row(children: [
-                  const Icon(Icons.place_outlined, color: Colors.white, size: 16),
-                  const SizedBox(width: 4),
-                  Text(textoAteColeta(distMotoboyLojaKm)!,
-                      style: const TextStyle(color: Colors.white, fontSize: 13)),
-                ]),
-                const SizedBox(height: 6),
-              ],
               // Linha 5: rota + km | valor base riscado → valor final
               Row(children: [
                 const Icon(Icons.route_outlined, color: Colors.white, size: 16),
                 const SizedBox(width: 4),
-                Text(textoLojaAoCliente(distanciaKm),
+                Text(formatarKm(distanciaKm),
                     style: const TextStyle(color: Colors.white, fontSize: 13)),
                 const Spacer(),
                 if (comRetorno) ...[
