@@ -8,6 +8,7 @@ import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
 import '../utils/bloqueio_helper.dart' as bloq;
+import '../utils/distancia_helper.dart';
 import '../services/logout_semanal_service.dart'
     show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_aceitos_screen.dart';
@@ -1095,6 +1096,16 @@ class _State extends State<PedidosDisponiveisScreen> {
     final loja = pedido['lojas'];
     final nomeLoja = loja?['nome'] ?? 'Estabelecimento';
 
+    double? distMotoboyLoja;
+    if (_posicaoAtual != null && loja != null && loja['latitude'] != null && loja['longitude'] != null) {
+      distMotoboyLoja = _calcularDistancia(
+        _posicaoAtual!.latitude,
+        _posicaoAtual!.longitude,
+        (loja['latitude'] as num).toDouble(),
+        (loja['longitude'] as num).toDouble(),
+      );
+    }
+
     final pedidoId = pedido['id'].toString();
     final segundosRestantes = _contadores[pedidoId];
     final isSequencial = _modoDespacho == 'sequencial';
@@ -1202,10 +1213,19 @@ class _State extends State<PedidosDisponiveisScreen> {
 
               const SizedBox(height: 12),
 
+              if (textoAteColeta(distMotoboyLoja) != null) ...[
+                Row(children: [
+                  const Icon(Icons.place_outlined, color: Color(0xFFFFFFFF), size: 16),
+                  const SizedBox(width: 4),
+                  Text(textoAteColeta(distMotoboyLoja)!,
+                      style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+                ]),
+                const SizedBox(height: 6),
+              ],
               Row(children: [
                 const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
                 const SizedBox(width: 4),
-                Text('${distanciaKm.toStringAsFixed(2)} km',
+                Text(textoLojaAoCliente(distanciaKm),
                     style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
                 const Spacer(),
                 if (comRetorno) ...[

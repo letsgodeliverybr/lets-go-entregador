@@ -11,6 +11,7 @@ import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
 import '../utils/cla_helper.dart' as cla;
 import '../utils/bloqueio_helper.dart' as bloq;
+import '../utils/distancia_helper.dart';
 import '../services/logout_semanal_service.dart'
     show contarEntregasAtivas, limitePedidosLoja;
 import 'pedidos_disponiveis_screen.dart';
@@ -527,11 +528,21 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
             ),
             const SizedBox(height: 12),
 
+            // Linha 5b: entregador até a loja (some sem GPS)
+            if (textoAteColeta(_distMotoboyLoja) != null) ...[
+              Row(children: [
+                const Icon(Icons.place_outlined, color: Color(0xFFFFFFFF), size: 16),
+                const SizedBox(width: 4),
+                Text(textoAteColeta(_distMotoboyLoja)!,
+                    style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+              ]),
+              const SizedBox(height: 6),
+            ],
             // Linha 6: distância percurso + taxa
             Row(children: [
               const Icon(Icons.route_outlined, color: Color(0xFFFFFFFF), size: 16),
               const SizedBox(width: 4),
-              Text('${km.toStringAsFixed(2)} km', style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
+              Text(textoLojaAoCliente(km), style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 13)),
               const Spacer(),
               if (comRetorno) ...[
                 Text('R\$ ${valor.semRetorno.toStringAsFixed(2)}',

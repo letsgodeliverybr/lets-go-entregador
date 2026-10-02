@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/status_utils.dart';
 import '../utils/taxa_helper.dart' as th;
+import '../utils/distancia_helper.dart';
 
 class PedidoCardWidget extends StatelessWidget {
   final Map<String, dynamic> pedido;
@@ -129,11 +130,21 @@ class PedidoCardWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
+              // Linha 4b: entregador até a loja (some sem GPS)
+              if (textoAteColeta(distMotoboyLojaKm) != null) ...[
+                Row(children: [
+                  const Icon(Icons.place_outlined, color: Colors.white, size: 16),
+                  const SizedBox(width: 4),
+                  Text(textoAteColeta(distMotoboyLojaKm)!,
+                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                ]),
+                const SizedBox(height: 6),
+              ],
               // Linha 5: rota + km | valor base riscado → valor final
               Row(children: [
                 const Icon(Icons.route_outlined, color: Colors.white, size: 16),
                 const SizedBox(width: 4),
-                Text('${distanciaKm.toStringAsFixed(2)} km',
+                Text(textoLojaAoCliente(distanciaKm),
                     style: const TextStyle(color: Colors.white, fontSize: 13)),
                 const Spacer(),
                 if (comRetorno) ...[
