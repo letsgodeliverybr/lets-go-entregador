@@ -11,6 +11,7 @@ import '../services/tracking_service.dart';
 import '../services/premium_service.dart';
 import '../services/logout_semanal_service.dart';
 import 'login_screen.dart';
+import '../utils/diaria_helper.dart';
 import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 
@@ -224,6 +225,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // usada pelo selo no menu lateral (drawer_screen.dart) — fonte
         // única do cálculo, pra nunca divergir.
         PremiumService.entregas90Dias(uid),
+        // Diárias de hoje (Entrega Dedicada finalizada): lançamento em
+        // creditos_entregadores com vaga_id — ver utils/diaria_helper.dart.
+        _supabase
+            .from('creditos_entregadores')
+            .select('tipo,valor')
+            .eq('entregador_id', uid)
+            .not('vaga_id', 'is', null)
+            .eq('data', dataIso(now)),
       ]);
 
       final entregador = r[0] as Map<String, dynamic>;
@@ -232,16 +241,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final aceitasHoje = List<Map<String, dynamic>>.from(r[3] as List).length;
       final recusadasHoje = List<Map<String, dynamic>>.from(r[4] as List).length;
       final entregas90Dias = r[5] as int;
+      final diariasHoje = somaDiarias(List<Map<String, dynamic>>.from(r[6] as List));
 
-      final totalDia = pedidosHoje.fold<double>(
+      final totalPedidosDia = pedidosHoje.fold<double>(
         0, (s, p) => s + _calcTaxaMotoboy(p),
       );
+      // Valor do dia = entregas + diárias; ganho/km continua só das entregas.
+      final totalDia = totalPedidosDia + diariasHoje;
       final kmDia = pedidosHoje.fold<double>(
         0, (s, p) => s + ((p['distancia_km'] as num?)?.toDouble() ?? 0),
       );
-      final ganhoPorKmDia = kmDia > 0 ? totalDia / kmDia : null;
+      final ganhoPorKmDia = kmDia > 0 ? totalPedidosDia / kmDia : null;
 
-      debugPrint('[HOME] total_ganhos_hoje=$totalDia qtd_pedidos_hoje=${pedidosHoje.length} km_hoje=$kmDia ganho_por_km=$ganhoPorKmDia');
+      debugPrint('[HOME] total_ganhos_hoje=$totalDia diarias_hoje=$diariasHoje qtd_pedidos_hoje=${pedidosHoje.length} km_hoje=$kmDia ganho_por_km=$ganhoPorKmDia');
       debugPrint('[HOME] UID=$uid EID=$_eid match=${uid == _eid} saldoDisponivel=$saldoDisponivel');
       debugPrint('[HOME] aceitasHoje=$aceitasHoje recusadasHoje=$recusadasHoje entregas90Dias=$entregas90Dias');
 

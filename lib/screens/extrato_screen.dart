@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/diaria_helper.dart';
 
 class ExtratoScreen extends StatefulWidget {
   const ExtratoScreen({super.key});
@@ -10,6 +11,8 @@ class ExtratoScreen extends StatefulWidget {
 class _ExtratoScreenState extends State<ExtratoScreen> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _pedidos = [];
+  List<Map<String, dynamic>> _diarias = [];
+  List<ItemExtrato> _itens = [];
   bool _carregando = true;
   String _filtro = 'mes';
 
@@ -54,7 +57,26 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
       final lista = List<Map<String, dynamic>>.from(raw);
       debugPrint('Pedidos encontrados: ${lista.length}');
 
-      if (mounted) setState(() { _pedidos = lista; _carregando = false; });
+      // Diárias finalizadas no período (creditos_entregadores com vaga_id;
+      // estorno de diária vem como débito). Filtro pela data da vaga.
+      final rawDiarias = await _supabase
+          .from('creditos_entregadores')
+          .select('id, tipo, valor, observacoes, data, created_at')
+          .eq('entregador_id', uid)
+          .not('vaga_id', 'is', null)
+          .gte('data', dataIso(_inicio))
+          .order('created_at', ascending: false);
+      final diarias = List<Map<String, dynamic>>.from(rawDiarias);
+      debugPrint('Diárias encontradas: ${diarias.length}');
+
+      if (mounted) {
+        setState(() {
+          _pedidos = lista;
+          _diarias = diarias;
+          _itens = juntarExtrato(lista, diarias, _valor, (p) => _parseBrasilia(p['updated_at']?.toString()));
+          _carregando = false;
+        });
+      }
     } catch (e) {
       debugPrint('ExtratoScreen error: $e');
       if (mounted) setState(() => _carregando = false);
@@ -67,7 +89,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
     return taxa + gorjeta;
   }
 
-  double get _total => _pedidos.fold(0, (s, p) => s + _valor(p));
+  double get _total => _itens.fold(0, (s, i) => s + i.valor);
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +113,7 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
           Expanded(
             child: _carregando
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF1A56DB)))
-                : _pedidos.isEmpty
+                : _itens.isEmpty
                     ? const Center(child: Text('Nenhuma entrega no período',
                           style: TextStyle(color: Colors.white54)))
                     : RefreshIndicator(
@@ -99,8 +121,8 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
                         color: const Color(0xFF1A56DB),
                         child: ListView.builder(
                           padding: const EdgeInsets.all(12),
-                          itemCount: _pedidos.length,
-                          itemBuilder: (_, i) => _buildItem(_pedidos[i]),
+                          itemCount: _itens.length,
+                          itemBuilder: (_, i) => _itens[i].ehDiaria ? _buildDiaria(_itens[i]) : _buildItem(_itens[i].dados),
                         ),
                       ),
           ),
@@ -152,7 +174,8 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
       child: Row(children: [
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Total do período', style: TextStyle(color: Colors.white54, fontSize: 13)),
-          Text('${_pedidos.length} entrega${_pedidos.length != 1 ? 's' : ''}',
+          Text('${_pedidos.length} entrega${_pedidos.length != 1 ? 's' : ''}'
+              '${_diarias.isEmpty ? '' : ' + ${_diarias.where((c) => c['tipo'] != 'debito').length} diária${_diarias.where((c) => c['tipo'] != 'debito').length != 1 ? 's' : ''}'}',
               style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ]),
         const Spacer(),
@@ -204,6 +227,40 @@ class _ExtratoScreenState extends State<ExtratoScreen> {
         ])),
         Text('R\$ ${_valor(p).toStringAsFixed(2)}',
             style: const TextStyle(color: Color(0xFF10b981), fontWeight: FontWeight.w700, fontSize: 16)),
+      ]),
+    );
+  }
+
+  String _fmtData(DateTime? d) => d == null
+      ? '—'
+      : '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} às ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+  // Diária no mesmo padrão do pedido: descrição, data e valor; estorno em vermelho.
+  Widget _buildDiaria(ItemExtrato item) {
+    final c = item.dados;
+    final estorno = c['tipo'] == 'debito';
+    final descricao = c['observacoes']?.toString() ?? (estorno ? 'Estorno De Diária' : 'Diária Finalizada');
+    final cor = estorno ? const Color(0xFFef4444) : const Color(0xFF10b981);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161820),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2A2D35)),
+      ),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(descricao,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 3),
+          Text(_fmtData(item.quando),
+              style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
+          const SizedBox(height: 2),
+          const Text('Entrega Dedicada', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        ])),
+        Text('${estorno ? '- ' : ''}R\$ ${item.valor.abs().toStringAsFixed(2)}',
+            style: TextStyle(color: cor, fontWeight: FontWeight.w700, fontSize: 16)),
       ]),
     );
   }
