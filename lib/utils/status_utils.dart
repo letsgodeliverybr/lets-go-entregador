@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
 
-Color statusColor(String? status) {
-  switch (status) {
-    case 'recebido':      return const Color(0xFFEF4444);
-    case 'pronto':        return const Color(0xFFEC4899);
-    case 'aceito':        return const Color(0xFFF59E0B);
-    case 'chegou_local':  return const Color(0xFF38BDF8);
-    case 'no_local':      return const Color(0xFF38BDF8);
-    case 'em_rota':       return const Color(0xFF1A56DB);
-    case 'chegou_destino':return const Color(0xFF1A56DB);
-    case 'retornando':    return const Color(0xFF10B981);
-    case 'finalizado':    return const Color(0xFF10B981);
-    case 'entregue':      return const Color(0xFF10B981);
-    case 'cancelado':     return const Color(0xFFEF4444);
-    default:              return const Color(0xFF475569);
-  }
-}
+// Selo de status do pedido no app (2026-10-02): todos em azul (o mesmo
+// #1A56DB do app), em vez das cores de status do painel. Só a cor; os
+// textos dos status continuam em statusLabel.
+Color statusColor(String? status) => const Color(0xFF1A56DB);
 
 String statusLabel(String? status) {
   switch (status) {
