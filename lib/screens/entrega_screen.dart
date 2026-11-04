@@ -982,8 +982,21 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
     );
   }
 
-  Widget _buildCardTela2(dynamic numero) {
-    final endereco = widget.pedido['endereco'] ?? '—';
+  // tel:0800XXXXXXX,12345678 a partir de pedidos.telefone_0800 ("0800 ... · 12345678")
+  Future<void> _discar0800() async {
+    final partes = (widget.pedido['telefone_0800']?.toString() ?? '').split('·');
+    final numero = partes.first.replaceAll(RegExp(r'[^0-9]'), '');
+    final loc = partes.length > 1 ? partes[1].replaceAll(RegExp(r'[^0-9]'), '') : '';
+    if (numero.isEmpty) return;
+    final uri = Uri.parse(loc.length == 8 ? 'tel:$numero,$loc' : 'tel:$numero');
+    try {
+      await launchUrl(uri);
+    } catch (e) {
+      debugPrint('[0800] não abriu o discador: $e');
+    }
+  }
+
+  Widget _buildCardTela2(dynamic numero) {    final endereco = widget.pedido['endereco'] ?? '—';
     final complemento = widget.pedido['complemento']?.toString() ?? '';
     final nomeCliente = widget.pedido['cliente'] ?? '—';
     // Telefone do cliente removido dessa tela (privacidade — ver auditoria
@@ -1052,15 +1065,19 @@ class _EntregaScreenState extends State<EntregaScreen> with WidgetsBindingObserv
         ]),
         if (zero800.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Row(children: [
-            const Icon(Icons.support_agent_outlined, color: Colors.white54, size: 16),
-            const SizedBox(width: 6),
-            Text(zero800, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          ]),
+          // iFood (2026-11-04): toca e já disca o 0800, pausa e o localizador
+          // de 8 dígitos (vírgula = pausa no discador).
+          InkWell(
+            onTap: _discar0800,
+            child: Row(children: [
+              const Icon(Icons.phone_outlined, color: Color(0xFF1A56DB), size: 16),
+              const SizedBox(width: 6),
+              Text(zero800, style: const TextStyle(color: Color(0xFF1A56DB), fontSize: 13, fontWeight: FontWeight.w600)),
+            ]),
+          ),
         ],
         if (observacao.isNotEmpty) ...[
-          const Divider(color: Color(0xFF2A2D35), height: 20),
-          const Text('OBSERVAÇÕES', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.0)),
+          const Divider(color: Color(0xFF2A2D35), height: 20),          const Text('OBSERVAÇÕES', style: TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.0)),
           const SizedBox(height: 4),
           Text(observacao, style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ],
