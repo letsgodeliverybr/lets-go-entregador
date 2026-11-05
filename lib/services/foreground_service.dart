@@ -5,6 +5,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'battery_service.dart';
 
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const _supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -107,9 +108,11 @@ class LocationTaskHandler extends TaskHandler {
     // disponivel/status são responsabilidade exclusiva de
     // TrackingService.ficarOnline/ficarOffline/iniciar/parar.
     try {
+      final bateria = await BatteryService.nivelRecente();
       await Supabase.instance.client.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
+        if (bateria != null) 'bateria': bateria,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _entregadorId!);
     } catch (e) {

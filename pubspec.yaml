@@ -1,7 +1,7 @@
 name: lets_go_entregador
 description: Lets Go Delivery app.
 publish_to: 'none'
-version: 1.0.0+129
+version: 1.0.0+130
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Volume do alerta registrado em todas as engines (inclusive background do push), 2026-11-04
+  letsgo_volume:
+    path: packages/letsgo_volume
   webview_flutter: ^4.8.0
   flutter_map: any
   latlong2: any

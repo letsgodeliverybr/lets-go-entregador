@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
+import '../services/battery_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/cla_helper.dart' as cla;
@@ -563,6 +564,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _aceitar(Map<String, dynamic> pedido) async {
+    if (await BatteryService.bloqueiaAceite(context)) return;
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 
@@ -714,6 +716,7 @@ class _State extends State<PedidosDisponiveisScreen> {
   }
 
   Future<void> _aceitarRota(Map<String, dynamic> rotaData) async {
+    if (await BatteryService.bloqueiaAceite(context)) return;
     final user = _supabase.auth.currentUser;
     if (user == null) return;
 

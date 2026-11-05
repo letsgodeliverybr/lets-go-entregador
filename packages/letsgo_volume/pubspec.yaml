@@ -1,0 +1,19 @@
+name: letsgo_volume
+description: Volume do alerta de pedido (Mídia e Alarme) e checagem do canal, registrado em todas as engines Flutter (inclusive a de background do push).
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.letsgodelivery.letsgo_volume
+        pluginClass: LetsgoVolumePlugin

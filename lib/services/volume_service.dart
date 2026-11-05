@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'notification_service.dart';
 import 'package:flutter/services.dart';
 
 /// Força o volume MÁXIMO (streams de Mídia E Alarme — ver comentário
@@ -41,6 +43,36 @@ import 'package:flutter/services.dart';
 /// não subir num teste anterior).
 class VolumeService {
   static const MethodChannel _channel = MethodChannel('letsgo/volume');
+
+  /// Canal "Novo Pedido" silenciado pelo usuário (2026-11-04): o app não
+  /// consegue religar o som de um canal (só o usuário, nas configurações).
+  /// Ao ficar disponível, avisa e oferece abrir a configuração do canal.
+  static Future<void> avisarSeCanalSilenciado(BuildContext context) async {
+    bool silenciado = false;
+    try {
+      silenciado = await _channel.invokeMethod<bool>('canalSilenciado', {'canal': NotificationService.canalPedidoId}) ?? false;
+    } catch (_) {}
+    if (!silenciado || !context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161820),
+        title: const Text('Alerta de pedido sem som', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: const Text('O aviso de "Novo Pedido" está silenciado neste celular. Sem som, você pode perder entregas. Ative o som e a importância "Urgente" do canal Novo Pedido.',
+            style: TextStyle(color: Colors.white70, fontSize: 14)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Agora não')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try { await _channel.invokeMethod('abrirConfigCanal', {'canal': NotificationService.canalPedidoId}); } catch (_) {}
+            },
+            child: const Text('Ativar som'),
+          ),
+        ],
+      ),
+    );
+  }
 
   static Future<void> forcarVolumeMidiaMaximo() async {
     try {

@@ -216,9 +216,11 @@ class TrackingService {
   // mexer em lat/lng.
   static Future<void> _enviar(String entregadorId, Position pos) async {
     try {
+      final bateria = await BatteryService.nivelRecente();
       await _supabase.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
+        if (bateria != null) 'bateria': bateria,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
       debugPrint('[TrackingService] ✓ GPS: ${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}');

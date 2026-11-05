@@ -52,6 +52,7 @@ class NotificationService {
   // o alerta soando. Ver comentário completo no createNotificationChannel
   // abaixo (som novo, alerta_insistente_pedido).
   static const String _channelPedidoId = 'letsgo_novo_pedido_v8';
+  static String get canalPedidoId => _channelPedidoId;
   static const String _channelPedidoName = 'Novo Pedido';
   static const String _channelPedidoDesc = 'Alerta de novo pedido disponível';
 

@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../services/battery_service.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
@@ -66,6 +67,7 @@ class _State extends State<AceitarPedidoScreen> {
   static const _centro = LatLng(-21.1775, -47.8103);
 
   Future<void> _aceitar() async {
+    if (await BatteryService.bloqueiaAceite(context)) return;
     setState(() => _aceitando = true);
     final user = _supabase.auth.currentUser;
     if (user == null) return;

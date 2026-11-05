@@ -11,6 +11,7 @@ import '../services/location_permission_flow.dart';
 // canal nativo, ver _assinarRealtimeRota abaixo).
 import '../services/location_service.dart';
 import '../services/tracking_service.dart';
+import '../services/volume_service.dart';
 import '../services/logout_semanal_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
@@ -214,6 +215,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
           return;
         }
         await TrackingService.iniciar(user.id);
+        if (mounted) await VolumeService.avisarSeCanalSilenciado(context);
         final pos = await LocationService.getCurrentPosition();
         if (pos != null && mounted) {
           final ll = LatLng(pos.latitude, pos.longitude);

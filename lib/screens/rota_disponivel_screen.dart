@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
+import '../services/battery_service.dart';
 import '../services/location_service.dart';
 import '../utils/taxa_helper.dart' as th;
 import '../utils/status_utils.dart' as su;
@@ -107,6 +108,7 @@ class _RotaDisponivelScreenState extends State<RotaDisponivelScreen> {
   }
 
   Future<void> _aceitar() async {
+    if (await BatteryService.bloqueiaAceite(context)) return;
     if (_processando) return;
     setState(() => _processando = true);
     final user = _supabase.auth.currentUser;

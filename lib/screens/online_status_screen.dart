@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_permission_flow.dart';
 import '../services/tracking_service.dart';
+import '../services/volume_service.dart';
 import 'home_screen.dart';
 import 'cadastro_aprovacao_screen.dart';
 import 'aguardo_aprovacao_screen.dart';
@@ -158,6 +159,7 @@ class _OnlineStatusScreenState extends State<OnlineStatusScreen>
         await TrackingService.ficarOnline(_uid);
         await TrackingService.iniciar(_uid);
         if (mounted) setState(() => _online = true);
+        if (mounted) await VolumeService.avisarSeCanalSilenciado(context);
       }
     } on Exception catch (e) {
       if (!mounted) return;

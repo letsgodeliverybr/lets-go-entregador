@@ -6,7 +6,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -22,7 +21,6 @@ class MainActivity: FlutterActivity() {
     private val dndChannel = "letsgo/dnd"
     private val fullScreenIntentChannel = "letsgo/fullscreen_intent"
     private val miuiAutostartChannel = "letsgo/miui_autostart"
-    private val volumeChannel = "letsgo/volume"
     private val batteryLevelChannel = "letsgo/battery_level"
     private var batteryReceiver: BroadcastReceiver? = null
 
@@ -190,26 +188,9 @@ class MainActivity: FlutterActivity() {
         // main.dart, direto no _firebaseBackgroundHandler antes de mostrar
         // a notificação — cobre o canal de background), centralizado aqui
         // como única implementação nativa.
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, volumeChannel).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "forcarVolumeMidiaMaximo" -> {
-                    try {
-                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                        for (stream in intArrayOf(AudioManager.STREAM_MUSIC, AudioManager.STREAM_ALARM)) {
-                            val max = am.getStreamMaxVolume(stream)
-                            val atual = am.getStreamVolume(stream)
-                            if (atual < max) {
-                                am.setStreamVolume(stream, max, 0)
-                            }
-                        }
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("volume_error", e.message, null)
-                    }
-                }
-                else -> result.notImplemented()
-            }
-        }
+        // Canal "letsgo/volume" saiu daqui (2026-11-04): agora é o plugin local
+        // packages/letsgo_volume, registrado em todas as engines — aqui ele só
+        // existia com a Activity aberta e o volume não subia com o app fechado.
 
         // Nível de bateria em tempo real (regra de negócio: entregador com
         // bateria < 15% não pode ficar/permanecer Disponível, 2026-09-03).
