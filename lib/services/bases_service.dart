@@ -13,9 +13,8 @@ class BaseArea {
 /// Áreas das bases (Agendamento > Bases do painel) para o mapa da Home.
 ///
 /// O entregador só LÊ agenda_bases (RLS); quem desenha é o ADM. Atualiza ao
-/// vivo pelo Realtime enquanto a tela do mapa está aberta. Não liga GPS:
-/// o "dentro/fora" usa a posição que o mapa já tem e é só informação — quem
-/// decide a chegada é o servidor (agenda_solicitar_chegada).
+/// vivo pelo Realtime enquanto a tela do mapa está aberta. Só desenha: quem
+/// decide a chegada é o servidor (agenda_solicitar_chegada, pelo card).
 class BasesService extends ChangeNotifier {
   BasesService._();
   static final BasesService instance = BasesService._();
@@ -24,23 +23,17 @@ class BasesService extends ChangeNotifier {
 
   List<BaseArea> areas = const [];
 
-  /// Faixa "+R$ 10 CHEGADA 18:30–19:00": só nos dias em que a chegada vale.
-  String? faixaChegada;
-
   int _usos = 0;
   RealtimeChannel? _canal;
   Timer? _debounce;
   Timer? _retry;
-  Timer? _dia;
   int _retryCont = 0;
 
   void ativar() {
     _usos++;
     if (_usos == 1) {
       _assinar();
-      // A faixa da chegada depende da config do ADM e do dia: relê de hora em hora.
-      _dia = Timer.periodic(const Duration(hours: 1), (_) => _carregarFaixa());
-      carregar();
+      _carregarAreas();
     }
   }
 
@@ -48,7 +41,6 @@ class BasesService extends ChangeNotifier {
     if (_usos == 0) return;
     _usos--;
     if (_usos > 0) return;
-    _dia?.cancel();
     _debounce?.cancel();
     _retry?.cancel();
     _retryCont = 0;
@@ -91,10 +83,6 @@ class BasesService extends ChangeNotifier {
     });
   }
 
-  Future<void> carregar() async {
-    await Future.wait([_carregarAreas(), _carregarFaixa()]);
-  }
-
   Future<void> _carregarAreas() async {
     try {
       final r = await _supabase.from('agenda_bases').select('id, nome, poligono, ativo');
@@ -115,39 +103,5 @@ class BasesService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Bases] erro ao carregar áreas: $e');
     }
-  }
-
-  Future<void> _carregarFaixa() async {
-    try {
-      final r = Map<String, dynamic>.from(await _supabase.rpc('agenda_status') as Map);
-      final ch = Map<String, dynamic>.from(r['chegada'] as Map? ?? {});
-      final v = (ch['valor'] as num?)?.toDouble() ?? 0;
-      final valor = v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2).replaceAll('.', ',');
-      faixaChegada = ch['vale_hoje'] == true ? '+R\$ $valor CHEGADA ${ch['inicio']}–${ch['fim']}' : null;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('[Bases] erro ao ler a faixa de chegada: $e');
-    }
-  }
-
-  /// Nome da base cuja área contém [p] (mesma conta do servidor), ou null.
-  String? baseEm(LatLng p) {
-    for (final a in areas) {
-      if (_dentro(p, a.pontos)) return a.nome;
-    }
-    return null;
-  }
-
-  static bool _dentro(LatLng p, List<LatLng> poli) {
-    var d = false;
-    for (var i = 0, j = poli.length - 1; i < poli.length; j = i++) {
-      final yi = poli[i].latitude, xi = poli[i].longitude;
-      final yj = poli[j].latitude, xj = poli[j].longitude;
-      if (((yi > p.latitude) != (yj > p.latitude)) &&
-          (p.longitude < (xj - xi) * (p.latitude - yi) / (yj - yi) + xi)) {
-        d = !d;
-      }
-    }
-    return d;
   }
 }

@@ -429,35 +429,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     super.dispose();
   }
 
-  Widget _buildFaixaBases() {
-    final svc = BasesService.instance;
-    final base = _posicaoAtual == null ? null : svc.baseEm(_posicaoAtual!);
-    Widget chip(String t, Color fundo, {IconData? icone}) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: fundo,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 6)],
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (icone != null) Icon(icone, color: Colors.white, size: 14),
-            if (icone != null) const SizedBox(width: 4),
-            Flexible(
-              child: Text(t,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-            ),
-          ]),
-        );
-    return Wrap(spacing: 8, runSpacing: 6, children: [
-      if (_posicaoAtual != null)
-        base != null
-            ? chip('Você está dentro da área: $base', const Color(0xFF10b981), icone: Icons.check_circle)
-            : chip('Fora da área das bases', const Color(0xFF161820).withOpacity(.9), icone: Icons.place_outlined),
-      if (svc.faixaChegada != null) chip(svc.faixaChegada!, const Color(0xFF1A56DB), icone: Icons.flag),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) {
     final nomeCompleto = _entregador?['nome']?.toString() ?? '';
@@ -709,10 +680,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       ]),
                   ],
                 ),
-
-                // Dentro/fora da área da base + faixa da chegada (só nos dias válidos).
-                if (BasesService.instance.areas.isNotEmpty)
-                  Positioned(top: 12, left: 12, right: 12, child: _buildFaixaBases()),
 
                 // BOTÃO CHAT - canto inferior esquerdo do mapa
                 Positioned(
