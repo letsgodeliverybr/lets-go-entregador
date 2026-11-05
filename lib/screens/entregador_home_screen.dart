@@ -13,6 +13,7 @@ import '../services/location_service.dart';
 import '../services/tracking_service.dart';
 import '../services/volume_service.dart';
 import '../services/logout_semanal_service.dart';
+import '../services/bases_service.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 import 'drawer_screen.dart';
 import 'home_screen.dart';
@@ -68,6 +69,14 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     _iniciarLocalizacaoPassiva();
     _assinarRealtimeRota();
     WidgetsBinding.instance.addPostFrameCallback((_) => _centrarMapaNoMotoboy());
+    // Agendamento 131: áreas das bases no mapa (só leitura, ao vivo enquanto
+    // esta tela está aberta).
+    BasesService.instance.addListener(_onBases);
+    BasesService.instance.ativar();
+  }
+
+  void _onBases() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _centrarMapaNoMotoboy() async {
@@ -408,6 +417,8 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
 
   @override
   void dispose() {
+    BasesService.instance.removeListener(_onBases);
+    BasesService.instance.desativar();
     _statsTimer?.cancel();
     _rotaAutorecusaTimer?.cancel();
     _channelRota?.unsubscribe();
@@ -416,6 +427,35 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
     // nativo, sobrevive a essa tela fechar por conta própria (mesmo
     // raciocínio já aplicado em pedidos_disponiveis_screen.dart).
     super.dispose();
+  }
+
+  Widget _buildFaixaBases() {
+    final svc = BasesService.instance;
+    final base = _posicaoAtual == null ? null : svc.baseEm(_posicaoAtual!);
+    Widget chip(String t, Color fundo, {IconData? icone}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: fundo,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 6)],
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (icone != null) Icon(icone, color: Colors.white, size: 14),
+            if (icone != null) const SizedBox(width: 4),
+            Flexible(
+              child: Text(t,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        );
+    return Wrap(spacing: 8, runSpacing: 6, children: [
+      if (_posicaoAtual != null)
+        base != null
+            ? chip('Você está dentro da área: $base', const Color(0xFF10b981), icone: Icons.check_circle)
+            : chip('Fora da área das bases', const Color(0xFF161820).withOpacity(.9), icone: Icons.place_outlined),
+      if (svc.faixaChegada != null) chip(svc.faixaChegada!, const Color(0xFF1A56DB), icone: Icons.flag),
+    ]);
   }
 
   @override
@@ -523,6 +563,27 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.letsgo.entregador',
                     ),
+
+                    // Áreas das bases (Agendamento): azul pontilhado com o nome.
+                    if (BasesService.instance.areas.isNotEmpty)
+                      PolygonLayer(
+                        polygons: [
+                          for (final b in BasesService.instance.areas)
+                            Polygon(
+                              points: b.pontos,
+                              isFilled: true,
+                              color: const Color(0xFF1A56DB).withOpacity(0.12),
+                              borderColor: const Color(0xFF3B82F6),
+                              borderStrokeWidth: 2.5,
+                              isDotted: true,
+                              label: b.nome,
+                              rotateLabel: false,
+                              labelStyle: const TextStyle(
+                                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,
+                                  shadows: [Shadow(color: Colors.black, blurRadius: 4)]),
+                            ),
+                        ],
+                      ),
 
                     // Pins das lojas (azul com ícone de loja)
                     if (_lojasAtivas.isNotEmpty)
@@ -648,6 +709,10 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       ]),
                   ],
                 ),
+
+                // Dentro/fora da área da base + faixa da chegada (só nos dias válidos).
+                if (BasesService.instance.areas.isNotEmpty)
+                  Positioned(top: 12, left: 12, right: 12, child: _buildFaixaBases()),
 
                 // BOTÃO CHAT - canto inferior esquerdo do mapa
                 Positioned(

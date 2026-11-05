@@ -220,6 +220,7 @@ class TrackingService {
       await _supabase.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
+        'gps_meta': LocationService.gpsMeta(pos),
         if (bateria != null) 'bateria': bateria,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
@@ -257,6 +258,7 @@ class TrackingService {
         'status': 'disponivel',
         'lat': pos?.latitude,
         'lng': pos?.longitude,
+        if (pos != null) 'gps_meta': LocationService.gpsMeta(pos),
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', entregadorId);
     } catch (_) {}

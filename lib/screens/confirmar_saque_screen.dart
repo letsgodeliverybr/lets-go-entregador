@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -26,16 +27,73 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
 
+  // Taxa global saque rápido (app 131): a chave fica no banco
+  // (saque_taxa_config) e quem decide a taxa é o servidor (solicitar_saque).
+  // Aqui só mostramos: com a chave desligada, nenhuma taxa aparece. Atualiza
+  // ao vivo pelo Realtime enquanto esta tela está aberta. null = ainda não
+  // leu / banco sem a chave (mostra a regra de sempre, como antes).
+  bool? _cobrarTaxa;
+  RealtimeChannel? _canalTaxa;
+  Timer? _retryTaxa;
+
   @override
   void initState() {
     super.initState();
     _carregar();
+    _carregarChaveTaxa();
+    _assinarChaveTaxa();
   }
 
   @override
   void dispose() {
+    _retryTaxa?.cancel();
+    final c = _canalTaxa;
+    _canalTaxa = null;
+    if (c != null) _supabase.removeChannel(c);
     _valorController.dispose();
     super.dispose();
+  }
+
+  Future<void> _carregarChaveTaxa() async {
+    try {
+      final r = await _supabase
+          .from('saque_taxa_config')
+          .select('cobrar_taxa')
+          .eq('id', 1)
+          .maybeSingle();
+      if (mounted) setState(() => _cobrarTaxa = r == null ? null : r['cobrar_taxa'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _cobrarTaxa = null);
+    }
+  }
+
+  void _assinarChaveTaxa() {
+    _canalTaxa = _supabase
+        .channel('saque_taxa_${DateTime.now().millisecondsSinceEpoch}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'saque_taxa_config',
+          callback: (payload) {
+            final v = payload.newRecord['cobrar_taxa'];
+            if (mounted && v is bool) setState(() => _cobrarTaxa = v);
+          },
+        )
+        .subscribe((status, [error]) {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        _carregarChaveTaxa(); // voltou a conexão: lê o estado atual
+      } else if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        _retryTaxa?.cancel();
+        _retryTaxa = Timer(const Duration(seconds: 5), () async {
+          if (!mounted) return;
+          final c = _canalTaxa;
+          _canalTaxa = null;
+          if (c != null) await _supabase.removeChannel(c);
+          if (mounted) _assinarChaveTaxa();
+        });
+      }
+    });
   }
 
   Future<void> _carregar() async {
@@ -75,10 +133,24 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
     }
   }
 
-  double _calcularTaxa(double valorBruto) =>
-      valorBruto < 100
+  double _calcularTaxaLocal(double valorBruto) => _cobrarTaxa == false
+      ? 0
+      : valorBruto < 100
           ? 5.0
           : double.parse((valorBruto * 0.05).toStringAsFixed(2));
+
+  // A taxa mostrada na confirmação vem do servidor (mesma regra que cobra);
+  // sem conexão com a prévia, usa a regra local com a chave lida.
+  Future<double> _calcularTaxa(double valorBruto) async {
+    try {
+      final r = await _supabase.rpc('saque_taxa_previa', params: {'p_valor': valorBruto});
+      final m = Map<String, dynamic>.from(r as Map);
+      if (mounted) setState(() => _cobrarTaxa = m['cobrar_taxa'] == true);
+      return (m['taxa'] as num).toDouble();
+    } catch (_) {
+      return _calcularTaxaLocal(valorBruto);
+    }
+  }
 
   Future<void> _solicitarSaque() async {
     final valorStr = _valorController.text.trim().replaceAll(',', '.');
@@ -104,7 +176,8 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
       return;
     }
 
-    final taxa = _calcularTaxa(valorBruto);
+    final taxa = await _calcularTaxa(valorBruto);
+    if (!mounted) return;
     final valorLiquido =
         double.parse((valorBruto - taxa).toStringAsFixed(2));
 
@@ -120,9 +193,12 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           _linhaResumo('Valor solicitado',
               'R\$ ${valorBruto.toStringAsFixed(2)}', Colors.white),
-          const SizedBox(height: 8),
-          _linhaResumo('Taxa', '- R\$ ${taxa.toStringAsFixed(2)}',
-              const Color(0xFFef4444)),
+          // Chave desligada (taxa 0): a linha da taxa não aparece.
+          if (taxa > 0) ...[
+            const SizedBox(height: 8),
+            _linhaResumo('Taxa', '- R\$ ${taxa.toStringAsFixed(2)}',
+                const Color(0xFFef4444)),
+          ],
           const Divider(color: Color(0xFF2A2D35), height: 24),
           _linhaResumo('Você recebe',
               'R\$ ${valorLiquido.toStringAsFixed(2)}',
@@ -278,6 +354,11 @@ class _ConfirmarSaqueScreenState extends State<ConfirmarSaqueScreen> {
                       const BorderSide(color: Color(0xFF1A56DB))),
             ),
           ),
+          if (_cobrarTaxa != false) ...[
+            const SizedBox(height: 8),
+            const Text('Taxa do saque rápido: R\$ 5,00 abaixo de R\$ 100; 5% a partir de R\$ 100.',
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+          ],
           const SizedBox(height: 20),
           if (temPix) ...[
             Container(

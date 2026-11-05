@@ -14,6 +14,8 @@ import 'login_screen.dart';
 import '../utils/diaria_helper.dart';
 import '../utils/saldo_semana.dart';
 import '../widgets/app_bottom_nav_bar.dart';
+import '../widgets/agenda_card.dart';
+import '../services/agenda_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,7 +50,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _recusadasHoje = 0;
   int _entregas90Dias = 0;
   static const _metaPremium = PremiumService.metaEntregas90Dias;
-  String? _turnoSelecionado;
 
   String get _uid => _supabase.auth.currentUser?.id ?? '';
   String? _entregadorId;
@@ -71,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _buscarEntregadorId();
     _carregarDados();
     _iniciarRealtime();
+    AgendaService.instance.saldoMudou.addListener(_agendarRecarregar);
   }
 
   Future<void> _buscarEntregadorId() async {
@@ -106,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AgendaService.instance.saldoMudou.removeListener(_agendarRecarregar);
     _retryTimerCanal?.cancel();
     _canal?.unsubscribe();
     _debounce?.cancel();
@@ -852,128 +855,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildLinhaAgendamentoDesempenho() =>
       _linhaResponsiva(_buildCardAgendamento(), _buildCardDesempenho());
 
-  Widget _buildCardAgendamento() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161820),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A2D35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Agendamento',
-              style: TextStyle(
-                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          _botaoTurno('almoco', 'Almoço', '10:00–14:00'),
-          const SizedBox(height: 8),
-          _botaoTurno('jantar', 'Jantar', '19:00–23:00'),
-          const Spacer(),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: ElevatedButton(
-              onPressed: _turnoSelecionado == null ? null : _confirmarTurno,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A56DB),
-                disabledBackgroundColor: const Color(0xFF1A56DB).withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
-                // Padding horizontal reduzido (2026-09-10, corrige texto
-                // quebrando em 2 linhas) — o padding padrão do
-                // ElevatedButton (~24dp de cada lado) não sobrava espaço
-                // suficiente pro texto numa coluna de metade da tela.
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              // FittedBox garante 1 linha só sempre, encolhendo o texto se
-              // precisar em vez de quebrar — mais robusto que só ajustar
-              // padding/fonte, funciona em qualquer largura de tela.
-              child: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('Confirmar Turno',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _botaoTurno(String valor, String label, String horario) {
-    final selecionado = _turnoSelecionado == valor;
-    return GestureDetector(
-      onTap: () => setState(() => _turnoSelecionado = valor),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selecionado
-              ? const Color(0xFF1A56DB).withOpacity(0.15)
-              : const Color(0xFF1E2130),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: selecionado
-                  ? const Color(0xFF1A56DB)
-                  : const Color(0xFF2A2D35)),
-        ),
-        // Gap FIXO (2026-09-10, corrige espaçamento inconsistente) — antes
-        // usava MainAxisAlignment.spaceBetween, que calcula o espaço livre
-        // com base na largura medida de CADA texto. "Almoço" (com o "m",
-        // mais largo) mede mais que "Jantar" no mesmo peso/tamanho de
-        // fonte, sobrando menos espaço livre pro spaceBetween distribuir —
-        // resultado: gap visivelmente menor no botão Almoço, mesmo sendo
-        // o mesmo widget/mesmo código nos dois. Expanded+SizedBox garante
-        // um gap de 8px sempre, independente da largura do texto.
-        // FittedBox no label (2026-09-10, corrige truncamento) — o
-        // Expanded (fix de espaçamento acima) deixa pouco espaço sobrando
-        // pro label num card de meia-tela, e TextOverflow.ellipsis cortava
-        // "Almoço"/"Jantar" pra "Alm…"/"Jan…". FittedBox encolhe a fonte
-        // em vez de cortar — mesma técnica já usada no botão "Confirmar
-        // Turno" — garante a palavra inteira sempre visível. O horário
-        // continua no tamanho normal (menor, não precisa desse cuidado).
-        child: Row(
-          children: [
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(label,
-                    style: TextStyle(
-                        color: selecionado ? const Color(0xFF1A56DB) : Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(horario,
-                style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Confirmação só visual por enquanto — não existe backend de agendamento
-  // de turno hoje (investigado: não achei tabela/coluna nenhuma pra isso em
-  // nenhum dos dois repos). Fica pra uma decisão futura se precisar
-  // persistir de verdade.
-  void _confirmarTurno() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Turno Confirmado!'),
-        backgroundColor: Color(0xFF10b981),
-      ),
-    );
-  }
+  // Agendamento 131: vaga do dia, bônus por entregas e chegada na base —
+  // tudo no AgendaCard (assina o Realtime só enquanto está na tela).
+  Widget _buildCardAgendamento() => const AgendaCard();
 
   Widget _buildCardDesempenho() {
     return Container(

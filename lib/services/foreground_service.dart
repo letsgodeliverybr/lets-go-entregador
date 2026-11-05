@@ -112,6 +112,11 @@ class LocationTaskHandler extends TaskHandler {
       await Supabase.instance.client.from('entregadores').update({
         'lat': pos.latitude,
         'lng': pos.longitude,
+        'gps_meta': {
+          'precisao': pos.accuracy,
+          'simulada': pos.isMocked,
+          't': DateTime.now().millisecondsSinceEpoch,
+        },
         if (bateria != null) 'bateria': bateria,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', _entregadorId!);
