@@ -868,10 +868,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('Meu Desempenho Hoje',
+              textAlign: TextAlign.center,
               style: TextStyle(
                   color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
@@ -893,15 +894,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _linhaDesempenho(String label, int valor) =>
       _linhaDesempenhoTexto(label, '$valor');
 
+  // Número grande e azul em cima, nome embaixo, tudo centralizado.
   Widget _linhaDesempenhoTexto(String label, String valor) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(valor,
+              style: const TextStyle(
+                  color: Color(0xFF1A56DB), fontWeight: FontWeight.w800, fontSize: 26, height: 1.1)),
+        ),
+        const SizedBox(height: 2),
         Text(label,
-            style: const TextStyle(color: Colors.white, fontSize: 13)),
-        Text(valor,
-            style: const TextStyle(
-                color: Color(0xFF1A56DB), fontWeight: FontWeight.bold, fontSize: 16)),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
     );
   }

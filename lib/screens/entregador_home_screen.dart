@@ -535,7 +535,7 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                       userAgentPackageName: 'com.letsgo.entregador',
                     ),
 
-                    // Áreas das bases (Agendamento): azul pontilhado com o nome.
+                    // Áreas das bases (Agendamento): só a área azul pontilhada, sem nome.
                     if (BasesService.instance.areas.isNotEmpty)
                       PolygonLayer(
                         polygons: [
@@ -547,11 +547,6 @@ class _EntregadorHomeScreenState extends State<EntregadorHomeScreen> {
                               borderColor: const Color(0xFF3B82F6),
                               borderStrokeWidth: 2.5,
                               isDotted: true,
-                              label: b.nome,
-                              rotateLabel: false,
-                              labelStyle: const TextStyle(
-                                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,
-                                  shadows: [Shadow(color: Colors.black, blurRadius: 4)]),
                             ),
                         ],
                       ),

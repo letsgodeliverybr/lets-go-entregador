@@ -3,7 +3,7 @@ import '../services/agenda_service.dart';
 
 /// Card "Agendamento" da Home (app 131). Mostra só o que o servidor devolve
 /// (agenda_status): % de vagas, vaga do dia, barra de entregas com as duas
-/// faixas de bônus e a chegada na base (18:30–19:00; a primeira entrega
+/// faixas de bônus e a chegada na base (janela do ADM; a primeira entrega
 /// aceita depois do registro ganha o bônus quando for finalizada).
 /// Assina o Realtime só enquanto o card está na tela e o app está aberto.
 class AgendaCard extends StatefulWidget {
@@ -20,6 +20,8 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
   static const _azul = Color(0xFF1A56DB);
   static const _verde = Color(0xFF10b981);
   static const _cinza = Color(0xFF6B7280);
+  static const _amarelo = Color(0xFFFBBF24);
+  static const _vermelho = Color(0xFFEF4444);
 
   @override
   void initState() {
@@ -161,7 +163,7 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
     return [
       Text(esgotado ? 'Vagas esgotadas hoje' : '$pct% das vagas disponíveis',
           style: TextStyle(
-              color: esgotado ? const Color(0xFFef4444) : Colors.white,
+              color: esgotado ? _vermelho : Colors.white,
               fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
       Text('Vaga do dia · ${e['inicio_contagem'] ?? '07:00'}–23:59',
@@ -199,15 +201,43 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
       _barra(cont, m1, m2),
       const SizedBox(height: 8),
       ..._faixas(e, pagas),
+      ..._linhaChegada(e),
       ..._chegada(e),
+      // pode_cancelar vem do servidor: só antes da 1ª entrega (e sem
+      // chegada registrada nem faixa paga).
       if (e['pode_cancelar'] == true) ...[
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: _enviando ? null : _confirmarCancelar,
-          child: const Text('Cancelar vaga',
-              style: TextStyle(color: _cinza, fontSize: 11, decoration: TextDecoration.underline)),
-        ),
+        const SizedBox(height: 12),
+        _botaoCancelar(),
       ],
+    ];
+  }
+
+  Widget _botaoCancelar() => SizedBox(
+        width: double.infinity,
+        height: 36,
+        child: OutlinedButton(
+          onPressed: _enviando ? null : _confirmarCancelar,
+          style: OutlinedButton.styleFrom(
+            backgroundColor: _vermelho.withOpacity(0.12),
+            side: BorderSide(color: _vermelho.withOpacity(0.5)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Cancelar vaga',
+                style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ),
+      );
+
+  // 3ª linha, em amarelo: "Chegada +R$ 10" (só nos dias em que a chegada vale).
+  List<Widget> _linhaChegada(Map<String, dynamic> e) {
+    final ch = Map<String, dynamic>.from(e['chegada'] as Map? ?? {});
+    if (ch['vale_hoje'] != true) return const [];
+    return [
+      const SizedBox(height: 4),
+      _faixa('Chegada', '+R\$ ${_moeda(ch['valor'])}', ch['status'] == 'paga', cor: _amarelo),
     ];
   }
 
@@ -236,78 +266,54 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
     );
   }
 
-  Widget _faixa(String meta, String valor, bool paga) => Row(children: [
+  // [cor] fixa a cor da linha (a da chegada é sempre amarela).
+  Widget _faixa(String meta, String valor, bool paga, {Color? cor}) => Row(children: [
         Icon(paga ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: paga ? _verde : _cinza, size: 14),
+            color: cor ?? (paga ? _verde : _cinza), size: 14),
         const SizedBox(width: 5),
         Expanded(
           child: Text.rich(
             TextSpan(children: [
               TextSpan(text: '$meta '),
-              TextSpan(text: valor, style: TextStyle(color: paga ? _verde : Colors.white, fontWeight: FontWeight.w700)),
+              TextSpan(text: valor, style: TextStyle(color: cor ?? (paga ? _verde : Colors.white), fontWeight: FontWeight.w700)),
             ]),
-            style: TextStyle(color: paga ? _verde : Colors.white70, fontSize: 12),
+            style: TextStyle(color: cor ?? (paga ? _verde : Colors.white70), fontSize: 12),
           ),
         ),
       ]);
 
-  // Bloco "+R$ 10 de chegada", separado por uma linha fina.
+  // Chegada: só os avisos de status e, dentro da janela, o botão (quando o
+  // servidor confere que ele está na área) ou o motivo de não aparecer.
+  // Fora da janela não mostra texto — a linha "Chegada +R$ 10" já diz o valor.
   List<Widget> _chegada(Map<String, dynamic> e) {
     final ch = Map<String, dynamic>.from(e['chegada'] as Map? ?? {});
     if (ch['vale_hoje'] != true) return const [];
     final valor = _moeda(ch['valor']);
-    final status = ch['status'] as String?;
-    Widget texto(String t, {Color cor = Colors.white70, IconData? icone, FontWeight peso = FontWeight.normal}) => Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    Widget aviso(String t, Color cor, IconData? icone) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (icone != null) Padding(padding: const EdgeInsets.only(top: 1, right: 4), child: Icon(icone, color: cor, size: 14)),
-            Expanded(child: Text(t, style: TextStyle(color: cor, fontSize: 11, fontWeight: peso))),
-          ],
+            Expanded(child: Text(t, style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.w600))),
+          ]),
         );
-    final corpo = <Widget>[];
-    switch (status) {
+    switch (ch['status'] as String?) {
       case 'registrada':
-        corpo.add(texto('Chegada registrada. A 1ª entrega que você aceitar leva +R\$ $valor.', cor: _verde, icone: Icons.check));
-        break;
+        return [aviso('Chegada registrada. A 1ª entrega que você aceitar leva +R\$ $valor.', _verde, Icons.check)];
       case 'paga':
         final n = ch['pedido_numero'];
-        corpo.add(texto('+R\$ $valor de chegada recebido${n != null ? ' (entrega #$n)' : ''}.', cor: _verde, icone: Icons.check_circle));
-        break;
+        return [aviso('+R\$ $valor de chegada recebido${n != null ? ' (entrega #$n)' : ''}.', _verde, Icons.check_circle)];
       case 'bloqueada':
-        corpo.add(texto('Chegada bloqueada pelo ADM.', cor: const Color(0xFFef4444), icone: Icons.block));
-        break;
-      default:
-        if (ch['janela_aberta'] != true) {
-          corpo.add(texto('Chegue na base entre ${ch['inicio']} e ${ch['fim']}. A 1ª entrega depois leva +R\$ $valor.'));
-        } else {
-          // Nome da base vem do painel: a base onde ele está (conferida
-          // pelo servidor) ou, sem isso, as bases ativas cadastradas.
-          final conf = _svc.chegadaConferida;
-          final nomes = _svc.basesNomes;
-          final base = (conf?['ok'] == true && conf?['base'] != null)
-              ? conf!['base'].toString()
-              : (nomes.isEmpty ? 'base' : nomes.join(' ou '));
-          corpo.add(texto('Chegou na $base? Toque em Registrar chegada.', cor: Colors.white, peso: FontWeight.w600));
-          if (conf != null && conf['ok'] == true) {
-            corpo
-              ..add(const SizedBox(height: 8))
-              ..add(_botao('Registrar chegada', _enviando ? null : () => _executar(_svc.solicitarChegada), cor: _verde));
-          } else {
-            corpo
-              ..add(const SizedBox(height: 4))
-              ..add(texto((conf?['msg'] as String?) ?? 'Conferindo sua posição…', cor: _cinza));
-          }
-        }
+        return [aviso('Chegada bloqueada pelo ADM.', _vermelho, Icons.block)];
     }
-    return [
-      const SizedBox(height: 10),
-      const Divider(color: Color(0xFF2A2D35), height: 1, thickness: 1),
-      const SizedBox(height: 8),
-      Text('+R\$ $valor de chegada',
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 4),
-      ...corpo,
-    ];
+    if (ch['janela_aberta'] != true) return const [];
+    final conf = _svc.chegadaConferida;
+    if (conf != null && conf['ok'] == true) {
+      return [
+        const SizedBox(height: 10),
+        _botao('Registrar chegada', _enviando ? null : () => _executar(_svc.solicitarChegada), cor: _verde),
+      ];
+    }
+    return [aviso((conf?['msg'] as String?) ?? 'Conferindo sua posição…', _cinza, null)];
   }
 
   Widget _botao(String t, VoidCallback? onPressed, {Color cor = _azul}) => SizedBox(

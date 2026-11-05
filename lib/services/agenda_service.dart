@@ -26,10 +26,6 @@ class AgendaService extends ChangeNotifier {
   /// Conferência da chegada (só durante a janela, com vaga e sem pedido).
   Map<String, dynamic>? chegadaConferida;
 
-  /// Nomes das bases ativas com área (cadastradas pelo ADM no painel) — o
-  /// card usa no texto da chegada; nada de nome fixo no código.
-  List<String> basesNomes = const [];
-
   /// Incrementa quando chega crédito/pedido novo do entregador — a Home usa
   /// para recarregar o saldo sem esperar o próprio canal dela.
   final ValueNotifier<int> saldoMudou = ValueNotifier<int>(0);
@@ -144,28 +140,12 @@ class AgendaService extends ChangeNotifier {
       final r = await _supabase.rpc('agenda_status');
       estado = Map<String, dynamic>.from(r as Map);
       erro = null;
-      await _carregarBasesNomes();
       await _conferirChegadaSePreciso();
     } catch (e) {
       debugPrint('[Agenda] erro ao atualizar: $e');
       erro = 'Sem conexão. Tentando de novo…';
     }
     notifyListeners();
-  }
-
-  Future<void> _carregarBasesNomes() async {
-    final ch = Map<String, dynamic>.from(estado?['chegada'] as Map? ?? {});
-    if (estado?['reservado'] != true || ch['vale_hoje'] != true) return;
-    try {
-      final r = await _supabase
-          .from('agenda_bases')
-          .select('nome')
-          .eq('ativo', true)
-          .not('poligono', 'is', null)
-          .order('nome');
-      basesNomes = [for (final b in List<Map<String, dynamic>>.from(r)) (b['nome'] ?? '').toString()]
-        ..removeWhere((n) => n.isEmpty);
-    } catch (_) {}
   }
 
   bool get _chegadaEmAberto {
@@ -175,7 +155,7 @@ class AgendaService extends ChangeNotifier {
     return ch['vale_hoje'] == true && ch['janela_aberta'] == true && ch['status'] == null;
   }
 
-  // Durante a janela (18:30–19:00, com vaga): confere no
+  // Durante a janela da chegada (horário do ADM, com vaga): confere no
   // servidor se o botão pode aparecer. Se faltou só um GPS recente/preciso,
   // manda uma posição nova (o entregador parado na base não gera ping).
   Future<void> _conferirChegadaSePreciso() async {
