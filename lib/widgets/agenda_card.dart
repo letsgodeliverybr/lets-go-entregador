@@ -98,32 +98,37 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final e = _svc.estado;
+    final reservado = e?['reservado'] == true;
+    final valeMais = e != null && e['tipo_dia'] != 'semana';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF161820),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2A2D35)),
       ),
+      // Meia largura ao lado do "Meu Desempenho Hoje": todo texto quebra
+      // dentro do card (sem Row com texto solto) e os selos usam Wrap.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(children: [
-            Expanded(
-              child: Text(
-                  e != null && e['reservado'] == true
-                      ? 'Agendamento · Vaga de hoje confirmada ✓'
-                      : 'Agendamento',
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            ),
-            // Sábado, domingo e feriado: faixas com valor maior.
-            if (e != null && e['tipo_dia'] != 'semana') _selo('Hoje vale mais'),
-          ]),
+          const Text('Agendamento',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          if (reservado || valeMais) ...[
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, runSpacing: 4, children: [
+              if (reservado) _selo('Vaga confirmada ✓', _verde),
+              // Sábado, domingo e feriado: faixas com valor maior.
+              if (valeMais) _selo('Hoje vale mais', _azul),
+            ]),
+          ],
           const SizedBox(height: 10),
           if (e == null)
             Text(_svc.erro ?? 'Carregando…', style: const TextStyle(color: _cinza, fontSize: 12))
-          else if (e['reservado'] == true)
+          else if (reservado)
             ..._reservado(e)
           else
             ..._semReserva(e),
@@ -136,12 +141,18 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
     );
   }
 
-  Widget _selo(String t) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-            color: _azul.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
-        child: Text(t, style: const TextStyle(color: _azul, fontSize: 10, fontWeight: FontWeight.w600)),
+  Widget _selo(String t, Color cor) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(color: cor.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+        child: Text(t, style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.w700)),
       );
+
+  // Faixas em duas linhas, uma abaixo da outra (cabem em meia tela).
+  List<Widget> _faixas(Map<String, dynamic> e, List<String> pagas) => [
+        _faixa('${e['meta1']} entregas', '+R\$ ${_moeda(e['valor1'])}', pagas.contains('faixa1')),
+        const SizedBox(height: 4),
+        _faixa('${e['meta2']} entregas', '+R\$ ${_moeda(e['valor2'])}', pagas.contains('faixa2')),
+      ];
 
   List<Widget> _semReserva(Map<String, dynamic> e) {
     final pct = (e['vagas_pct'] as num?)?.toInt() ?? 0;
@@ -153,10 +164,10 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
               color: esgotado ? const Color(0xFFef4444) : Colors.white,
               fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 4),
-      Text(
-          'Vaga do dia · ${e['inicio_contagem'] ?? '07:00'}–23:59\n'
-          '${e['meta1']} entregas = +R\$ ${_moeda(e['valor1'])} · ${e['meta2']} entregas = +R\$ ${_moeda(e['valor2'])}',
+      Text('Vaga do dia · ${e['inicio_contagem'] ?? '07:00'}–23:59',
           style: const TextStyle(color: _cinza, fontSize: 11)),
+      const SizedBox(height: 8),
+      ..._faixas(e, const []),
       if (!cadastroOk) ...[
         const SizedBox(height: 6),
         const Text('Seu cadastro precisa estar aprovado.',
@@ -174,30 +185,34 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
     final m2 = (e['meta2'] as num?)?.toInt() ?? 30;
     final pagas = List<String>.from(e['faixas_pagas'] as List? ?? const []);
     return [
-      Text('${cont > m2 ? m2 : cont} de $m2 entregas hoje',
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      Text.rich(
+        TextSpan(children: [
+          TextSpan(
+              text: '${cont > m2 ? m2 : cont}',
+              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, height: 1.0)),
+          TextSpan(
+              text: ' de $m2 entregas',
+              style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+        ]),
+      ),
       const SizedBox(height: 8),
       _barra(cont, m1, m2),
-      const SizedBox(height: 6),
-      Row(children: [
-        _faixa('$m1 entregas = +R\$ ${_moeda(e['valor1'])}', pagas.contains('faixa1')),
-        const Spacer(),
-        _faixa('$m2 entregas = +R\$ ${_moeda(e['valor2'])}', pagas.contains('faixa2')),
-      ]),
+      const SizedBox(height: 8),
+      ..._faixas(e, pagas),
       ..._chegada(e),
       if (e['pode_cancelar'] == true) ...[
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         GestureDetector(
           onTap: _enviando ? null : _confirmarCancelar,
-          child: const Text('Cancelar vaga (só antes da primeira entrega)',
+          child: const Text('Cancelar vaga',
               style: TextStyle(color: _cinza, fontSize: 11, decoration: TextDecoration.underline)),
         ),
       ],
     ];
   }
 
-  // Barra 0..meta2 com marcas em meta1 e meta2. Sem LayoutBuilder (o card
-  // fica dentro de IntrinsicHeight na Home): só FractionallySizedBox/Align.
+  // Barra 0..meta2 com marca na meta1. Sem LayoutBuilder (o card fica
+  // dentro de IntrinsicHeight na Home): só FractionallySizedBox/Align.
   Widget _barra(int cont, int m1, int m2) {
     final frac = (cont / m2).clamp(0.0, 1.0);
     final marca1 = (m1 / m2) * 2 - 1; // Alignment.x de -1 a 1
@@ -215,64 +230,83 @@ class _AgendaCardState extends State<AgendaCard> with WidgetsBindingObserver {
         ),
         Align(
           alignment: Alignment(marca1, 0),
-          child: Container(width: 2, height: 10, color: Colors.white54),
+          child: Container(width: 2, height: 10, color: Colors.white70),
         ),
       ]),
     );
   }
 
-  Widget _faixa(String t, bool paga) => Row(mainAxisSize: MainAxisSize.min, children: [
-        if (paga) const Icon(Icons.check_circle, color: _verde, size: 14),
-        if (paga) const SizedBox(width: 3),
-        Text(t,
-            style: TextStyle(
-                color: paga ? _verde : _cinza, fontSize: 11, fontWeight: paga ? FontWeight.w600 : FontWeight.normal)),
+  Widget _faixa(String meta, String valor, bool paga) => Row(children: [
+        Icon(paga ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: paga ? _verde : _cinza, size: 14),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text.rich(
+            TextSpan(children: [
+              TextSpan(text: '$meta '),
+              TextSpan(text: valor, style: TextStyle(color: paga ? _verde : Colors.white, fontWeight: FontWeight.w700)),
+            ]),
+            style: TextStyle(color: paga ? _verde : Colors.white70, fontSize: 12),
+          ),
+        ),
       ]);
 
+  // Bloco "+R$ 10 de chegada", separado por uma linha fina.
   List<Widget> _chegada(Map<String, dynamic> e) {
     final ch = Map<String, dynamic>.from(e['chegada'] as Map? ?? {});
     if (ch['vale_hoje'] != true) return const [];
     final valor = _moeda(ch['valor']);
     final status = ch['status'] as String?;
-    Widget linha(String t, Color c, {IconData? icone}) => Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(children: [
-            if (icone != null) Icon(icone, color: c, size: 14),
-            if (icone != null) const SizedBox(width: 4),
-            Expanded(child: Text(t, style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w600))),
-          ]),
+    Widget texto(String t, {Color cor = Colors.white70, IconData? icone, FontWeight peso = FontWeight.normal}) => Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (icone != null) Padding(padding: const EdgeInsets.only(top: 1, right: 4), child: Icon(icone, color: cor, size: 14)),
+            Expanded(child: Text(t, style: TextStyle(color: cor, fontSize: 11, fontWeight: peso))),
+          ],
         );
+    final corpo = <Widget>[];
     switch (status) {
       case 'registrada':
-        return [linha('Chegada registrada · a primeira entrega que você aceitar ganha +R\$ $valor', _verde, icone: Icons.check)];
+        corpo.add(texto('Chegada registrada. A 1ª entrega que você aceitar leva +R\$ $valor.', cor: _verde, icone: Icons.check));
+        break;
       case 'paga':
         final n = ch['pedido_numero'];
-        return [linha('+R\$ $valor de chegada recebido${n != null ? ' (entrega #$n)' : ''}', _verde, icone: Icons.check_circle)];
+        corpo.add(texto('+R\$ $valor de chegada recebido${n != null ? ' (entrega #$n)' : ''}.', cor: _verde, icone: Icons.check_circle));
+        break;
       case 'bloqueada':
-        return [linha('Chegada bloqueada pelo ADM', const Color(0xFFef4444), icone: Icons.block)];
-    }
-    // Nome da base vem do painel: a base onde ele está (conferida pelo
-    // servidor) ou, sem isso, as bases ativas cadastradas.
-    final conf = _svc.chegadaConferida;
-    final nomes = _svc.basesNomes;
-    final base = (conf?['ok'] == true && conf?['base'] != null)
-        ? conf!['base'].toString()
-        : (nomes.isEmpty ? 'base' : nomes.join(' ou '));
-    if (ch['janela_aberta'] != true) {
-      return [linha('Chegada na $base: das ${ch['inicio']} às ${ch['fim']}. A primeira entrega depois ganha +R\$ $valor.', _cinza)];
-    }
-    if (conf != null && conf['ok'] == true) {
-      return [
-        const SizedBox(height: 10),
-        Text('Chegou na $base? Toque em Registrar chegada. A primeira entrega depois ganha +R\$ $valor.',
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        _botao('Registrar chegada', _enviando ? null : () => _executar(_svc.solicitarChegada), cor: _verde),
-      ];
+        corpo.add(texto('Chegada bloqueada pelo ADM.', cor: const Color(0xFFef4444), icone: Icons.block));
+        break;
+      default:
+        if (ch['janela_aberta'] != true) {
+          corpo.add(texto('Chegue na base entre ${ch['inicio']} e ${ch['fim']}. A 1ª entrega depois leva +R\$ $valor.'));
+        } else {
+          // Nome da base vem do painel: a base onde ele está (conferida
+          // pelo servidor) ou, sem isso, as bases ativas cadastradas.
+          final conf = _svc.chegadaConferida;
+          final nomes = _svc.basesNomes;
+          final base = (conf?['ok'] == true && conf?['base'] != null)
+              ? conf!['base'].toString()
+              : (nomes.isEmpty ? 'base' : nomes.join(' ou '));
+          corpo.add(texto('Chegou na $base? Toque em Registrar chegada.', cor: Colors.white, peso: FontWeight.w600));
+          if (conf != null && conf['ok'] == true) {
+            corpo
+              ..add(const SizedBox(height: 8))
+              ..add(_botao('Registrar chegada', _enviando ? null : () => _executar(_svc.solicitarChegada), cor: _verde));
+          } else {
+            corpo
+              ..add(const SizedBox(height: 4))
+              ..add(texto((conf?['msg'] as String?) ?? 'Conferindo sua posição…', cor: _cinza));
+          }
+        }
     }
     return [
-      linha('Chegou na $base? Toque em Registrar chegada. A primeira entrega depois ganha +R\$ $valor.', Colors.white),
-      linha((conf?['msg'] as String?) ?? 'Conferindo sua posição…', _cinza),
+      const SizedBox(height: 10),
+      const Divider(color: Color(0xFF2A2D35), height: 1, thickness: 1),
+      const SizedBox(height: 8),
+      Text('+R\$ $valor de chegada',
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      ...corpo,
     ];
   }
 
